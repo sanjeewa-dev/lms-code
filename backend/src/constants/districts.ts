@@ -1,0 +1,30 @@
+/** All 25 districts of Sri Lanka (alphabetical). */
+export const SRI_LANKAN_DISTRICTS = [
+  'Ampara',
+  'Anuradhapura',
+  'Badulla',
+  'Batticaloa',
+  'Colombo',
+  'Galle',
+  'Gampaha',
+  'Hambantota',
+  'Jaffna',
+  'Kalutara',
+  'Kandy',
+  'Kegalle',
+  'Kilinochchi',
+  'Kurunegala',
+  'Mannar',
+  'Matale',
+  'Matara',
+  'Monaragala',
+  'Mullaitivu',
+  'Nuwara Eliya',
+  'Polonnaruwa',
+  'Puttalam',
+  'Ratnapura',
+  'Trincomalee',
+  'Vavuniya',
+] as const;
+
+export type SriLankanDistrict = (typeof SRI_LANKAN_DISTRICTS)[number];
