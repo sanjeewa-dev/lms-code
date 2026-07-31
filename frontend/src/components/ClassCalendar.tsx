@@ -143,11 +143,12 @@ function DayHoverCard({
   );
 }
 
-export function ClassCalendar() {
+export function ClassCalendar({ size = 'compact' }: { size?: 'compact' | 'full' }) {
   const t = useTenantApi();
   const { slug } = useParams<{ slug: string }>();
   const base = `/${slug}`;
   const todayKey = new Date().toISOString().slice(0, 10);
+  const isFull = size === 'full';
 
   const [cursor, setCursor] = useState(() => {
     const now = new Date();
@@ -193,15 +194,35 @@ export function ClassCalendar() {
   };
 
   return (
-    <div className="w-full max-w-[280px] overflow-visible rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/5 dark:bg-ink-850">
-      <div className="flex items-center justify-between gap-1 border-b border-slate-100 px-3 py-2.5 dark:border-white/5">
+    <div
+      className={`w-full overflow-visible rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/5 dark:bg-ink-850 ${
+        isFull ? '' : 'max-w-[280px]'
+      }`}
+    >
+      <div
+        className={`flex items-center justify-between gap-1 border-b border-slate-100 dark:border-white/5 ${
+          isFull ? 'px-4 py-3.5' : 'px-3 py-2.5'
+        }`}
+      >
         <div className="flex items-center gap-2">
-          <span className="grid h-7 w-7 place-items-center rounded-lg bg-pink-100 text-pink-600">
-            <Icon name="live" width={14} height={14} />
+          <span
+            className={`grid place-items-center rounded-lg bg-pink-100 text-pink-600 ${
+              isFull ? 'h-9 w-9' : 'h-7 w-7'
+            }`}
+          >
+            <Icon name="live" width={isFull ? 16 : 14} height={isFull ? 16 : 14} />
           </span>
           <div>
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Calendar</h2>
-            <p className="text-[10px] text-slate-400">Hover or click a day</p>
+            <h2
+              className={`font-semibold text-slate-900 dark:text-white ${
+                isFull ? 'text-base' : 'text-sm'
+              }`}
+            >
+              Calendar
+            </h2>
+            <p className={`text-slate-400 ${isFull ? 'text-xs' : 'text-[10px]'}`}>
+              Hover or click a day with sessions
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-0.5">
@@ -209,38 +230,44 @@ export function ClassCalendar() {
             type="button"
             onClick={goPrev}
             aria-label="Previous month"
-            className="grid h-6 w-6 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100 dark:hover:bg-white/10"
+            className="grid h-7 w-7 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100 dark:hover:bg-white/10"
           >
             <Icon name="chevron" width={12} height={12} className="rotate-180" />
           </button>
-          <span className="min-w-[72px] text-center text-[11px] font-semibold text-slate-700 dark:text-slate-200">
+          <span
+            className={`min-w-[88px] text-center font-semibold text-slate-700 dark:text-slate-200 ${
+              isFull ? 'text-sm' : 'text-[11px]'
+            }`}
+          >
             {monthLabel(cursor.year, cursor.month)}
           </span>
           <button
             type="button"
             onClick={goNext}
             aria-label="Next month"
-            className="grid h-6 w-6 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100 dark:hover:bg-white/10"
+            className="grid h-7 w-7 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100 dark:hover:bg-white/10"
           >
             <Icon name="chevron" width={12} height={12} />
           </button>
         </div>
       </div>
 
-      <div className="p-2.5">
-        <div className="mb-1 grid grid-cols-7 gap-0.5">
+      <div className={isFull ? 'p-4' : 'p-2.5'}>
+        <div className={`mb-1 grid grid-cols-7 ${isFull ? 'gap-1' : 'gap-0.5'}`}>
           {WEEKDAYS.map((d, i) => (
             <div
               key={`${d}-${i}`}
-              className="py-0.5 text-center text-[9px] font-semibold text-slate-400"
+              className={`py-0.5 text-center font-semibold text-slate-400 ${
+                isFull ? 'text-[11px]' : 'text-[9px]'
+              }`}
             >
               {d}
             </div>
           ))}
         </div>
-        <div className="grid grid-cols-7 gap-0.5">
+        <div className={`grid grid-cols-7 ${isFull ? 'gap-1' : 'gap-0.5'}`}>
           {cells.map((cell, i) => {
-            if (!cell) return <div key={`pad-${i}`} className="h-7" />;
+            if (!cell) return <div key={`pad-${i}`} className={isFull ? 'h-10' : 'h-7'} />;
 
             const daySessions = byDate.get(cell.key) ?? [];
             const hasSessions = daySessions.length > 0;
@@ -259,7 +286,6 @@ export function ClassCalendar() {
                   if (hasSessions) setHoveredKey(cell.key);
                 }}
                 onMouseLeave={() => {
-                  // Keep open while pinned; only clear hover preview
                   setHoveredKey((k) => (k === cell.key ? null : k));
                 }}
               >
@@ -270,7 +296,9 @@ export function ClassCalendar() {
                     if (!hasSessions) return;
                     setPinnedKey((k) => (k === cell.key ? null : cell.key));
                   }}
-                  className={`flex h-7 w-full flex-col items-center justify-center rounded-md text-[11px] font-medium transition ${
+                  className={`flex w-full flex-col items-center justify-center rounded-lg font-medium transition ${
+                    isFull ? 'h-10 text-sm' : 'h-7 text-[11px]'
+                  } ${
                     isPinned
                       ? 'bg-brand-600 text-white ring-2 ring-brand-300'
                       : isToday
@@ -283,10 +311,10 @@ export function ClassCalendar() {
                   {cell.day}
                   {hasSessions && (
                     <span className="mt-px flex gap-px">
-                      {daySessions.slice(0, 2).map((s) => (
+                      {daySessions.slice(0, 3).map((s) => (
                         <span
                           key={s.id}
-                          className={`h-0.5 w-0.5 rounded-full ${
+                          className={`rounded-full ${isFull ? 'h-1 w-1' : 'h-0.5 w-0.5'} ${
                             isPinned || isToday
                               ? 'bg-white'
                               : s.status === 'live'
@@ -298,7 +326,7 @@ export function ClassCalendar() {
                     </span>
                   )}
                   {hasLive && !isToday && !isPinned && (
-                    <span className="absolute right-0.5 top-0.5 h-1 w-1 animate-pulse rounded-full bg-red-500" />
+                    <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
                   )}
                 </button>
 
@@ -316,10 +344,10 @@ export function ClassCalendar() {
           })}
         </div>
         {sessionsQuery.isLoading && (
-          <p className="mt-2 text-center text-[10px] text-slate-400">Loading…</p>
+          <p className="mt-3 text-center text-xs text-slate-400">Loading…</p>
         )}
         {!sessionsQuery.isLoading && sessions.length === 0 && (
-          <p className="mt-2 text-center text-[10px] text-slate-400">No upcoming classes</p>
+          <p className="mt-3 text-center text-xs text-slate-400">No upcoming classes this month</p>
         )}
       </div>
     </div>

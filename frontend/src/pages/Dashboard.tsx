@@ -91,9 +91,11 @@ function ShortcutTile({
   return (
     <Link
       to={to}
-      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-brand-200 hover:shadow-md dark:border-white/5 dark:bg-ink-850"
+      className="group rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-md dark:border-white/5 dark:bg-ink-850 dark:hover:border-brand-700/40"
     >
-      <span className={`mb-3 grid h-10 w-10 place-items-center rounded-xl ${toneChip[tone]}`}>
+      <span
+        className={`mb-3 grid h-10 w-10 place-items-center rounded-xl transition group-hover:scale-105 ${toneChip[tone]}`}
+      >
         <Icon name={icon} width={18} height={18} />
       </span>
       <p className="font-semibold text-slate-900 dark:text-white">{title}</p>
@@ -188,15 +190,49 @@ export default function Dashboard() {
   const quizGenHint = 'Open a class → Quizzes → AI generate';
 
   if (isAdmin) {
+    const firstName = user?.name?.split(' ')[0] ?? 'Admin';
+
     return (
       <div className="space-y-6">
         {statsQuery.isError && (
           <ErrorBanner message="Could not load dashboard stats. Try refreshing the page." />
         )}
 
+        <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-white/5 dark:bg-ink-850 sm:p-6">
+          <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-brand-500/10 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-24 left-1/3 h-48 w-48 rounded-full bg-violet-500/10 blur-3xl" />
+          <div className="relative flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-brand-600 dark:text-brand-400">
+                Institute overview
+              </p>
+              <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
+                Welcome back, {firstName}
+              </h1>
+              <p className="mt-1.5 max-w-xl text-sm text-slate-500 dark:text-slate-400">
+                Monitor students, fees, and live sessions — then jump into teaching tools.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                to={`${base}/classes`}
+                className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-brand-600/20 transition hover:bg-brand-700"
+              >
+                Manage classes
+              </Link>
+              <Link
+                to={`${base}/students`}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-200 dark:hover:bg-white/10"
+              >
+                View students
+              </Link>
+            </div>
+          </div>
+        </div>
+
         {statsQuery.isLoading ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            {Array.from({ length: 5 }).map((_, i) => (
               <div
                 key={i}
                 className="h-[104px] animate-pulse rounded-2xl border border-slate-200 bg-slate-100 dark:border-white/5 dark:bg-ink-850"
@@ -204,7 +240,7 @@ export default function Dashboard() {
             ))}
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <StatCard label="Students" value={dash(s?.students)} icon="users" tone="blue" to={`${base}/students`} />
             <StatCard
               label="Pending payments"
@@ -228,85 +264,113 @@ export default function Dashboard() {
               tone="green"
               to={`${base}/live`}
             />
+            <StatCard
+              label="Revenue"
+              value={s ? `Rs. ${s.revenue.toLocaleString()}` : '—'}
+              icon="revenue"
+              highlight
+              to={`${base}/payments`}
+            />
           </div>
         )}
 
         <LiveNowStrip />
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <AtRiskPanel compact />
-          <div className="space-y-4">
-            <SmartOpsPanel />
-            <div className="grid items-start gap-4 sm:grid-cols-3">
-              <StatCard
-                label="Revenue"
-                value={s ? `Rs. ${s.revenue.toLocaleString()}` : '—'}
-                icon="revenue"
-                highlight
-                to={`${base}/payments`}
-              />
-              <Card className="sm:col-span-2">
-                <h2 className="mb-1 text-lg font-semibold text-slate-900 dark:text-white">Shortcuts</h2>
-                <p className="mb-4 text-sm text-slate-400">AI tools, chat, and follow-ups.</p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <ShortcutTile
-                    to={`${base}/ai-copilot`}
-                    title="AI Copilot"
-                    hint="Quiz gen, feedback, weak topics"
-                    icon="spark"
-                    tone="purple"
-                  />
-                  <ShortcutTile
-                    to={quizGenHref}
-                    title="Generate quiz"
-                    hint={quizGenHint}
-                    icon="quiz"
-                    tone="amber"
-                  />
-                  <ShortcutTile
-                    to={`${base}/chat`}
-                    title="Chat"
-                    hint={chatUnread ? `${chatUnread} unread` : 'Message teachers & students'}
-                    icon="chat"
-                    tone="sky"
-                  />
-                  <ShortcutTile
-                    to={`${base}/interventions`}
-                    title="Interventions"
-                    hint={`${s?.openInterventions ?? 0} open follow-ups`}
-                    icon="note"
-                    tone="pink"
-                  />
-                </div>
-              </Card>
-            </div>
-          </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <ShortcutTile
+            to={`${base}/ai-copilot`}
+            title="AI Copilot"
+            hint="Quiz gen, feedback, weak topics"
+            icon="spark"
+            tone="purple"
+          />
+          <ShortcutTile
+            to={quizGenHref}
+            title="Generate quiz"
+            hint={quizGenHint}
+            icon="quiz"
+            tone="amber"
+          />
+          <ShortcutTile
+            to={`${base}/chat`}
+            title="Chat"
+            hint={chatUnread ? `${chatUnread} unread` : 'Message teachers & students'}
+            icon="chat"
+            tone="sky"
+          />
+          <ShortcutTile
+            to={`${base}/interventions`}
+            title="Interventions"
+            hint={`${s?.openInterventions ?? 0} open follow-ups`}
+            icon="note"
+            tone="pink"
+          />
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2">
-            <ClassCalendar />
+        <div className="grid items-start gap-6 lg:grid-cols-2">
+          <AtRiskPanel compact />
+          <SmartOpsPanel />
+        </div>
+
+        <div className="grid items-stretch gap-6 lg:grid-cols-12">
+          <div className="lg:col-span-5">
+            <ClassCalendar size="full" />
           </div>
-          <Card>
-            <h2 className="mb-3 text-lg font-semibold text-slate-900 dark:text-white">Recent classes</h2>
+          <Card className="flex h-full flex-col lg:col-span-7">
+            <div className="mb-4 flex items-center justify-between gap-2">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Recent classes</h2>
+                <p className="text-sm text-slate-400">Jump back into class hubs</p>
+              </div>
+              <Link
+                to={`${base}/classes`}
+                className="shrink-0 text-sm font-semibold text-brand-600 hover:underline"
+              >
+                View all
+              </Link>
+            </div>
             {classes.length > 0 ? (
               <ul className="divide-y divide-slate-100 dark:divide-white/5">
-                {classes.slice(0, 6).map((c) => (
-                  <li key={c.id} className="flex items-center justify-between py-2.5">
+                {classes.slice(0, 8).map((c) => (
+                  <li key={c.id}>
                     <Link
                       to={`${base}/classes/${c.id}`}
-                      className="truncate font-medium text-slate-800 hover:text-brand-600 dark:text-slate-200"
+                      className="flex items-center justify-between gap-3 py-3 transition hover:bg-slate-50/80 dark:hover:bg-white/5"
                     >
-                      {c.title}
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-sky-100 text-sky-600">
+                          <Icon name="classes" width={16} height={16} />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-slate-800 dark:text-slate-100">
+                            {c.title}
+                          </p>
+                          {c.batch?.name && (
+                            <p className="truncate text-xs text-slate-400">{c.batch.name}</p>
+                          )}
+                        </div>
+                      </div>
+                      <Icon name="chevron" width={14} height={14} className="shrink-0 text-slate-300" />
                     </Link>
-                    {c.batch?.name && (
-                      <span className="ml-3 shrink-0 text-sm text-slate-400">{c.batch.name}</span>
-                    )}
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-slate-400">No classes yet.</p>
+              <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-6 py-12 text-center dark:border-white/10 dark:bg-white/5">
+                <span className="mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-sky-100 text-sky-600">
+                  <Icon name="classes" />
+                </span>
+                <p className="font-medium text-slate-700 dark:text-slate-200">No classes yet</p>
+                <p className="mt-1 max-w-xs text-sm text-slate-400">
+                  Create your first class to start enrollments, quizzes, and live sessions.
+                </p>
+                <Link
+                  to={`${base}/classes`}
+                  className="mt-4 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+                >
+                  Create a class
+                </Link>
+              </div>
             )}
           </Card>
         </div>
