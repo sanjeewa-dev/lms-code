@@ -9,14 +9,23 @@ export function publicUser(user: {
   role: Role;
   tenantId: string | null;
   tenant?: { slug: string; name: string } | null;
+}, extras?: {
+  supportSession?: {
+    id: string;
+    tenantId: string;
+    tenantSlug: string;
+    tenantName: string;
+    expiresAt: string;
+  } | null;
 }) {
   return {
     id: user.id,
     name: user.name,
     email: user.email,
     role: user.role,
-    tenantId: user.tenantId,
-    tenantSlug: user.tenant?.slug ?? null,
+    tenantId: extras?.supportSession?.tenantId ?? user.tenantId,
+    tenantSlug: extras?.supportSession?.tenantSlug ?? user.tenant?.slug ?? null,
+    supportSession: extras?.supportSession ?? null,
   };
 }
 

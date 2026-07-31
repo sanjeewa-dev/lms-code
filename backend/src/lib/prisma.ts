@@ -11,7 +11,10 @@ export const basePrisma = new PrismaClient({
 });
 
 // Models that carry a tenantId and must be isolated per tenant.
+// Keep in sync with schema models that have tenantId (excluding Tenant itself,
+// platform-only AuditLog/JobRun/SupportSession, and join tables without tenantId).
 const TENANT_MODELS = new Set<string>([
+  'User',
   'Class',
   'Enrollment',
   'Payment',
@@ -29,6 +32,13 @@ const TENANT_MODELS = new Set<string>([
   'ClassSchedule',
   'Attendance',
   'Notification',
+  'StudentInvite',
+  'AiUsage',
+  'AiToolHistory',
+  'Intervention',
+  'ParentToken',
+  'Conversation',
+  'Message',
 ]);
 
 // Operations that accept a `where` we can safely constrain by tenantId.
@@ -67,12 +77,13 @@ export const prisma = basePrisma.$extends({
         if (WHERE_OPS.has(operation)) {
           typedArgs.where = { AND: [typedArgs.where ?? {}, { tenantId }] };
         } else if (operation === 'create') {
-          typedArgs.data = { tenantId, ...(typedArgs.data as object) };
+          // Force request tenantId — never trust caller-supplied tenantId.
+          typedArgs.data = { ...(typedArgs.data as object), tenantId };
         } else if (operation === 'createMany') {
           const data = typedArgs.data;
           typedArgs.data = Array.isArray(data)
-            ? data.map((d) => ({ tenantId, ...(d as object) }))
-            : { tenantId, ...(data as object) };
+            ? data.map((d) => ({ ...(d as object), tenantId }))
+            : { ...(data as object), tenantId };
         }
 
         return query(args);

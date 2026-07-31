@@ -1,5 +1,12 @@
 import nodemailer from 'nodemailer';
 import { env } from '../config/env';
+import { basePrisma } from '../lib/prisma';
+import {
+  emailDetailCard,
+  emailParagraph,
+  escapeHtml,
+  renderEmailLayout,
+} from './emailLayout';
 
 function mailFrom() {
   // Gmail requires the From address to match the authenticated account.
@@ -19,13 +26,36 @@ const transporter =
       })
     : null;
 
-export async function sendMail(opts: { to: string; subject: string; text: string; html: string }) {
+export async function sendMail(opts: {
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+  tenantId?: string | null;
+  relatedType?: string;
+  relatedId?: string;
+}) {
   if (!transporter) {
     console.log('\n--- EMAIL (SMTP not configured — logged to console) ---');
     console.log(`To: ${opts.to}`);
     console.log(`Subject: ${opts.subject}`);
     console.log(opts.text);
     console.log('---\n');
+    try {
+      await basePrisma.emailLog.create({
+        data: {
+          tenantId: opts.tenantId ?? undefined,
+          to: opts.to,
+          subject: opts.subject,
+          status: 'skipped',
+          relatedType: opts.relatedType,
+          relatedId: opts.relatedId,
+          error: 'SMTP not configured',
+        },
+      });
+    } catch {
+      /* ignore log failures */
+    }
     return;
   }
 
@@ -38,8 +68,38 @@ export async function sendMail(opts: { to: string; subject: string; text: string
       html: opts.html,
     });
     console.log(`[email] Sent to ${opts.to} (messageId: ${info.messageId})`);
+    try {
+      await basePrisma.emailLog.create({
+        data: {
+          tenantId: opts.tenantId ?? undefined,
+          to: opts.to,
+          subject: opts.subject,
+          status: 'sent',
+          providerId: info.messageId,
+          relatedType: opts.relatedType,
+          relatedId: opts.relatedId,
+        },
+      });
+    } catch {
+      /* ignore log failures */
+    }
   } catch (err) {
     console.error('[email] Failed to send:', err);
+    try {
+      await basePrisma.emailLog.create({
+        data: {
+          tenantId: opts.tenantId ?? undefined,
+          to: opts.to,
+          subject: opts.subject,
+          status: 'failed',
+          relatedType: opts.relatedType,
+          relatedId: opts.relatedId,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      });
+    } catch {
+      /* ignore */
+    }
     throw err;
   }
 }
@@ -66,15 +126,69 @@ export async function sendStudentClassInvite(opts: {
     `If you did not expect this email, you can ignore it.`,
   ].join('\n');
 
-  const html = `
-    <p>Hello <strong>${studentName}</strong>,</p>
-    <p>You have been invited to register for <strong>${classTitle}</strong> at <strong>${instituteName}</strong>.</p>
-    <p><a href="${inviteUrl}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;">Complete registration</a></p>
-    <p style="color:#64748b;font-size:14px;">Or copy this link: ${inviteUrl}</p>
-    <p style="color:#64748b;font-size:14px;">This link expires in 7 days.</p>
-  `;
+  const html = renderEmailLayout({
+    instituteName,
+    preheader: `Register for ${classTitle} — invitation from ${instituteName}`,
+    eyebrow: 'Class invitation',
+    title: `You're invited to ${classTitle}`,
+    bodyHtml: [
+      emailParagraph(`Hello <strong>${escapeHtml(studentName)}</strong>,`),
+      emailParagraph(
+        `Complete your registration to join <strong>${escapeHtml(classTitle)}</strong> at <strong>${escapeHtml(instituteName)}</strong>.`
+      ),
+      emailDetailCard([
+        { label: 'Institute', value: instituteName },
+        { label: 'Class', value: classTitle },
+        { label: 'Expires', value: 'In 7 days' },
+      ]),
+      emailParagraph('If you did not expect this email, you can safely ignore it.', { muted: true }),
+    ].join(''),
+    cta: { label: 'Complete registration', url: inviteUrl },
+    footerNote: `This invitation was sent by ${instituteName}.`,
+  });
 
   await sendMail({ to, subject, text, html });
+}
+
+export async function sendLiveClassStarted(opts: {
+  to: string;
+  studentName: string;
+  teacherName: string;
+  className: string;
+  instituteName: string;
+  joinUrl: string;
+  tenantId?: string;
+}) {
+  const { to, studentName, teacherName, className, instituteName, joinUrl, tenantId } = opts;
+  const subject = `🔴 Live class started: ${className}`;
+  const text = [
+    `Hello ${studentName},`,
+    '',
+    `${teacherName} has just started a live class for "${className}" at ${instituteName}.`,
+    '',
+    `Join now: ${joinUrl}`,
+  ].join('\n');
+
+  const html = renderEmailLayout({
+    instituteName,
+    preheader: `${teacherName} started a live class — join now`,
+    eyebrow: 'Live class started',
+    title: `Join live: ${className}`,
+    bodyHtml: [
+      emailParagraph(`Hello <strong>${escapeHtml(studentName)}</strong>,`),
+      emailParagraph(
+        `<strong>${escapeHtml(teacherName)}</strong> has just started a live class for <strong>${escapeHtml(className)}</strong> at <strong>${escapeHtml(instituteName)}</strong>. Join now to attend.`
+      ),
+      emailDetailCard([
+        { label: 'Teacher', value: teacherName },
+        { label: 'Class', value: className },
+      ]),
+    ].join(''),
+    cta: { label: 'Join live class now', url: joinUrl },
+    footerNote: `You received this because you are enrolled in ${className}.`,
+  });
+
+  await sendMail({ to, subject, text, html, tenantId, relatedType: 'live_class' });
 }
 
 export async function sendStudentEnrolledNotice(opts: {
@@ -94,11 +208,32 @@ export async function sendStudentEnrolledNotice(opts: {
     `Sign in to access your class: ${loginUrl}`,
   ].join('\n');
 
-  const html = `
-    <p>Hello <strong>${studentName}</strong>,</p>
-    <p>You have been added to <strong>${classTitle}</strong> at <strong>${instituteName}</strong>.</p>
-    <p><a href="${loginUrl}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;">Sign in</a></p>
-  `;
+  const html = renderEmailLayout({
+    instituteName,
+    preheader: `You're enrolled in ${classTitle}`,
+    eyebrow: 'Enrollment confirmed',
+    title: `Welcome to ${classTitle}`,
+    bodyHtml: [
+      emailParagraph(`Hello <strong>${escapeHtml(studentName)}</strong>,`),
+      emailParagraph(
+        `You have been added to <strong>${escapeHtml(classTitle)}</strong> at <strong>${escapeHtml(instituteName)}</strong>. Sign in to access materials, live classes, and payments.`
+      ),
+      emailDetailCard([
+        { label: 'Institute', value: instituteName },
+        { label: 'Class', value: classTitle },
+      ]),
+    ].join(''),
+    cta: { label: 'Sign in to your class', url: loginUrl },
+  });
 
   await sendMail({ to, subject, text, html });
 }
+
+export {
+  renderEmailLayout,
+  emailDetailCard,
+  emailParagraph,
+  emailStatGrid,
+  emailBulletList,
+  escapeHtml,
+} from './emailLayout';

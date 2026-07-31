@@ -3,7 +3,9 @@ import { Link, useParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { Spinner } from '../components/ui';
 import { Icon } from '../components/icons';
+import { BrandMark } from '../components/BrandMark';
 import { useDarkMode } from '../hooks/useDarkMode';
+import { useDocumentMeta } from '../hooks/useDocumentMeta';
 import type { PublicTenant } from '../api/types';
 
 function monthDay(date: string) {
@@ -22,6 +24,18 @@ export default function TenantLanding() {
     queryKey: ['public', slug],
     queryFn: async () => (await api.get<PublicTenant>(`/t/${slug}/public`)).data,
     retry: false,
+  });
+
+  const tenant = query.data?.tenant;
+
+  useDocumentMeta({
+    title: tenant
+      ? `${tenant.name} — Online Learning Platform`
+      : `Institute — Mindspark LMS`,
+    description: tenant
+      ? `Welcome to ${tenant.name}. Access your classes, notices, events, and live lessons on our online learning platform.`
+      : 'Online learning platform powered by Mindspark LMS.',
+    ogImage: tenant?.logoUrl ?? undefined,
   });
 
   if (query.isLoading)
@@ -45,8 +59,7 @@ export default function TenantLanding() {
     );
   }
 
-  const { tenant, notices, events, videos } = query.data;
-
+  const { notices, events, videos } = query.data;
   const navItems = [
     { href: '#home', label: 'Home' },
     { href: '#events', label: 'Events' },
@@ -60,7 +73,7 @@ export default function TenantLanding() {
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-white/5 dark:bg-ink-850/90">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <a href="#home" className="flex items-center gap-2.5 text-lg font-bold text-slate-900 dark:text-white">
-            <span className="brand-chip h-9 w-9 text-base font-extrabold">{tenant.name[0]}</span>
+            <BrandMark name={tenant.name} logoUrl={tenant.logoUrl} size="sm" />
             {tenant.name}
           </a>
           <nav className="hidden items-center gap-1 md:flex">
@@ -99,10 +112,11 @@ export default function TenantLanding() {
           <span className="inline-flex items-center gap-2 rounded-full bg-brand-600 px-4 py-1.5 text-xs font-semibold text-white shadow">
             Special notices
           </span>
-          <h1 className="mt-6 text-5xl font-extrabold tracking-tight text-white">Welcome</h1>
+          <h1 className="mt-6 text-5xl font-extrabold tracking-tight text-white">
+            Welcome to {tenant.name}
+          </h1>
           <p className="mt-4 max-w-2xl text-lg text-slate-300">
-            Excellence within reach. We provide high-quality, affordable education to learners worldwide, empowering
-            you to reach your professional and personal milestones.
+            Excellence within reach. Access your classes, live sessions, quizzes, and study resources — all in one place.
           </p>
           <div className="mt-8 flex gap-3">
             <Link

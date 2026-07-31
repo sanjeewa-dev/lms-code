@@ -27,6 +27,7 @@ function serializeTeacher(t: {
   phone: string | null;
   subject: string | null;
   createdAt: Date;
+  classesOwned?: { id: string; title: string }[];
 }) {
   return {
     id: t.id,
@@ -35,7 +36,51 @@ function serializeTeacher(t: {
     phone: t.phone ?? '',
     subject: t.subject ?? '',
     createdAt: t.createdAt,
+    classes: t.classesOwned?.map((c) => ({ id: c.id, title: c.title })) ?? [],
   };
+}
+
+async function syncTeacherClasses(tenantId: string, teacherId: string, classIds: string[] | undefined) {
+  if (classIds === undefined) return;
+
+  const uniqueIds = [...new Set(classIds)];
+  if (uniqueIds.length) {
+    const owned = await basePrisma.class.findMany({
+      where: { tenantId, id: { in: uniqueIds } },
+      select: { id: true },
+    });
+    if (owned.length !== uniqueIds.length) throw badRequest('One or more classes were not found');
+  }
+
+  const current = await basePrisma.class.findMany({
+    where: { tenantId, teacherId },
+    select: { id: true },
+  });
+  const currentIds = new Set(current.map((c) => c.id));
+  const nextIds = new Set(uniqueIds);
+
+  const toAssign = uniqueIds.filter((id) => !currentIds.has(id));
+  const toRelease = [...currentIds].filter((id) => !nextIds.has(id));
+
+  if (toAssign.length) {
+    await basePrisma.class.updateMany({
+      where: { tenantId, id: { in: toAssign } },
+      data: { teacherId },
+    });
+  }
+
+  if (toRelease.length) {
+    const fallbackAdmin = await basePrisma.user.findFirst({
+      where: { tenantId, role: 'admin', status: 'approved' },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+    if (!fallbackAdmin) throw badRequest('Cannot unassign classes without an institute admin to fall back to');
+    await basePrisma.class.updateMany({
+      where: { tenantId, id: { in: toRelease } },
+      data: { teacherId: fallbackAdmin.id },
+    });
+  }
 }
 
 // Aggregate stats for the admin/teacher dashboard.
@@ -104,7 +149,10 @@ router.get(
         createdAt: true,
         enrollments: {
           orderBy: { createdAt: 'desc' },
-          select: { class: { select: { title: true } } },
+          select: {
+            status: true,
+            class: { select: { id: true, title: true } },
+          },
         },
       },
     });
@@ -113,7 +161,12 @@ router.get(
         ...s,
         phone: phones[0] ?? phone,
         phones: phones.length > 0 ? phones : phone ? [phone] : [],
-        classes: [...new Set(enrollments.map((e) => e.class.title))],
+        classes: enrollments.map((e) => e.class.title),
+        classEnrollments: enrollments.map((e) => ({
+          classId: e.class.id,
+          title: e.class.title,
+          status: e.status,
+        })),
       })),
     });
   })
@@ -130,8 +183,14 @@ router.patch(
     }
     const student = await basePrisma.user.findFirst({
       where: { id: req.params.id, tenantId: req.tenant!.id, role: 'student' },
+      include: { _count: { select: { enrollments: true } } },
     });
     if (!student) throw notFound('Student not found');
+    if (next === 'approved' && student._count.enrollments === 0) {
+      throw badRequest(
+        'Students must be enrolled in at least one class before approval. Invite them from a class roster first.'
+      );
+    }
     const updated = await basePrisma.user.update({
       where: { id: student.id },
       data: { status: next },
@@ -189,7 +248,10 @@ router.get(
     const teachers = await basePrisma.user.findMany({
       where: { tenantId: req.tenant!.id, role: 'teacher' },
       orderBy: { createdAt: 'desc' },
-      select: teacherSelect,
+      select: {
+        ...teacherSelect,
+        classesOwned: { select: { id: true, title: true }, orderBy: { title: 'asc' } },
+      },
     });
     res.json({ teachers: teachers.map(serializeTeacher) });
   })
@@ -220,10 +282,25 @@ router.post(
         subject: data.subject || null,
         phone: data.phone || null,
       },
-      select: teacherSelect,
+      select: {
+        ...teacherSelect,
+        classesOwned: { select: { id: true, title: true } },
+      },
     });
 
-    res.status(201).json({ teacher: serializeTeacher(teacher) });
+    if (data.classIds?.length) {
+      await syncTeacherClasses(tenantId, teacher.id, data.classIds);
+    }
+
+    const withClasses = await basePrisma.user.findFirst({
+      where: { id: teacher.id },
+      select: {
+        ...teacherSelect,
+        classesOwned: { select: { id: true, title: true }, orderBy: { title: 'asc' } },
+      },
+    });
+
+    res.status(201).json({ teacher: serializeTeacher(withClasses!) });
   })
 );
 
@@ -262,9 +339,25 @@ router.patch(
     const updated = await basePrisma.user.update({
       where: { id: teacher.id },
       data: update,
-      select: teacherSelect,
+      select: {
+        ...teacherSelect,
+        classesOwned: { select: { id: true, title: true } },
+      },
     });
-    res.json({ teacher: serializeTeacher(updated) });
+
+    if (data.classIds !== undefined) {
+      await syncTeacherClasses(tenantId, teacher.id, data.classIds);
+    }
+
+    const withClasses = await basePrisma.user.findFirst({
+      where: { id: teacher.id },
+      select: {
+        ...teacherSelect,
+        classesOwned: { select: { id: true, title: true }, orderBy: { title: 'asc' } },
+      },
+    });
+
+    res.json({ teacher: serializeTeacher(withClasses!) });
   })
 );
 

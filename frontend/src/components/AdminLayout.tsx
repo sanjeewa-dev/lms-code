@@ -2,8 +2,19 @@ import { useState } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useDarkMode } from '../hooks/useDarkMode';
-import { Icon } from './icons';
+import { Icon, type IconName } from './icons';
 import { Breadcrumbs, adminTrails } from './Breadcrumbs';
+
+const links: { to: string; label: string; icon: IconName; end?: boolean }[] = [
+  { to: '/admin', label: 'Overview', icon: 'dashboard', end: true },
+  { to: '/admin/tenants', label: 'Institutes', icon: 'building' },
+  { to: '/admin/users', label: 'Users', icon: 'users' },
+  { to: '/admin/monitoring', label: 'Monitoring', icon: 'chart' },
+  { to: '/admin/ai', label: 'AI Usage', icon: 'spark' },
+  { to: '/admin/payments', label: 'Payments', icon: 'payments' },
+  { to: '/admin/audit', label: 'Audit Log', icon: 'note' },
+  { to: '/admin/profile', label: 'Profile', icon: 'user' },
+];
 
 export function AdminLayout() {
   const { user, logout } = useAuth();
@@ -27,24 +38,19 @@ export function AdminLayout() {
           </span>
         </Link>
 
-        <nav className="flex-1 space-y-1 px-3 py-2">
-          <NavLink
-            to="/admin"
-            end
-            onClick={() => setOpen(false)}
-            className={({ isActive }) => `side-link ${isActive ? 'side-link-active' : ''}`}
-          >
-            <Icon name="building" />
-            Institutes
-          </NavLink>
-          <NavLink
-            to="/admin/profile"
-            onClick={() => setOpen(false)}
-            className={({ isActive }) => `side-link ${isActive ? 'side-link-active' : ''}`}
-          >
-            <Icon name="user" />
-            Profile
-          </NavLink>
+        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">
+          {links.map((l) => (
+            <NavLink
+              key={l.to}
+              to={l.to}
+              end={l.end}
+              onClick={() => setOpen(false)}
+              className={({ isActive }) => `side-link ${isActive ? 'side-link-active' : ''}`}
+            >
+              <Icon name={l.icon} />
+              {l.label}
+            </NavLink>
+          ))}
         </nav>
 
         <button
@@ -64,19 +70,20 @@ export function AdminLayout() {
                 <Icon name="menu" />
               </button>
               <div>
-                <p className="text-xs text-slate-400">Platform control</p>
-                <h1 className="text-lg font-bold text-slate-900 dark:text-white">
-                  Welcome back, {user?.name.split(' ')[0]} <span className="align-middle">👋</span>
-                </h1>
+                <p className="text-xs text-slate-400">
+                  {new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
+                </p>
+                <Link to="/admin/profile" className="hover:text-brand-600">
+                  <h1 className="text-lg font-bold text-slate-900 dark:text-white">
+                    Hi, {user?.name.split(' ')[0]} <span className="align-middle">👋</span>
+                  </h1>
+                </Link>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <button className="icon-btn" onClick={toggle} aria-label="Toggle theme">
                 <Icon name={dark ? 'sun' : 'moon'} />
               </button>
-              <span className="rounded-full bg-accent-600/15 px-3 py-1.5 text-xs font-semibold text-accent-600">
-                super-admin
-              </span>
             </div>
           </div>
         </header>

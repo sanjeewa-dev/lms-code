@@ -3,7 +3,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTenantApi } from '../hooks/useTenantApi';
 import { useAuth } from '../context/AuthContext';
 import { apiErrorMessage } from '../api/client';
-import { Button, Card, Input, Spinner, Textarea } from '../components/ui';
+import { Badge, Button, Card, Input, Spinner, Textarea } from '../components/ui';
+import { Icon } from '../components/icons';
+import { EmptyState, FormPanel, PageHeader } from '../components/tenant/TenantUi';
 import type { EventItem } from '../api/types';
 
 export default function Events() {
@@ -45,63 +47,95 @@ export default function Events() {
   });
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Events</h1>
-          <p className="text-slate-500 dark:text-slate-400">Upcoming and recent events</p>
-        </div>
-        {canManage && <Button onClick={() => setShowForm((s) => !s)}>{showForm ? 'Close' : 'New event'}</Button>}
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        icon="events"
+        tone="sky"
+        title="Events"
+        subtitle="Upcoming and recent institute events"
+        action={
+          canManage ? (
+            <button
+              onClick={() => setShowForm((s) => !s)}
+              className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700"
+            >
+              <span className="text-lg leading-none">+</span>
+              {showForm ? 'Close' : 'New event'}
+            </button>
+          ) : undefined
+        }
+      />
 
       {showForm && canManage && (
-        <Card>
+        <FormPanel
+          title="Create new event"
+          subtitle="Share date, details, and an optional batch label"
+          onClose={() => setShowForm(false)}
+        >
           <div className="grid gap-3 sm:grid-cols-2">
             <Input label="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
             <Input
-              label="Date"
+              label="Date & time"
               type="datetime-local"
               value={form.eventDate}
               onChange={(e) => setForm({ ...form, eventDate: e.target.value })}
             />
-            <Input label="Batch label (optional)" value={form.batchLabel} onChange={(e) => setForm({ ...form, batchLabel: e.target.value })} />
+            <Input
+              label="Batch label (optional)"
+              className="sm:col-span-2"
+              value={form.batchLabel}
+              onChange={(e) => setForm({ ...form, batchLabel: e.target.value })}
+              placeholder="e.g. 2026 A/L"
+            />
           </div>
           <Textarea
             label="Details"
             className="mt-3"
-            rows={2}
+            rows={3}
             value={form.body}
             onChange={(e) => setForm({ ...form, body: e.target.value })}
           />
           {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-          <Button className="mt-3" onClick={() => createMutation.mutate()} disabled={createMutation.isPending || !form.title || !form.eventDate}>
+          <Button
+            className="mt-4"
+            onClick={() => createMutation.mutate()}
+            disabled={createMutation.isPending || !form.title || !form.eventDate}
+          >
             {createMutation.isPending ? 'Saving...' : 'Create event'}
           </Button>
-        </Card>
+        </FormPanel>
       )}
 
       {query.isLoading ? (
         <Spinner />
       ) : query.data && query.data.length > 0 ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {query.data.map((e) => (
-            <Card key={e.id}>
-              <div className="text-xs font-medium text-brand-600">
-                {new Date(e.eventDate).toLocaleString()}
-                {e.batchLabel ? ` · ${e.batchLabel}` : ''}
+            <Card key={e.id} className="rounded-2xl transition hover:border-brand-200 hover:shadow-md">
+              <div className="flex items-start justify-between gap-2">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-sky-100 text-sky-600">
+                  <Icon name="events" width={18} height={18} />
+                </span>
+                {canManage && (
+                  <button
+                    className="text-xs font-medium text-red-500 hover:underline"
+                    onClick={() => deleteMutation.mutate(e.id)}
+                  >
+                    Delete
+                  </button>
+                )}
               </div>
-              <div className="font-semibold text-slate-800 dark:text-slate-100">{e.title}</div>
-              <p className="text-sm text-slate-500">{e.body}</p>
-              {canManage && (
-                <button className="mt-2 text-xs text-red-600 hover:underline" onClick={() => deleteMutation.mutate(e.id)}>
-                  Delete
-                </button>
-              )}
+              <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-brand-600">
+                {new Date(e.eventDate).toLocaleString()}
+              </p>
+              <h3 className="mt-1 font-semibold text-slate-900 dark:text-white">{e.title}</h3>
+              {e.batchLabel && <Badge tone="slate">{e.batchLabel}</Badge>}
+              <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{e.body}</p>
             </Card>
           ))}
         </div>
       ) : (
-        <p className="text-sm text-slate-500">No events.</p>
+        <EmptyState message="No events yet." />
       )}
     </div>
   );

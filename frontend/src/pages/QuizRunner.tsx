@@ -38,7 +38,9 @@ export default function QuizRunner() {
           }
         }
       })
-      .catch((err) => setError(apiErrorMessage(err)));
+      .catch((err) => {
+        if (active) setError(apiErrorMessage(err));
+      });
     return () => {
       active = false;
     };

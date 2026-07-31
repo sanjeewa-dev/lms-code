@@ -1,22 +1,55 @@
-import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import { Button, Card, Input } from '../components/ui';
 import { PasswordRequirements } from '../components/PasswordRequirements';
-import { apiErrorMessage } from '../api/client';
+import { api, apiErrorMessage } from '../api/client';
 import { validatePassword } from '../lib/passwordValidation';
+
+type PublicClass = {
+  id: string;
+  title: string;
+  description: string;
+  price: number;
+  teacher?: { name: string } | null;
+};
 
 export default function TenantRegister() {
   const { slug } = useParams<{ slug: string }>();
+  const [params] = useSearchParams();
   const { registerTenant } = useAuth();
-  const [form, setForm] = useState({ name: '', email: '', password: '' });
+  const [form, setForm] = useState({
+    name: '',
+    email: '',
+    password: '',
+    classId: params.get('classId') ?? '',
+  });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
 
+  const classesQuery = useQuery({
+    queryKey: ['public-classes', slug],
+    enabled: Boolean(slug),
+    queryFn: async () =>
+      (await api.get<{ classes: PublicClass[] }>(`/t/${slug}/public/classes`)).data.classes,
+  });
+
+  useEffect(() => {
+    const list = classesQuery.data;
+    if (!list?.length) return;
+    if (form.classId && list.some((c) => c.id === form.classId)) return;
+    setForm((f) => ({ ...f, classId: list[0].id }));
+  }, [classesQuery.data, form.classId]);
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+    if (!form.classId) {
+      setError('Select a class to join. Students must enroll in a class.');
+      return;
+    }
     const pwdErr = validatePassword(form.password);
     if (pwdErr) {
       setError(pwdErr);
@@ -42,7 +75,8 @@ export default function TenantRegister() {
           </div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Registration submitted</h1>
           <p className="mt-2 text-sm text-slate-500">
-            Your account is awaiting approval from the institute. You'll be able to sign in once an admin approves it.
+            Your account is awaiting approval from the institute. You&apos;ll be able to sign in once an
+            admin approves it.
           </p>
           <Link
             to="/login"
@@ -55,6 +89,8 @@ export default function TenantRegister() {
     );
   }
 
+  const classes = classesQuery.data ?? [];
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-hero-gradient px-4">
       <Card className="w-full max-w-md">
@@ -64,9 +100,39 @@ export default function TenantRegister() {
           </div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Register as a student</h1>
           <p className="text-sm capitalize text-slate-500">Institute: {slug}</p>
+          <p className="mt-1 text-xs text-slate-400">You must choose a class to join.</p>
         </div>
         <form onSubmit={onSubmit} className="space-y-4">
-          <Input label="Full name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+              Class
+            </span>
+            <select
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
+              value={form.classId}
+              onChange={(e) => setForm({ ...form, classId: e.target.value })}
+              required
+              disabled={classesQuery.isLoading || classes.length === 0}
+            >
+              {classes.length === 0 ? (
+                <option value="">No published classes available</option>
+              ) : (
+                classes.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.title}
+                    {c.price > 0 ? ` (LKR ${c.price})` : ' (Free)'}
+                    {c.teacher?.name ? ` · ${c.teacher.name}` : ''}
+                  </option>
+                ))
+              )}
+            </select>
+          </label>
+          <Input
+            label="Full name"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            required
+          />
           <Input
             label="Email"
             type="email"
@@ -84,7 +150,7 @@ export default function TenantRegister() {
           />
           <PasswordRequirements password={form.password} />
           {error && <p className="text-sm text-red-600">{error}</p>}
-          <Button type="submit" disabled={loading} className="w-full">
+          <Button type="submit" disabled={loading || !form.classId || classes.length === 0} className="w-full">
             {loading ? 'Creating...' : 'Create account'}
           </Button>
         </form>

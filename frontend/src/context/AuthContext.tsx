@@ -13,7 +13,10 @@ interface AuthContextValue {
   login: (email: string, password: string, tenantSlug?: string) => Promise<UnifiedLoginResult>;
   loginPlatform: (email: string, password: string) => Promise<User>;
   loginTenant: (slug: string, email: string, password: string) => Promise<User>;
-  registerTenant: (slug: string, input: { name: string; email: string; password: string }) => Promise<void>;
+  registerTenant: (
+    slug: string,
+    input: { name: string; email: string; password: string; classId: string }
+  ) => Promise<void>;
   refreshUser: () => Promise<void>;
   updateUser: (user: User) => void;
   logout: () => void;
@@ -82,7 +85,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return handleAuth(data);
   }
 
-  async function registerTenant(slug: string, input: { name: string; email: string; password: string }) {
+  async function registerTenant(
+    slug: string,
+    input: { name: string; email: string; password: string; classId: string }
+  ) {
     // New students are created as "pending" and must be approved before sign-in.
     await api.post(`/t/${slug}/auth/register`, input);
   }
@@ -90,6 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   function logout() {
     const refreshToken = tokenStore.refresh;
     if (refreshToken) api.post('/auth/logout', { refreshToken }).catch(() => undefined);
+    tokenStore.endSupport();
     tokenStore.clear();
     setUser(null);
     navigate('/login', { replace: true });

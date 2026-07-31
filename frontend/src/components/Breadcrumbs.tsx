@@ -75,6 +75,14 @@ export const tenantTrails: Trail[] = [
   { pattern: 'dashboard', trail: [{ label: 'Dashboard' }] },
   { pattern: 'classes', trail: [{ label: 'Classes' }] },
   { pattern: 'classes/:classId', trail: [{ label: 'Classes', to: 'classes' }, { label: 'Class Details' }] },
+  {
+    pattern: 'classes/:classId/:section',
+    trail: [
+      { label: 'Classes', to: 'classes' },
+      { label: 'Class Details', to: 'classes/:classId' },
+      { label: 'Section' },
+    ],
+  },
   { pattern: 'materials/:materialId', trail: [{ label: 'Classes', to: 'classes' }, { label: 'Material' }] },
   { pattern: 'quizzes/:quizId/take', trail: [{ label: 'Classes', to: 'classes' }, { label: 'Quiz' }] },
   {
@@ -90,11 +98,22 @@ export const tenantTrails: Trail[] = [
   { pattern: 'events', trail: [{ label: 'Events' }] },
   { pattern: 'attendance', trail: [{ label: 'Attendance' }] },
   { pattern: 'live', trail: [{ label: 'Live Class' }] },
+  { pattern: 'chat', trail: [{ label: 'Chat' }] },
+  { pattern: 'ai', trail: [{ label: 'AI Student Area' }] },
+  { pattern: 'ai-copilot', trail: [{ label: 'AI Teacher Copilot' }] },
+  { pattern: 'interventions', trail: [{ label: 'Interventions' }] },
   { pattern: 'settings', trail: [{ label: 'Settings' }] },
 ];
 
 /** Breadcrumb trails for the platform admin app (relative to `/admin`). */
 export const adminTrails: Trail[] = [
-  { pattern: '', trail: [{ label: 'Institutes' }] },
+  { pattern: '', trail: [{ label: 'Overview' }] },
+  { pattern: 'tenants', trail: [{ label: 'Institutes' }] },
+  { pattern: 'tenants/:id', trail: [{ label: 'Institutes', to: 'tenants' }, { label: 'Institute' }] },
+  { pattern: 'users', trail: [{ label: 'Users' }] },
+  { pattern: 'monitoring', trail: [{ label: 'Monitoring' }] },
+  { pattern: 'ai', trail: [{ label: 'AI Usage' }] },
+  { pattern: 'payments', trail: [{ label: 'Payments' }] },
+  { pattern: 'audit', trail: [{ label: 'Audit Log' }] },
   { pattern: 'profile', trail: [{ label: 'Profile' }] },
 ];

@@ -23,6 +23,7 @@ export function serializeProfile(user: User & { tenant?: { slug: string; name: s
       ...base,
       guardianName: user.guardianName,
       guardianPhone: user.guardianPhone,
+      guardianEmail: user.guardianEmail,
       area: user.area,
       district: user.district,
     };

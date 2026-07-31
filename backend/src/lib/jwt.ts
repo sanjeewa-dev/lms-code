@@ -8,6 +8,7 @@ export interface AccessTokenPayload {
   email: string;
   name: string;
   tenantId: string | null;
+  supportSessionId?: string;
 }
 
 export function signAccessToken(payload: AccessTokenPayload): string {

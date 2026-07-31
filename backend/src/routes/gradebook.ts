@@ -33,7 +33,7 @@ router.get(
         orderBy: { createdAt: 'asc' },
       }),
       prisma.quiz.findMany({
-        where: { classId: klass.id },
+        where: { classId: klass.id, isPublished: true },
         select: { id: true, title: true, totalMarks: true, isPublished: true },
         orderBy: { createdAt: 'asc' },
       }),
@@ -168,6 +168,98 @@ router.get(
         };
       }),
     });
+  })
+);
+
+/** Student dashboard: quiz + assignment marks as % across enrolled classes (chronological). */
+router.get(
+  '/performance/mine',
+  authenticate,
+  requireRole('student'),
+  asyncHandler(async (req, res) => {
+    const studentId = req.user!.sub;
+
+    const [attempts, gradedSubs] = await Promise.all([
+      prisma.quizAttempt.findMany({
+        where: {
+          studentId,
+          submittedAt: { not: null },
+          quiz: { isPublished: true },
+        },
+        include: {
+          quiz: { select: { title: true, totalMarks: true, class: { select: { title: true } } } },
+        },
+        orderBy: { submittedAt: 'asc' },
+        take: 24,
+      }),
+      prisma.submission.findMany({
+        where: {
+          studentId,
+          grade: { not: null },
+          assessmentId: { not: null },
+          assessment: { kind: 'assessment' },
+        },
+        include: {
+          assessment: {
+            select: {
+              title: true,
+              maxMarks: true,
+              class: { select: { title: true } },
+            },
+          },
+        },
+        orderBy: { submittedAt: 'asc' },
+        take: 24,
+      }),
+    ]);
+
+    type Point = {
+      label: string;
+      classTitle: string;
+      score: number;
+      totalMarks: number;
+      percentage: number;
+      submittedAt: string;
+      kind: 'quiz' | 'assignment';
+    };
+
+    const quizPoints: Point[] = attempts.map((a) => {
+      const total = a.quiz.totalMarks || 0;
+      const score = a.score == null ? 0 : Number(a.score);
+      const percentage = total > 0 ? Math.max(0, Math.min(100, Math.round((score / total) * 100))) : 0;
+      return {
+        label: a.quiz.title,
+        classTitle: a.quiz.class.title,
+        score,
+        totalMarks: total,
+        percentage,
+        submittedAt: a.submittedAt!.toISOString(),
+        kind: 'quiz',
+      };
+    });
+
+    const assignmentPoints: Point[] = gradedSubs
+      .filter((s) => s.assessment && s.assessment.maxMarks != null && s.assessment.maxMarks > 0)
+      .map((s) => {
+        const total = Number(s.assessment!.maxMarks);
+        const score = Number(s.grade);
+        const percentage = Math.max(0, Math.min(100, Math.round((score / total) * 100)));
+        return {
+          label: s.assessment!.title,
+          classTitle: s.assessment!.class.title,
+          score,
+          totalMarks: total,
+          percentage,
+          submittedAt: s.submittedAt.toISOString(),
+          kind: 'assignment' as const,
+        };
+      });
+
+    const points = [...quizPoints, ...assignmentPoints]
+      .sort((a, b) => a.submittedAt.localeCompare(b.submittedAt))
+      .slice(-24);
+
+    res.json({ points });
   })
 );
 

@@ -61,6 +61,7 @@ router.patch(
     if (user.role === 'student') {
       if (data.guardianName !== undefined) update.guardianName = data.guardianName || null;
       if (data.guardianPhone !== undefined) update.guardianPhone = data.guardianPhone || null;
+      if (data.guardianEmail !== undefined) update.guardianEmail = data.guardianEmail || null;
       if (data.area !== undefined) update.area = data.area || null;
       if (data.district !== undefined) update.district = data.district || null;
     }

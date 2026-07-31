@@ -7,6 +7,13 @@ export interface User {
   role: Role;
   tenantId: string | null;
   tenantSlug: string | null;
+  supportSession?: {
+    id: string;
+    tenantId: string;
+    tenantSlug: string;
+    tenantName: string;
+    expiresAt: string;
+  } | null;
 }
 
 export interface UserProfile {
@@ -21,6 +28,7 @@ export interface UserProfile {
   subject?: string | null;
   guardianName?: string | null;
   guardianPhone?: string | null;
+  guardianEmail?: string | null;
   area?: string | null;
   district?: string | null;
   status?: string;
@@ -39,6 +47,7 @@ export interface TenantSummary {
   name: string;
   logoUrl?: string | null;
   isActive: boolean;
+  plan?: 'pro' | 'enterprise';
   createdAt: string;
   userCount?: number;
   classCount?: number;
@@ -67,6 +76,8 @@ export interface AdminStats {
 }
 
 export type StudentStatus = 'pending' | 'approved' | 'rejected';
+export type EnrollmentStatus = 'pending' | 'active' | 'rejected';
+export type PaymentStatus = 'pending' | 'approved' | 'rejected';
 
 export interface TenantUser {
   id: string;
@@ -78,6 +89,7 @@ export interface TenantUser {
   freeIdCard?: boolean;
   status?: StudentStatus;
   classes?: string[];
+  classEnrollments?: { classId: string; title: string; status: EnrollmentStatus }[];
   createdAt: string;
 }
 
@@ -88,6 +100,7 @@ export interface Teacher {
   subject: string;
   phone: string;
   createdAt: string;
+  classes?: { id: string; title: string }[];
 }
 
 export interface ClassSummary {
@@ -102,9 +115,6 @@ export interface ClassSummary {
   studentCount?: number;
   createdAt: string;
 }
-
-export type EnrollmentStatus = 'pending' | 'active' | 'rejected';
-export type PaymentStatus = 'pending' | 'approved' | 'rejected';
 
 export interface Enrollment {
   id: string;
@@ -171,7 +181,8 @@ export interface SubmissionItem {
   student?: { id: string; name: string; email: string };
 }
 
-export type MeetingPlatform = 'zoom' | 'teams' | 'google_meet';
+export type MeetingPlatform = 'zoom' | 'teams' | 'google_meet' | 'jitsi';
+export type SessionStatus = 'scheduled' | 'live' | 'ended';
 
 export interface ClassSchedule {
   id: string;
@@ -179,6 +190,11 @@ export interface ClassSchedule {
   classTime: string;
   platform: MeetingPlatform;
   meetingText: string;
+  status: SessionStatus;
+  roomName: string | null;
+  startedAt: string | null;
+  endedAt: string | null;
+  recordingUrl: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -224,6 +240,8 @@ export interface AttemptResult {
     correctIndex: number;
     selectedIndex: number;
     marks: number;
+    explanation?: string | null;
+    explanationSteps?: string[] | null;
   }[];
 }
 
@@ -305,4 +323,38 @@ export interface PublicTenant {
   notices: Notice[];
   events: EventItem[];
   videos: VideoLesson[];
+}
+
+export interface ChatPeerClass {
+  id: string;
+  title: string;
+}
+
+export interface ChatContact {
+  id: string;
+  name: string;
+  email: string;
+  role: 'teacher' | 'student';
+  subtitle?: string;
+  classes?: ChatPeerClass[];
+}
+
+export interface ChatConversation {
+  id: string;
+  peer: { id: string; name: string; email: string };
+  peerClasses: ChatPeerClass[];
+  lastMessage: { body: string; createdAt: string; senderId: string } | null;
+  lastMessageAt: string | null;
+  unreadCount: number;
+  createdAt: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  body: string;
+  senderId: string;
+  senderName: string;
+  readAt: string | null;
+  createdAt: string;
+  mine: boolean;
 }

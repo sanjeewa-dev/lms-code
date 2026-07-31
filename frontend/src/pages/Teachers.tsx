@@ -2,11 +2,12 @@ import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTenantApi } from '../hooks/useTenantApi';
 import { apiErrorMessage } from '../api/client';
-import { Card, Spinner } from '../components/ui';
+import { Badge, Button, Card, Spinner } from '../components/ui';
 import { Icon } from '../components/icons';
 import { PasswordRequirements } from '../components/PasswordRequirements';
 import { validatePassword } from '../lib/passwordValidation';
-import type { Teacher } from '../api/types';
+import { EmptyState, FormPanel, PageHeader } from '../components/tenant/TenantUi';
+import type { ClassSummary, Teacher } from '../api/types';
 
 interface FormState {
   name: string;
@@ -14,9 +15,20 @@ interface FormState {
   password: string;
   subject: string;
   phone: string;
+  classIds: string[];
 }
 
-const EMPTY_FORM: FormState = { name: '', email: '', password: '', subject: '', phone: '' };
+const EMPTY_FORM: FormState = {
+  name: '',
+  email: '',
+  password: '',
+  subject: '',
+  phone: '',
+  classIds: [],
+};
+
+const inputCls =
+  'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-white/10 dark:bg-white/5';
 
 export default function Teachers() {
   const t = useTenantApi();
@@ -35,12 +47,22 @@ export default function Teachers() {
     queryFn: async () => (await t.get<{ teachers: Teacher[] }>('/teachers')).data.teachers,
   });
 
+  const classesQuery = useQuery({
+    queryKey: ['classes', t.slug],
+    queryFn: async () => (await t.get<{ classes: ClassSummary[] }>('/classes')).data.classes,
+  });
+
+  const allClasses = classesQuery.data ?? [];
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const list = teachersQuery.data ?? [];
     if (!q) return list;
     return list.filter(
-      (x) => x.name.toLowerCase().includes(q) || x.subject.toLowerCase().includes(q)
+      (x) =>
+        x.name.toLowerCase().includes(q) ||
+        x.subject.toLowerCase().includes(q) ||
+        x.email.toLowerCase().includes(q)
     );
   }, [teachersQuery.data, search]);
 
@@ -59,6 +81,7 @@ export default function Teachers() {
       password: '',
       subject: teacher.subject,
       phone: teacher.phone,
+      classIds: teacher.classes?.map((c) => c.id) ?? [],
     });
     setFormError('');
     setModalOpen(true);
@@ -67,8 +90,18 @@ export default function Teachers() {
   function refresh() {
     return Promise.all([
       queryClient.invalidateQueries({ queryKey: ['teachers', t.slug] }),
+      queryClient.invalidateQueries({ queryKey: ['classes', t.slug] }),
       queryClient.invalidateQueries({ queryKey: ['stats', t.slug] }),
     ]);
+  }
+
+  function toggleClass(classId: string) {
+    setForm((f) => ({
+      ...f,
+      classIds: f.classIds.includes(classId)
+        ? f.classIds.filter((id) => id !== classId)
+        : [...f.classIds, classId],
+    }));
   }
 
   async function submit(e: React.FormEvent) {
@@ -94,6 +127,7 @@ export default function Teachers() {
         email: form.email.trim(),
         subject: form.subject.trim(),
         phone: form.phone.trim(),
+        classIds: form.classIds,
         ...(form.password ? { password: form.password } : {}),
       };
 
@@ -126,30 +160,23 @@ export default function Teachers() {
   }
 
   return (
-    <div className="space-y-5">
-      {/* Page header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span className="grid h-11 w-11 place-items-center rounded-xl bg-violet-100 text-violet-600">
-            <Icon name="teacher" />
-          </span>
-          <div>
-            <h1 className="text-xl font-bold text-slate-900 dark:text-white">Teachers Management</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Add, edit, and manage teacher accounts.
-            </p>
-          </div>
-        </div>
-        <button
-          onClick={openAdd}
-          className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700"
-        >
-          <span className="text-lg leading-none">+</span> Add New Teacher
-        </button>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        icon="teacher"
+        tone="violet"
+        title="Teachers"
+        subtitle="Add teachers and assign them to classes now or later."
+        action={
+          <button
+            onClick={openAdd}
+            className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700"
+          >
+            <span className="text-lg leading-none">+</span> Add teacher
+          </button>
+        }
+      />
 
-      {/* Search */}
-      <Card>
+      <Card className="rounded-2xl">
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
             <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
@@ -157,14 +184,12 @@ export default function Teachers() {
             </span>
             <input
               className={`${inputCls} pl-9`}
-              placeholder="Search by Name or Subject..."
+              placeholder="Search by name, subject, or email..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <span className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white">
-            {filtered.length} teachers
-          </span>
+          <Badge tone="slate">{filtered.length} teachers</Badge>
         </div>
       </Card>
 
@@ -172,64 +197,79 @@ export default function Teachers() {
         <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">{actionError}</p>
       )}
 
-      {/* Table */}
-      <Card className="p-0">
+      <Card className="overflow-hidden rounded-2xl p-0">
         {teachersQuery.isLoading ? (
           <Spinner label="Loading teachers..." />
         ) : filtered.length === 0 ? (
-          <p className="p-6 text-sm text-slate-500 dark:text-slate-400">
-            {search ? 'No teachers match your search.' : 'No teachers yet. Add your first teacher.'}
-          </p>
+          <EmptyState
+            message={search ? 'No teachers match your search.' : 'No teachers yet. Add your first teacher.'}
+            action={
+              !search ? (
+                <Button onClick={openAdd}>Add teacher</Button>
+              ) : undefined
+            }
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-400 dark:border-white/5">
+              <thead className="border-b border-slate-100 bg-slate-50/80 text-xs uppercase tracking-wide text-slate-400 dark:border-white/5 dark:bg-white/5">
                 <tr>
-                  <th className="px-5 py-3 font-semibold">Teacher Name</th>
+                  <th className="px-5 py-3 font-semibold">Teacher</th>
                   <th className="px-5 py-3 font-semibold">Subject</th>
-                  <th className="px-5 py-3 font-semibold">Phone Number</th>
-                  <th className="px-5 py-3 font-semibold">Email</th>
-                  <th className="px-5 py-3 text-right font-semibold">Action</th>
+                  <th className="px-5 py-3 font-semibold">Classes</th>
+                  <th className="px-5 py-3 font-semibold">Contact</th>
+                  <th className="px-5 py-3 text-right font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                 {filtered.map((teacher) => (
-                  <tr key={teacher.id} className="transition hover:bg-slate-50 dark:hover:bg-white/5">
-                    <td className="px-5 py-3">
+                  <tr key={teacher.id} className="transition hover:bg-slate-50/80 dark:hover:bg-white/5">
+                    <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
                         <TeacherAvatar teacher={teacher} />
-                        <span className="font-semibold text-brand-600">{teacher.name}</span>
+                        <div>
+                          <p className="font-semibold text-slate-900 dark:text-white">{teacher.name}</p>
+                          <p className="text-xs text-slate-500">{teacher.email}</p>
+                        </div>
                       </div>
                     </td>
-                    <td className="px-5 py-3">
+                    <td className="px-5 py-4">
                       {teacher.subject ? (
-                        <span className="inline-flex rounded-md bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-700">
-                          {teacher.subject}
-                        </span>
+                        <Badge tone="blue">{teacher.subject}</Badge>
                       ) : (
                         <span className="text-slate-400">—</span>
                       )}
                     </td>
-                    <td className="px-5 py-3 text-slate-500 dark:text-slate-400">
-                      {teacher.phone || <span className="text-slate-400">—</span>}
+                    <td className="px-5 py-4">
+                      {teacher.classes && teacher.classes.length > 0 ? (
+                        <div className="flex max-w-xs flex-wrap gap-1">
+                          {teacher.classes.map((c) => (
+                            <Badge key={c.id} tone="slate">
+                              {c.title}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-400">No classes assigned</span>
+                      )}
                     </td>
-                    <td className="px-5 py-3 text-slate-500 dark:text-slate-400">{teacher.email}</td>
-                    <td className="px-5 py-3">
+                    <td className="px-5 py-4 text-slate-500">{teacher.phone || '—'}</td>
+                    <td className="px-5 py-4">
                       <div className="flex justify-end gap-1.5">
                         <button
                           onClick={() => openEdit(teacher)}
-                          title="Edit teacher"
-                          className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700"
+                          className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 text-slate-600 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 dark:border-white/10"
+                          title="Edit"
                         >
-                          <Icon name="note" width={14} height={14} /> Edit
+                          <Icon name="note" width={16} height={16} />
                         </button>
                         <button
                           onClick={() => remove(teacher)}
                           disabled={busyId === teacher.id}
-                          title="Delete teacher"
-                          className="inline-flex items-center gap-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-700 disabled:opacity-40"
+                          className="grid h-8 w-8 place-items-center rounded-lg bg-red-600 text-white transition hover:bg-red-700 disabled:opacity-40"
+                          title="Delete"
                         >
-                          <Icon name="trash" width={14} height={14} /> Del
+                          <Icon name="trash" width={16} height={16} />
                         </button>
                       </div>
                     </td>
@@ -241,12 +281,11 @@ export default function Teachers() {
         )}
       </Card>
 
-      {/* Add / Edit modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-500/40 p-4">
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4 backdrop-blur-sm">
           <form
             onSubmit={submit}
-            className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-ink-850"
+            className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-ink-850"
           >
             <button
               type="button"
@@ -255,80 +294,76 @@ export default function Teachers() {
             >
               ×
             </button>
-            <h2 className="mb-5 flex items-center gap-2 text-lg font-bold text-slate-900 dark:text-white">
-              <span className="text-brand-600">
-                <Icon name="teacher" width={22} height={22} />
-              </span>
-              {editing ? 'Edit Teacher' : 'Add New Teacher'}
+            <h2 className="mb-1 text-lg font-bold text-slate-900 dark:text-white">
+              {editing ? 'Edit teacher' : 'Add teacher'}
             </h2>
+            <p className="mb-5 text-sm text-slate-500">
+              {editing ? 'Update details or class assignments.' : 'Create an account and optionally assign classes.'}
+            </p>
 
             <div className="space-y-3">
-              <Field label="Teacher Name">
-                <input
-                  className={inputCls}
-                  placeholder="e.g. Mr. Sunimal Perera"
-                  value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  required
-                />
+              <Field label="Teacher name *">
+                <input className={inputCls} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} required />
               </Field>
-              <Field label="Email">
-                <input
-                  type="email"
-                  className={inputCls}
-                  placeholder="teacher@institute.lk"
-                  value={form.email}
-                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                  required
-                />
+              <Field label="Email *">
+                <input type="email" className={inputCls} value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} required />
               </Field>
-              <Field label={editing ? 'Password (leave blank to keep current)' : 'Password'}>
-                <input
-                  type="password"
-                  className={inputCls}
-                  placeholder="Create a strong password"
-                  value={form.password}
-                  onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                  required={!editing}
-                />
+              <Field label={editing ? 'Password (leave blank to keep)' : 'Password *'}>
+                <input type="password" className={inputCls} value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} required={!editing} />
               </Field>
               {form.password && <PasswordRequirements password={form.password} />}
-              <Field label="Subject">
-                <input
-                  className={inputCls}
-                  placeholder="e.g. ICT"
-                  value={form.subject}
-                  onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))}
-                />
-              </Field>
-              <Field label="Phone Number">
-                <input
-                  className={inputCls}
-                  placeholder="e.g. 0771234567"
-                  value={form.phone}
-                  onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-                />
-              </Field>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Subject">
+                  <input className={inputCls} value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} placeholder="e.g. ICT" />
+                </Field>
+                <Field label="Phone">
+                  <input className={inputCls} value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="077..." />
+                </Field>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 dark:border-white/10 dark:bg-white/5">
+                <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Assign to classes</p>
+                <p className="mt-0.5 text-xs text-slate-500">Optional — you can assign classes later from here.</p>
+                {classesQuery.isLoading ? (
+                  <Spinner />
+                ) : allClasses.length === 0 ? (
+                  <p className="mt-2 text-sm text-slate-500">No classes yet. Create classes first.</p>
+                ) : (
+                  <div className="mt-3 flex max-h-36 flex-wrap gap-2 overflow-y-auto">
+                    {allClasses.map((c) => (
+                      <label
+                        key={c.id}
+                        className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${
+                          form.classIds.includes(c.id)
+                            ? 'border-brand-400 bg-brand-50 text-brand-700 dark:bg-brand-900/30'
+                            : 'border-slate-200 text-slate-600 hover:border-slate-300 dark:border-white/10'
+                        }`}
+                      >
+                        <input type="checkbox" className="sr-only" checked={form.classIds.includes(c.id)} onChange={() => toggleClass(c.id)} />
+                        {c.title}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             {formError && <p className="mt-3 text-sm text-red-600">{formError}</p>}
 
-            <button
-              type="submit"
-              disabled={saving}
-              className="mt-5 w-full rounded-lg bg-brand-600 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:opacity-60"
-            >
-              {saving ? 'Saving...' : editing ? 'Update Teacher' : 'Save Teacher'}
-            </button>
+            <div className="mt-5 flex gap-2">
+              <Button type="submit" disabled={saving} className="flex-1">
+                {saving ? 'Saving...' : editing ? 'Update teacher' : 'Save teacher'}
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setModalOpen(false)} disabled={saving}>
+                Cancel
+              </Button>
+            </div>
           </form>
         </div>
       )}
     </div>
   );
 }
-
-const inputCls =
-  'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-white/10 dark:bg-white/5';
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -342,12 +377,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function TeacherAvatar({ teacher }: { teacher: Teacher }) {
   const initials = teacher.name
     .split(' ')
-    .map((p) => p[0])
     .slice(0, 2)
-    .join('')
-    .toUpperCase();
+    .map((p) => p[0]?.toUpperCase() ?? '')
+    .join('');
   return (
-    <span className="grid h-9 w-9 place-items-center rounded-full bg-slate-200 text-xs font-bold text-slate-600 dark:bg-white/10 dark:text-slate-300">
+    <span className="grid h-10 w-10 place-items-center rounded-full bg-violet-100 text-xs font-bold text-violet-700">
       {initials || '?'}
     </span>
   );

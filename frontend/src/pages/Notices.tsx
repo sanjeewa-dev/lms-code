@@ -5,6 +5,8 @@ import { useTenantApi } from '../hooks/useTenantApi';
 import { useAuth } from '../context/AuthContext';
 import { apiErrorMessage } from '../api/client';
 import { Badge, Button, Card, Input, Spinner, Textarea } from '../components/ui';
+import { Icon } from '../components/icons';
+import { EmptyState, FormPanel, PageHeader } from '../components/tenant/TenantUi';
 import type { ClassSummary, Notice } from '../api/types';
 
 export default function Notices() {
@@ -110,63 +112,63 @@ export default function Notices() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Announcements</h1>
-          <p className="text-slate-500 dark:text-slate-400">Notices from your institute</p>
-        </div>
-        {canManage && (
-          <button
-            onClick={() => setShowForm((s) => !s)}
-            className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700"
-          >
-            <span className="text-lg leading-none">+</span>
-            {showForm ? 'Close' : 'New notice'}
-          </button>
-        )}
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        icon="notices"
+        tone="green"
+        title="Announcements"
+        subtitle="Notices and updates from your institute"
+        action={
+          canManage ? (
+            <button
+              onClick={() => setShowForm((s) => !s)}
+              className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700"
+            >
+              <span className="text-lg leading-none">+</span>
+              {showForm ? 'Close' : 'New notice'}
+            </button>
+          ) : undefined
+        }
+      />
 
       {showForm && canManage && (
-        <Card>
+        <FormPanel
+          title="Create new notice"
+          subtitle="Choose who should see this announcement"
+          onClose={() => setShowForm(false)}
+        >
           <Input label="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
           <Textarea
-            label="Body"
+            label="Message"
             className="mt-3"
-            rows={3}
+            rows={4}
             value={form.body}
             onChange={(e) => setForm({ ...form, body: e.target.value })}
           />
 
-          <div className="mt-3">
-            <span className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-300">Audience</span>
-            <div className="flex flex-wrap gap-4">
-              <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-                <input
-                  type="radio"
-                  name="scope"
-                  checked={form.scope === 'all'}
-                  onChange={() => setForm({ ...form, scope: 'all', classIds: [] })}
-                />
-                All classes
-              </label>
-              <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-                <input
-                  type="radio"
-                  name="scope"
-                  checked={form.scope === 'classes'}
-                  onChange={() => setForm({ ...form, scope: 'classes' })}
-                />
-                Specific classes
-              </label>
+          <div className="mt-4">
+            <span className="mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-300">Audience</span>
+            <div className="flex flex-wrap gap-2">
+              {(['all', 'classes'] as const).map((scope) => (
+                <button
+                  key={scope}
+                  type="button"
+                  onClick={() => setForm({ ...form, scope, classIds: scope === 'all' ? [] : form.classIds })}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                    form.scope === scope
+                      ? 'bg-brand-600 text-white'
+                      : 'bg-slate-100 text-slate-600 ring-1 ring-slate-200 dark:bg-white/5 dark:text-slate-300 dark:ring-white/10'
+                  }`}
+                >
+                  {scope === 'all' ? 'All classes' : 'Specific classes'}
+                </button>
+              ))}
             </div>
           </div>
 
           {form.scope === 'classes' && (
-            <div className="mt-3 rounded-lg border border-slate-200 p-3 dark:border-white/10">
-              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
-                Select class(es)
-              </p>
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/80 p-3 dark:border-white/10 dark:bg-white/5">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Select class(es)</p>
               {classesQuery.isLoading ? (
                 <Spinner />
               ) : teacherClasses.length === 0 ? (
@@ -178,16 +180,11 @@ export default function Notices() {
                       key={c.id}
                       className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${
                         form.classIds.includes(c.id)
-                          ? 'border-brand-400 bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-200'
-                          : 'border-slate-200 text-slate-600 hover:border-slate-300 dark:border-white/10 dark:text-slate-300 dark:hover:border-white/20'
+                          ? 'border-brand-400 bg-brand-50 text-brand-700 dark:bg-brand-900/30'
+                          : 'border-slate-200 text-slate-600 hover:border-slate-300 dark:border-white/10'
                       }`}
                     >
-                      <input
-                        type="checkbox"
-                        className="sr-only"
-                        checked={form.classIds.includes(c.id)}
-                        onChange={() => toggleClass(c.id)}
-                      />
+                      <input type="checkbox" className="sr-only" checked={form.classIds.includes(c.id)} onChange={() => toggleClass(c.id)} />
                       {c.title}
                     </label>
                   ))}
@@ -196,33 +193,26 @@ export default function Notices() {
             </div>
           )}
 
-          <label className="mt-3 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-            <input
-              type="checkbox"
-              checked={form.pinned}
-              onChange={(e) => setForm({ ...form, pinned: e.target.checked })}
-            />
-            Pin to top
+          <label className="mt-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-sm text-slate-700 dark:border-amber-900/40 dark:bg-amber-950/20">
+            <input type="checkbox" checked={form.pinned} onChange={(e) => setForm({ ...form, pinned: e.target.checked })} />
+            Pin to top of the list
           </label>
-          {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+
+          {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
           <Button
-            className="mt-3"
+            className="mt-4"
             onClick={() => createMutation.mutate()}
-            disabled={
-              createMutation.isPending ||
-              !form.title ||
-              (form.scope === 'classes' && form.classIds.length === 0)
-            }
+            disabled={createMutation.isPending || !form.title || (form.scope === 'classes' && form.classIds.length === 0)}
           >
             {createMutation.isPending ? 'Posting...' : 'Post notice'}
           </Button>
-        </Card>
+        </FormPanel>
       )}
 
       {query.isLoading ? (
         <Spinner />
       ) : query.data && query.data.length > 0 ? (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {query.data.map((n) => (
             <div
               key={n.id}
@@ -230,46 +220,53 @@ export default function Notices() {
               className="cursor-pointer"
               onClick={() => viewNotice(n)}
             >
-              <Card className={`transition ${!n.isRead ? 'border-l-4 border-l-red-500' : ''}`}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">{n.title}</span>
-                    {n.pinned && <Badge tone="amber">Pinned</Badge>}
-                    {!n.isRead && <Badge tone="red">New</Badge>}
-                    {n.scope === 'all' ? (
-                      <Badge tone="slate">All classes</Badge>
-                    ) : (
-                      n.classes?.map((c) => (
-                        <Badge key={c.id} tone="blue">
-                          {c.title}
-                        </Badge>
-                      ))
-                    )}
-                  </div>
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{n.body}</p>
-                  <span className="mt-1 block text-xs text-slate-400">
-                    {new Date(n.publishedAt).toLocaleString()}
+              <Card
+                className={`rounded-2xl transition hover:border-brand-200 hover:shadow-md ${
+                  !n.isRead ? 'border-l-4 border-l-brand-500' : ''
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-600">
+                    <Icon name="notices" width={18} height={18} />
                   </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-slate-900 dark:text-white">{n.title}</span>
+                      {n.pinned && <Badge tone="amber">Pinned</Badge>}
+                      {!n.isRead && <Badge tone="red">New</Badge>}
+                      {n.scope === 'all' ? (
+                        <Badge tone="slate">All classes</Badge>
+                      ) : (
+                        n.classes?.map((c) => (
+                          <Badge key={c.id} tone="blue">
+                            {c.title}
+                          </Badge>
+                        ))
+                      )}
+                    </div>
+                    <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{n.body}</p>
+                    <span className="mt-2 block text-xs text-slate-400">
+                      {new Date(n.publishedAt).toLocaleString()}
+                    </span>
+                  </div>
+                  {canManage && (
+                    <button
+                      className="shrink-0 text-xs font-medium text-red-500 hover:underline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteMutation.mutate(n.id);
+                      }}
+                    >
+                      Delete
+                    </button>
+                  )}
                 </div>
-                {canManage && (
-                  <button
-                    className="shrink-0 text-xs text-red-600 hover:underline"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteMutation.mutate(n.id);
-                    }}
-                  >
-                    Delete
-                  </button>
-                )}
-              </div>
               </Card>
             </div>
           ))}
         </div>
       ) : (
-        <p className="text-sm text-slate-500">No announcements yet.</p>
+        <EmptyState message="No announcements yet." />
       )}
     </div>
   );

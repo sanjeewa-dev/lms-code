@@ -81,7 +81,7 @@ export function MaterialsTab({ classId, canManage }: { classId: string; canManag
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm dark:border-white/5 dark:bg-ink-850">
         <div>
           <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Materials</h3>
           <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -99,7 +99,7 @@ export function MaterialsTab({ classId, canManage }: { classId: string; canManag
       </div>
 
       {canManage && showForm && (
-        <Card>
+        <Card className="rounded-2xl">
           <h3 className="mb-3 font-semibold text-slate-900 dark:text-white">Upload material</h3>
           <p className="mb-3 text-sm text-slate-500">
             PDFs and images are rendered as watermarked, view-only pages. Students cannot download the original file.
@@ -129,7 +129,7 @@ export function MaterialsTab({ classId, canManage }: { classId: string; canManag
       )}
 
       {canManage && editTarget && (
-        <Card>
+        <Card className="rounded-2xl">
           <h3 className="mb-3 font-semibold text-slate-900 dark:text-white">Edit: {editTarget.title}</h3>
           <div className="space-y-3">
             <label className="block">
@@ -151,19 +151,28 @@ export function MaterialsTab({ classId, canManage }: { classId: string; canManag
         </Card>
       )}
 
-      <Card>
+      <Card className="overflow-hidden rounded-2xl p-0">
         {materialsQuery.isLoading ? (
-          <Spinner />
+          <div className="p-6">
+            <Spinner />
+          </div>
         ) : materials.length === 0 ? (
-          <p className="text-sm text-slate-500">No materials uploaded yet.</p>
+          <div className="p-6 text-sm text-slate-500">No materials uploaded yet.</div>
         ) : (
           <ul className="divide-y divide-slate-100 dark:divide-white/5">
             {materials.map((m) => (
-              <li key={m.id} className="flex items-start justify-between gap-3 py-3">
-                <div>
-                  <p className="font-medium text-slate-800 dark:text-slate-200">{m.title}</p>
+              <li key={m.id} className="flex items-start justify-between gap-3 px-5 py-4 transition hover:bg-slate-50/80 dark:hover:bg-white/5">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-100 text-blue-600">
+                      <Icon name="classes" width={18} height={18} />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-slate-800 dark:text-slate-200">{m.title}</p>
+                      <p className="mt-0.5 text-xs text-slate-400">{m.pageCount} page(s) · view-only</p>
+                    </div>
+                  </div>
                   {m.description && <p className="mt-0.5 text-xs text-slate-400">{m.description}</p>}
-                  <p className="mt-0.5 text-xs text-slate-400">{m.pageCount} page(s) · view-only</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   {m.fileId && (

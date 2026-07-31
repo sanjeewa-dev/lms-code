@@ -2,6 +2,9 @@ import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
 
 const ACCESS_KEY = 'lms_access_token';
 const REFRESH_KEY = 'lms_refresh_token';
+const PLATFORM_ACCESS_KEY = 'lms_platform_access_backup';
+const PLATFORM_REFRESH_KEY = 'lms_platform_refresh_backup';
+const SUPPORT_META_KEY = 'lms_support_meta';
 
 export const tokenStore = {
   get access() {
@@ -17,6 +20,35 @@ export const tokenStore = {
   clear() {
     localStorage.removeItem(ACCESS_KEY);
     localStorage.removeItem(REFRESH_KEY);
+  },
+  beginSupport(accessToken: string, meta: { sessionId: string; tenantId: string; tenantSlug: string; tenantName: string }) {
+    const curAccess = localStorage.getItem(ACCESS_KEY);
+    const curRefresh = localStorage.getItem(REFRESH_KEY);
+    if (curAccess) localStorage.setItem(PLATFORM_ACCESS_KEY, curAccess);
+    if (curRefresh) localStorage.setItem(PLATFORM_REFRESH_KEY, curRefresh);
+    localStorage.setItem(ACCESS_KEY, accessToken);
+    localStorage.setItem(SUPPORT_META_KEY, JSON.stringify(meta));
+  },
+  endSupport() {
+    const platformAccess = localStorage.getItem(PLATFORM_ACCESS_KEY);
+    const platformRefresh = localStorage.getItem(PLATFORM_REFRESH_KEY);
+    localStorage.removeItem(PLATFORM_ACCESS_KEY);
+    localStorage.removeItem(PLATFORM_REFRESH_KEY);
+    localStorage.removeItem(SUPPORT_META_KEY);
+    if (platformAccess && platformRefresh) {
+      localStorage.setItem(ACCESS_KEY, platformAccess);
+      localStorage.setItem(REFRESH_KEY, platformRefresh);
+      return true;
+    }
+    return false;
+  },
+  getSupportMeta(): { sessionId: string; tenantId: string; tenantSlug: string; tenantName: string } | null {
+    try {
+      const raw = localStorage.getItem(SUPPORT_META_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
   },
 };
 
@@ -82,6 +114,9 @@ export async function authFetchBlob(path: string): Promise<Blob> {
 
 export function apiErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
+    if (!error.response) {
+      return 'Cannot reach the API server. Start the backend with `npm run dev` in the backend folder.';
+    }
     return (error.response?.data as { error?: string })?.error ?? error.message;
   }
   if (error instanceof Error) return error.message;

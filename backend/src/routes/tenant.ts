@@ -14,7 +14,13 @@ import settingsRoutes from './settings';
 import attendanceRoutes from './attendance';
 import notificationRoutes from './notifications';
 import gradebookRoutes from './gradebook';
+import smartRoutes from './smart';
 import liveRoutes from './live';
+import aiStudentRoutes from './aiStudent';
+import aiTeacherRoutes from './aiTeacher';
+import interventionRoutes from './interventions';
+import parentTrustRoutes from './parentTrust';
+import chatRoutes from './chat';
 
 // Mounted at /api/t/:slug - all routes require an authenticated user that
 // belongs to the resolved tenant, and run inside the tenant query context.
@@ -36,5 +42,11 @@ router.use(attendanceRoutes);
 router.use(notificationRoutes);
 router.use(gradebookRoutes);
 router.use(liveRoutes);
+router.use(smartRoutes);
+router.use(aiStudentRoutes);
+router.use(aiTeacherRoutes);
+router.use(interventionRoutes);
+router.use(parentTrustRoutes);
+router.use(chatRoutes);
 
 export default router;

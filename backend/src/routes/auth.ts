@@ -8,6 +8,7 @@ import { authenticate } from '../middleware/auth';
 import { badRequest, unauthorized } from '../utils/httpError';
 import { issueTokens, publicUser } from '../services/auth';
 import { loginSchema } from '../validation/schemas';
+import { getActiveSupportSession } from '../services/supportSession';
 
 const router = Router();
 
@@ -48,14 +49,14 @@ router.post(
       throw unauthorized('Invalid email or password');
     }
 
-    // Students must be approved by their institute before they can sign in.
-    const allowed = matched.filter((u) => u.role !== 'student' || u.status === 'approved');
+    // Non-superadmins must be approved (rejected = inactivated).
+    const allowed = matched.filter((u) => u.role === 'superadmin' || u.status === 'approved');
     if (allowed.length === 0) {
       const status = matched[0].status;
       throw unauthorized(
         status === 'pending'
           ? 'Your account is pending approval by the institute.'
-          : 'Your account has been rejected. Please contact your institute.'
+          : 'Your account has been inactivated. Please contact your institute or platform support.'
       );
     }
 
@@ -127,7 +128,24 @@ router.get(
       include: { tenant: true },
     });
     if (!user) throw unauthorized();
-    res.json({ user: publicUser(user) });
+
+    let supportExtras: Parameters<typeof publicUser>[1] | undefined;
+    if (req.user!.supportSessionId && user.role === 'superadmin') {
+      const session = await getActiveSupportSession(req.user!.supportSessionId, user.id);
+      if (session) {
+        supportExtras = {
+          supportSession: {
+            id: session.id,
+            tenantId: session.tenant.id,
+            tenantSlug: session.tenant.slug,
+            tenantName: session.tenant.name,
+            expiresAt: session.expiresAt.toISOString(),
+          },
+        };
+      }
+    }
+
+    res.json({ user: publicUser(user, supportExtras) });
   })
 );
 

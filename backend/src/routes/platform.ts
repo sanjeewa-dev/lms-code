@@ -15,11 +15,40 @@ import {
 } from '../validation/schemas';
 import { publicUserFromProfile, serializeProfile } from '../services/profile';
 import { badRequest, conflict, notFound, unauthorized } from '../utils/httpError';
+import { writeAuditLog } from '../services/audit';
+import { resolvePlanFeatures } from '../services/planGates';
 
 // Mounted at /api/admin
 const router = Router();
 
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 50, standardHeaders: true, legacyHeaders: false });
+
+function clientIp(req: { ip?: string; headers: Record<string, unknown> }) {
+  const fwd = req.headers['x-forwarded-for'];
+  if (typeof fwd === 'string') return fwd.split(',')[0]?.trim();
+  return req.ip ?? null;
+}
+
+/** Build a URL slug from institute name; ensure uniqueness with numeric suffix. */
+async function uniqueSlugFromName(name: string): Promise<string> {
+  const base = name
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48);
+  const root = base.length >= 2 ? base : 'institute';
+
+  let slug = root;
+  let n = 2;
+  while (await basePrisma.tenant.findUnique({ where: { slug } })) {
+    const suffix = `-${n}`;
+    slug = `${root.slice(0, Math.max(2, 50 - suffix.length))}${suffix}`;
+    n += 1;
+  }
+  return slug;
+}
 
 // Platform super-admin login (no tenant).
 router.post(
@@ -57,6 +86,7 @@ router.get(
         name: t.name,
         logoUrl: t.logoUrl,
         isActive: t.isActive,
+        plan: t.plan,
         createdAt: t.createdAt,
         userCount: t._count.users,
         classCount: t._count.classes,
@@ -71,16 +101,15 @@ router.post(
   ...requireSuperadmin,
   asyncHandler(async (req, res) => {
     const data = createTenantSchema.parse(req.body);
-
-    const slugTaken = await basePrisma.tenant.findUnique({ where: { slug: data.slug } });
-    if (slugTaken) throw conflict('That slug is already taken');
+    const slug = await uniqueSlugFromName(data.name);
 
     const passwordHash = await bcrypt.hash(data.admin.password, 10);
     const tenant = await basePrisma.tenant.create({
       data: {
         name: data.name,
-        slug: data.slug,
+        slug,
         logoUrl: data.logoUrl,
+        plan: 'pro',
         users: {
           create: {
             name: data.admin.name,
@@ -93,6 +122,17 @@ router.post(
       include: { _count: { select: { users: true, classes: true } } },
     });
 
+    await writeAuditLog({
+      actorId: req.user!.sub,
+      actorEmail: req.user!.email,
+      action: 'tenant.create',
+      tenantId: tenant.id,
+      targetType: 'Tenant',
+      targetId: tenant.id,
+      meta: { slug: tenant.slug },
+      ip: clientIp(req),
+    });
+
     res.status(201).json({
       tenant: {
         id: tenant.id,
@@ -100,6 +140,7 @@ router.post(
         name: tenant.name,
         logoUrl: tenant.logoUrl,
         isActive: tenant.isActive,
+        plan: tenant.plan,
         createdAt: tenant.createdAt,
         userCount: tenant._count.users,
         classCount: tenant._count.classes,
@@ -117,9 +158,34 @@ router.patch(
     if (!tenant) throw notFound('Tenant not found');
     const updated = await basePrisma.tenant.update({
       where: { id: tenant.id },
-      data: { name: data.name, logoUrl: data.logoUrl, isActive: data.isActive },
+      data: {
+        name: data.name,
+        logoUrl: data.logoUrl,
+        isActive: data.isActive,
+        plan: data.plan,
+        ...(data.planFeatures !== undefined ? { planFeatures: data.planFeatures } : {}),
+      },
     });
-    res.json({ tenant: updated });
+
+    await writeAuditLog({
+      actorId: req.user!.sub,
+      actorEmail: req.user!.email,
+      action: 'tenant.update',
+      tenantId: updated.id,
+      targetType: 'Tenant',
+      targetId: updated.id,
+      meta: { plan: updated.plan, isActive: updated.isActive },
+      ip: clientIp(req),
+    });
+
+    res.json({
+      tenant: {
+        ...updated,
+        features: resolvePlanFeatures(updated),
+        hasPayhereSecret: Boolean(updated.payhereMerchantSecret),
+        payhereMerchantSecret: undefined,
+      },
+    });
   })
 );
 

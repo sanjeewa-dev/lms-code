@@ -21,6 +21,7 @@ function serializeSettings(t: {
   graceDays: number;
   requireMonthlyPayment: boolean;
   payhereMerchantId: string | null;
+  payhereMerchantSecret: string | null;
   payhereEnabled: boolean;
 }) {
   return {
@@ -38,6 +39,8 @@ function serializeSettings(t: {
     graceDays: t.graceDays,
     requireMonthlyPayment: t.requireMonthlyPayment,
     payhereMerchantId: t.payhereMerchantId,
+    payhereMerchantSecret: t.payhereMerchantSecret ? '••••••••' : null,
+    hasPayhereSecret: Boolean(t.payhereMerchantSecret),
     payhereEnabled: t.payhereEnabled,
   };
 }
@@ -98,6 +101,11 @@ router.patch(
         graceDays: data.graceDays,
         requireMonthlyPayment: data.requireMonthlyPayment,
         payhereMerchantId: emptyToNull(data.payhereMerchantId as string | null | undefined),
+        // Never overwrite with masked placeholder from the UI
+        payhereMerchantSecret:
+          data.payhereMerchantSecret === undefined || data.payhereMerchantSecret === '••••••••'
+            ? undefined
+            : emptyToNull(data.payhereMerchantSecret as string | null | undefined),
         payhereEnabled: data.payhereEnabled,
       },
     });

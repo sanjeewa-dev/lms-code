@@ -5,8 +5,8 @@ import { basePrisma } from '../lib/prisma';
 import { asyncHandler } from '../utils/asyncHandler';
 import { loginSchema, registerSchema } from '../validation/schemas';
 import { issueTokens, publicUser } from '../services/auth';
-import { resolveTenant } from '../middleware/tenant';
-import { badRequest, unauthorized } from '../utils/httpError';
+import { resolveTenant, enterTenantContext } from '../middleware/tenant';
+import { badRequest, unauthorized, notFound } from '../utils/httpError';
 
 // Mounted at /api/t/:slug/auth
 const router = Router({ mergeParams: true });
@@ -18,14 +18,21 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Student self-registration into a specific tenant.
+// Student self-registration into a specific tenant (must pick a published class).
 router.post(
   '/register',
   authLimiter,
   resolveTenant,
+  enterTenantContext,
   asyncHandler(async (req, res) => {
     const data = registerSchema.parse(req.body);
     const tenantId = req.tenant!.id;
+
+    const klass = await basePrisma.class.findFirst({
+      where: { id: data.classId, tenantId, isPublished: true },
+      select: { id: true, price: true, title: true },
+    });
+    if (!klass) throw notFound('Class not found or not open for registration');
 
     const existing = await basePrisma.user.findFirst({
       where: { tenantId, email: data.email },
@@ -33,6 +40,8 @@ router.post(
     if (existing) throw badRequest('Email is already registered at this institute');
 
     const passwordHash = await bcrypt.hash(data.password, 10);
+    const enrollmentStatus = Number(klass.price) === 0 ? 'active' : 'pending';
+
     await basePrisma.user.create({
       data: {
         tenantId,
@@ -41,11 +50,22 @@ router.post(
         passwordHash,
         role: 'student',
         status: 'pending',
+        enrollments: {
+          create: {
+            tenantId,
+            classId: klass.id,
+            status: enrollmentStatus,
+          },
+        },
       },
     });
 
     // New students await admin approval; no session is issued yet.
-    res.status(201).json({ pending: true });
+    res.status(201).json({
+      pending: true,
+      class: { id: klass.id, title: klass.title },
+      enrollmentStatus,
+    });
   })
 );
 

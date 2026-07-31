@@ -4,6 +4,10 @@ import { useTenantApi } from '../hooks/useTenantApi';
 import { useAuth } from '../context/AuthContext';
 import { Card } from '../components/ui';
 import { Icon, type IconName } from '../components/icons';
+import { AtRiskPanel } from '../components/AtRiskPanel';
+import { SmartOpsPanel, WeakTopicsCard } from '../components/SmartOpsPanel';
+import { PerformanceChart, type PerformancePoint } from '../components/PerformanceChart';
+import { ClassCalendar } from '../components/ClassCalendar';
 import type { ClassSummary, VideoLesson, Notice, EventItem, AdminStats } from '../api/types';
 
 type Tone = 'blue' | 'green' | 'purple' | 'amber' | 'pink' | 'sky';
@@ -113,6 +117,13 @@ export default function Dashboard() {
     queryFn: async () => (await t.get<{ stats: AdminStats }>('/stats')).data.stats,
   });
 
+  const performanceQuery = useQuery({
+    queryKey: ['performance-mine', slug],
+    enabled: !isStaff && user?.role === 'student',
+    queryFn: async () =>
+      (await t.get<{ points: PerformancePoint[] }>('/performance/mine')).data.points,
+  });
+
   const classes = classesQuery.data ?? [];
   const videos = videosQuery.data ?? [];
   const notices = noticesQuery.data ?? [];
@@ -132,7 +143,9 @@ export default function Dashboard() {
       <div className="space-y-6">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <StatCard label="Total Students" value={dash(s?.students)} icon="users" tone="blue" to={`${base}/students`} />
-          <StatCard label="Total Teachers" value={dash(s?.teachers)} icon="teacher" tone="purple" to={`${base}/teachers`} />
+          {user?.role === 'admin' && (
+            <StatCard label="Total Teachers" value={dash(s?.teachers)} icon="teacher" tone="purple" to={`${base}/teachers`} />
+          )}
           <StatCard label="Classes" value={dash(s?.classes)} icon="classes" tone="sky" to={`${base}/classes`} />
           <StatCard label="Enrollments" value={dash(s?.enrollments)} icon="note" tone="green" />
           <StatCard label="MCQ Exams" value={dash(s?.quizzes)} icon="quiz" tone="amber" to={`${base}/classes`} />
@@ -156,28 +169,36 @@ export default function Dashboard() {
             <BarChart data={overview} />
           </Card>
 
-          <Card>
-            <h2 className="mb-3 text-lg font-semibold text-slate-900 dark:text-white">Recent classes</h2>
-            {classes.length > 0 ? (
-              <ul className="divide-y divide-slate-100 dark:divide-white/5">
-                {classes.slice(0, 6).map((c) => (
-                  <li key={c.id} className="flex items-center justify-between py-2.5">
-                    <Link
-                      to={`${base}/classes/${c.id}`}
-                      className="truncate font-medium text-slate-800 hover:text-brand-600 dark:text-slate-200"
-                    >
-                      {c.title}
-                    </Link>
-                    <span className="ml-3 shrink-0 text-sm text-slate-400">
-                      {c.price > 0 ? `Rs. ${c.price.toLocaleString()}` : 'Free'}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-slate-400">No classes yet.</p>
-            )}
-          </Card>
+          <div className="space-y-4">
+            <ClassCalendar />
+            <Card>
+              <h2 className="mb-3 text-lg font-semibold text-slate-900 dark:text-white">Recent classes</h2>
+              {classes.length > 0 ? (
+                <ul className="divide-y divide-slate-100 dark:divide-white/5">
+                  {classes.slice(0, 4).map((c) => (
+                    <li key={c.id} className="flex items-center justify-between py-2.5">
+                      <Link
+                        to={`${base}/classes/${c.id}`}
+                        className="truncate font-medium text-slate-800 hover:text-brand-600 dark:text-slate-200"
+                      >
+                        {c.title}
+                      </Link>
+                      <span className="ml-3 shrink-0 text-sm text-slate-400">
+                        {c.price > 0 ? `Rs. ${c.price.toLocaleString()}` : 'Free'}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-slate-400">No classes yet.</p>
+              )}
+            </Card>
+          </div>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          <AtRiskPanel />
+          {user?.role === 'admin' && <SmartOpsPanel />}
         </div>
       </div>
     );
@@ -209,30 +230,46 @@ export default function Dashboard() {
         </Link>
       </div>
 
+      <WeakTopicsCard />
+
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <h2 className="mb-1 text-lg font-semibold text-slate-900 dark:text-white">Library overview</h2>
-          <p className="mb-4 text-sm text-slate-400">What's available to you right now</p>
-          <BarChart data={overview} />
+          <div className="mb-4 flex items-center gap-2">
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-100 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300">
+              <Icon name="chart" width={18} height={18} />
+            </span>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Performance Chart</h2>
+              <p className="text-sm text-slate-400">Your quiz and assignment scores over time (0–100%)</p>
+            </div>
+          </div>
+          {performanceQuery.isLoading ? (
+            <div className="flex h-56 items-center justify-center text-sm text-slate-400">Loading marks…</div>
+          ) : (
+            <PerformanceChart points={performanceQuery.data ?? []} />
+          )}
         </Card>
 
-        <Card>
-          <h2 className="mb-3 text-lg font-semibold text-slate-900 dark:text-white">Quick actions</h2>
-          <div className="space-y-2">
-            {quickActions.map((a) => (
-              <Link
-                key={a.label}
-                to={a.to}
-                className="flex items-center gap-3 rounded-xl border border-slate-200 p-3 text-sm font-medium text-slate-700 transition hover:border-brand-200 hover:bg-slate-50 dark:border-white/5 dark:text-slate-200 dark:hover:bg-white/5"
-              >
-                <span className={`grid h-9 w-9 place-items-center rounded-lg ${toneChip[a.tone]}`}>
-                  <Icon name={a.icon} />
-                </span>
-                {a.label}
-              </Link>
-            ))}
-          </div>
-        </Card>
+        <div className="space-y-4">
+          <ClassCalendar />
+          <Card>
+            <h2 className="mb-3 text-lg font-semibold text-slate-900 dark:text-white">Quick actions</h2>
+            <div className="space-y-2">
+              {quickActions.map((a) => (
+                <Link
+                  key={a.label}
+                  to={a.to}
+                  className="flex items-center gap-3 rounded-xl border border-slate-200 p-3 text-sm font-medium text-slate-700 transition hover:border-brand-200 hover:bg-slate-50 dark:border-white/5 dark:text-slate-200 dark:hover:bg-white/5"
+                >
+                  <span className={`grid h-9 w-9 place-items-center rounded-lg ${toneChip[a.tone]}`}>
+                    <Icon name={a.icon} />
+                  </span>
+                  {a.label}
+                </Link>
+              ))}
+            </div>
+          </Card>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

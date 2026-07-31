@@ -4,8 +4,10 @@ import { api, apiErrorMessage } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useTenantApi } from '../hooks/useTenantApi';
 import { Badge, Button, Card, Input, Select, Spinner } from '../components/ui';
+import { Icon } from '../components/icons';
 import { PasswordRequirements } from '../components/PasswordRequirements';
 import { validatePassword } from '../lib/passwordValidation';
+import { PageHeader } from '../components/tenant/TenantUi';
 import { SRI_LANKAN_DISTRICTS } from '../lib/districts';
 import type { UserProfile } from '../api/types';
 
@@ -25,6 +27,7 @@ export default function Profile() {
     subject: '',
     guardianName: '',
     guardianPhone: '',
+    guardianEmail: '',
     area: '',
     district: '',
   });
@@ -56,6 +59,7 @@ export default function Profile() {
       subject: p.subject ?? '',
       guardianName: p.guardianName ?? '',
       guardianPhone: p.guardianPhone ?? '',
+      guardianEmail: (p as { guardianEmail?: string | null }).guardianEmail ?? '',
       area: p.area ?? '',
       district: p.district ?? '',
     });
@@ -82,6 +86,7 @@ export default function Profile() {
       if (user?.role === 'student') {
         payload.guardianName = form.guardianName.trim();
         payload.guardianPhone = form.guardianPhone.trim();
+        payload.guardianEmail = form.guardianEmail.trim();
         payload.area = form.area.trim();
         if (form.district) payload.district = form.district;
       }
@@ -139,114 +144,99 @@ export default function Profile() {
   }
 
   const profile = profileQuery.data;
+  const initials = (form.name || 'U')
+    .split(' ')
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase())
+    .join('');
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">My profile</h1>
-        <p className="text-slate-500">Manage your account details and password</p>
-      </div>
+      <PageHeader
+        icon="user"
+        tone="blue"
+        title="My profile"
+        subtitle="Manage your account details and password"
+      />
 
       {profileQuery.isLoading ? (
         <Spinner label="Loading profile..." />
       ) : (
         <>
-          <Card>
-            <div className="mb-4 flex flex-wrap items-center gap-2">
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Personal information</h2>
-              {profile && <Badge tone="slate">{profile.role}</Badge>}
-              {profile?.tenantName && <Badge tone="blue">{profile.tenantName}</Badge>}
+          <Card className="overflow-hidden rounded-2xl p-0">
+            <div className="bg-brand-gradient px-6 py-6 text-white">
+              <div className="flex items-center gap-4">
+                <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white/20 text-xl font-bold">
+                  {initials}
+                </span>
+                <div>
+                  <h2 className="text-xl font-bold">{form.name || 'Your account'}</h2>
+                  <p className="text-sm text-white/80">{form.email}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {profile && <Badge tone="slate">{profile.role}</Badge>}
+                    {profile?.tenantName && <Badge tone="blue">{profile.tenantName}</Badge>}
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <form onSubmit={submitProfile} className="space-y-4">
+            <form onSubmit={submitProfile} className="space-y-4 p-6">
+              <h3 className="font-semibold text-slate-900 dark:text-white">Personal information</h3>
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Full name *</span>
-                  <input
-                    className={inputCls}
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    required
-                  />
+                  <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Full name *</span>
+                  <input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Email *</span>
-                  <input
-                    type="email"
-                    className={inputCls}
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    required
-                  />
+                  <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Email *</span>
+                  <input type="email" className={inputCls} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
                 </label>
               </div>
 
               {!isSuperAdmin && (
                 <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Phone</span>
-                  <input
-                    className={inputCls}
-                    value={form.phone}
-                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  />
+                  <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Phone</span>
+                  <input className={inputCls} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
                 </label>
               )}
 
               {user?.role === 'teacher' && (
                 <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Subject</span>
-                  <input
-                    className={inputCls}
-                    value={form.subject}
-                    onChange={(e) => setForm({ ...form, subject: e.target.value })}
-                    placeholder="e.g. Mathematics"
-                  />
+                  <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Subject</span>
+                  <input className={inputCls} value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} placeholder="e.g. Mathematics" />
                 </label>
               )}
 
               {user?.role === 'student' && (
-                <>
+                <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-white/5">
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Guardian & location</p>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className="block">
                       <span className="mb-1 block text-sm font-medium text-slate-700">Guardian name</span>
-                      <input
-                        className={inputCls}
-                        value={form.guardianName}
-                        onChange={(e) => setForm({ ...form, guardianName: e.target.value })}
-                      />
+                      <input className={inputCls} value={form.guardianName} onChange={(e) => setForm({ ...form, guardianName: e.target.value })} />
                     </label>
                     <label className="block">
                       <span className="mb-1 block text-sm font-medium text-slate-700">Guardian phone</span>
-                      <input
-                        className={inputCls}
-                        value={form.guardianPhone}
-                        onChange={(e) => setForm({ ...form, guardianPhone: e.target.value })}
-                      />
+                      <input className={inputCls} value={form.guardianPhone} onChange={(e) => setForm({ ...form, guardianPhone: e.target.value })} />
                     </label>
                   </div>
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-medium text-slate-700">Guardian email (for digests)</span>
+                    <input type="email" className={inputCls} value={form.guardianEmail} onChange={(e) => setForm({ ...form, guardianEmail: e.target.value })} placeholder="parent@email.com" />
+                  </label>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className="block">
                       <span className="mb-1 block text-sm font-medium text-slate-700">Area</span>
-                      <input
-                        className={inputCls}
-                        value={form.area}
-                        onChange={(e) => setForm({ ...form, area: e.target.value })}
-                      />
+                      <input className={inputCls} value={form.area} onChange={(e) => setForm({ ...form, area: e.target.value })} />
                     </label>
-                    <Select
-                      label="District"
-                      value={form.district}
-                      onChange={(e) => setForm({ ...form, district: e.target.value })}
-                    >
+                    <Select label="District" value={form.district} onChange={(e) => setForm({ ...form, district: e.target.value })}>
                       <option value="">Select district</option>
                       {SRI_LANKAN_DISTRICTS.map((d) => (
-                        <option key={d} value={d}>
-                          {d}
-                        </option>
+                        <option key={d} value={d}>{d}</option>
                       ))}
                     </Select>
                   </div>
-                </>
+                </div>
               )}
 
               {profileError && <p className="text-sm text-red-600">{profileError}</p>}
@@ -258,31 +248,16 @@ export default function Profile() {
             </form>
           </Card>
 
-          <Card>
-            <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">Change password</h2>
+          <Card className="rounded-2xl">
+            <div className="mb-4 flex items-center gap-2">
+              <Icon name="note" width={18} height={18} className="text-brand-600" />
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Change password</h2>
+            </div>
             <form onSubmit={submitPassword} className="space-y-4">
-              <Input
-                label="Current password"
-                type="password"
-                value={pwd.current}
-                onChange={(e) => setPwd({ ...pwd, current: e.target.value })}
-                required
-              />
-              <Input
-                label="New password"
-                type="password"
-                value={pwd.next}
-                onChange={(e) => setPwd({ ...pwd, next: e.target.value })}
-                required
-              />
+              <Input label="Current password" type="password" value={pwd.current} onChange={(e) => setPwd({ ...pwd, current: e.target.value })} required />
+              <Input label="New password" type="password" value={pwd.next} onChange={(e) => setPwd({ ...pwd, next: e.target.value })} required />
               <PasswordRequirements password={pwd.next} />
-              <Input
-                label="Confirm new password"
-                type="password"
-                value={pwd.confirm}
-                onChange={(e) => setPwd({ ...pwd, confirm: e.target.value })}
-                required
-              />
+              <Input label="Confirm new password" type="password" value={pwd.confirm} onChange={(e) => setPwd({ ...pwd, confirm: e.target.value })} required />
               {pwdError && <p className="text-sm text-red-600">{pwdError}</p>}
               {pwdSuccess && <p className="text-sm text-emerald-600">{pwdSuccess}</p>}
               <Button type="submit" disabled={passwordMutation.isPending || !pwd.current || !pwd.next}>

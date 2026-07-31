@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma';
 import { asyncHandler } from '../utils/asyncHandler';
 import { authenticate, requireRole, requireActiveEnrollment } from '../middleware/auth';
-import { quizSchema, submitAttemptSchema } from '../validation/schemas';
+import { quizSchema, quizUpdateSchema, submitAttemptSchema } from '../validation/schemas';
 import { gradeAttempt, isAttemptExpired } from '../services/quiz';
 import { studentHasContentAccess } from '../services/access';
 import { badRequest, conflict, forbidden, notFound } from '../utils/httpError';
@@ -113,11 +113,20 @@ router.get(
   asyncHandler(async (req, res) => {
     const quiz = await prisma.quiz.findFirst({
       where: { id: req.params.quizId },
-      include: { questions: { orderBy: { order: 'asc' } }, class: { select: { teacherId: true } } },
+      include: {
+        questions: { orderBy: { order: 'asc' } },
+        class: { select: { teacherId: true } },
+        _count: { select: { attempts: true } },
+      },
     });
     if (!quiz) throw notFound('Quiz not found');
     if (req.user!.role === 'teacher' && quiz.class.teacherId !== req.user!.sub) throw forbidden('Not allowed');
-    res.json({ quiz });
+    res.json({
+      quiz: {
+        ...quiz,
+        attemptCount: quiz._count.attempts,
+      },
+    });
   })
 );
 
@@ -137,6 +146,116 @@ router.patch(
       data: { isPublished: Boolean(req.body?.isPublished) },
     });
     res.json({ quiz: { id: updated.id, isPublished: updated.isPublished } });
+  })
+);
+
+router.patch(
+  '/quizzes/:quizId',
+  authenticate,
+  requireRole('teacher', 'admin'),
+  asyncHandler(async (req, res) => {
+    const quiz = await prisma.quiz.findFirst({
+      where: { id: req.params.quizId },
+      include: {
+        class: { select: { teacherId: true } },
+        _count: { select: { attempts: true } },
+      },
+    });
+    if (!quiz) throw notFound('Quiz not found');
+    if (req.user!.role === 'teacher' && quiz.class.teacherId !== req.user!.sub) {
+      throw forbidden('You can only edit quizzes for your own classes');
+    }
+
+    const data = quizUpdateSchema.parse(req.body);
+    if (
+      data.title === undefined &&
+      data.description === undefined &&
+      data.timeLimitSec === undefined &&
+      data.availableFrom === undefined &&
+      data.availableTo === undefined &&
+      data.isPublished === undefined &&
+      data.questions === undefined
+    ) {
+      throw badRequest('No fields to update');
+    }
+
+    if (data.questions && quiz._count.attempts > 0) {
+      throw badRequest(
+        'Cannot change questions after students have started this quiz. Create a new quiz instead.'
+      );
+    }
+
+    const tenantId = req.tenant!.id;
+    const updateData: {
+      title?: string;
+      description?: string;
+      timeLimitSec?: number;
+      availableFrom?: Date | null;
+      availableTo?: Date | null;
+      isPublished?: boolean;
+      totalMarks?: number;
+    } = {};
+
+    if (data.title !== undefined) updateData.title = data.title;
+    if (data.description !== undefined) updateData.description = data.description;
+    if (data.timeLimitSec !== undefined) updateData.timeLimitSec = data.timeLimitSec;
+    if (data.availableFrom !== undefined) updateData.availableFrom = data.availableFrom;
+    if (data.availableTo !== undefined) updateData.availableTo = data.availableTo;
+    if (data.isPublished !== undefined) updateData.isPublished = data.isPublished;
+
+    if (data.questions) {
+      updateData.totalMarks = data.questions.reduce((sum, q) => sum + q.marks, 0);
+      await prisma.$transaction([
+        prisma.question.deleteMany({ where: { quizId: quiz.id } }),
+        prisma.quiz.update({
+          where: { id: quiz.id },
+          data: {
+            ...updateData,
+            questions: {
+              create: data.questions.map((q, index) => ({
+                tenantId,
+                text: q.text,
+                options: q.options,
+                correctIndex: q.correctIndex,
+                marks: q.marks,
+                order: index,
+              })),
+            },
+          },
+          include: { _count: { select: { questions: true } } },
+        }),
+      ]);
+    } else {
+      await prisma.quiz.update({
+        where: { id: quiz.id },
+        data: updateData,
+      });
+    }
+
+    const updated = await prisma.quiz.findFirst({
+      where: { id: quiz.id },
+      include: { _count: { select: { questions: true } }, questions: { orderBy: { order: 'asc' } } },
+    });
+    res.json({ quiz: updated });
+  })
+);
+
+router.delete(
+  '/quizzes/:quizId',
+  authenticate,
+  requireRole('teacher', 'admin'),
+  asyncHandler(async (req, res) => {
+    const quiz = await prisma.quiz.findFirst({
+      where: { id: req.params.quizId },
+      include: { class: { select: { teacherId: true } } },
+    });
+    if (!quiz) throw notFound('Quiz not found');
+    if (req.user!.role === 'teacher' && quiz.class.teacherId !== req.user!.sub) {
+      throw forbidden('You can only delete quizzes for your own classes');
+    }
+
+    await prisma.quiz.delete({ where: { id: quiz.id } });
+    res.status(204).send();
   })
 );
 
@@ -174,11 +293,24 @@ router.post(
     });
     if (existing?.submittedAt) throw conflict('You have already completed this quiz');
 
-    const attempt =
-      existing ??
-      (await prisma.quizAttempt.create({
-        data: { tenantId: req.tenant!.id, quizId: quiz.id, studentId: req.user!.sub },
-      }));
+    let attempt = existing;
+    if (!attempt) {
+      try {
+        attempt = await prisma.quizAttempt.create({
+          data: { tenantId: req.tenant!.id, quizId: quiz.id, studentId: req.user!.sub },
+        });
+      } catch (err) {
+        // Concurrent "Start" (e.g. React Strict Mode double-mount) can race the unique
+        // (quizId, studentId) constraint — recover by loading the winner.
+        const code = typeof err === 'object' && err && 'code' in err ? (err as { code?: string }).code : undefined;
+        if (code !== 'P2002') throw err;
+        attempt = await prisma.quizAttempt.findFirst({
+          where: { quizId: quiz.id, studentId: req.user!.sub },
+        });
+        if (!attempt) throw err;
+        if (attempt.submittedAt) throw conflict('You have already completed this quiz');
+      }
+    }
 
     res.status(201).json({
       attempt: { id: attempt.id, startedAt: attempt.startedAt },
@@ -268,7 +400,7 @@ router.get(
     if (!canView) throw forbidden('Not allowed');
     if (!attempt.submittedAt) throw badRequest('Attempt not submitted yet');
 
-    const answerMap = new Map(attempt.answers.map((a) => [a.questionId, a.selectedIndex]));
+    const answerMap = new Map(attempt.answers.map((a) => [a.questionId, a]));
 
     res.json({
       result: {
@@ -278,14 +410,20 @@ router.get(
         quizId: attempt.quizId,
         quizTitle: attempt.quiz.title,
         classId: attempt.quiz.classId,
-        questions: attempt.quiz.questions.map((q) => ({
-          id: q.id,
-          text: q.text,
-          options: q.options,
-          correctIndex: q.correctIndex,
-          selectedIndex: answerMap.get(q.id) ?? -1,
-          marks: q.marks,
-        })),
+        questions: attempt.quiz.questions.map((q) => {
+          const ans = answerMap.get(q.id);
+          const steps = ans?.explanationSteps;
+          return {
+            id: q.id,
+            text: q.text,
+            options: q.options,
+            correctIndex: q.correctIndex,
+            selectedIndex: ans?.selectedIndex ?? -1,
+            marks: q.marks,
+            explanation: ans?.explanation ?? null,
+            explanationSteps: Array.isArray(steps) ? (steps as string[]) : null,
+          };
+        }),
       },
     });
   })

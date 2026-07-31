@@ -53,6 +53,33 @@ router.get(
   })
 );
 
+/** Published classes the student is not yet enrolled in (browse / self-enroll). */
+router.get(
+  '/classes/catalog',
+  authenticate,
+  requireRole('student'),
+  asyncHandler(async (req, res) => {
+    const enrolled = await prisma.enrollment.findMany({
+      where: { studentId: req.user!.sub },
+      select: { classId: true },
+    });
+    const enrolledIds = enrolled.map((e) => e.classId);
+    const classes = await prisma.class.findMany({
+      where: {
+        isPublished: true,
+        ...(enrolledIds.length ? { id: { notIn: enrolledIds } } : {}),
+      },
+      include: {
+        teacher: { select: { id: true, name: true } },
+        batch: { select: { id: true, name: true } },
+        _count: { select: { enrollments: true } },
+      },
+      orderBy: { title: 'asc' },
+    });
+    res.json({ classes: classes.map(serializeClass) });
+  })
+);
+
 router.get(
   '/classes/:classId',
   authenticate,
@@ -271,6 +298,50 @@ router.post(
         },
       },
     });
+  })
+);
+
+/**
+ * Remove a student from this class only.
+ * If it was their last enrollment, the student account is deleted (no orphan students).
+ */
+router.delete(
+  '/classes/:classId/students/:studentId',
+  authenticate,
+  requireRole('teacher', 'admin'),
+  asyncHandler(async (req, res) => {
+    const klass = await prisma.class.findFirst({ where: { id: req.params.classId } });
+    if (!klass) throw notFound('Class not found');
+    if (req.user!.role === 'teacher' && klass.teacherId !== req.user!.sub) {
+      throw forbidden('You can only manage your own classes');
+    }
+
+    const student = await basePrisma.user.findFirst({
+      where: {
+        id: req.params.studentId,
+        tenantId: req.tenant!.id,
+        role: 'student',
+      },
+    });
+    if (!student) throw notFound('Student not found');
+
+    const enrollment = await prisma.enrollment.findFirst({
+      where: { classId: klass.id, studentId: student.id, tenantId: req.tenant!.id },
+    });
+    if (!enrollment) throw notFound('Student is not enrolled in this class');
+
+    const otherCount = await prisma.enrollment.count({
+      where: { studentId: student.id, tenantId: req.tenant!.id, id: { not: enrollment.id } },
+    });
+
+    await prisma.enrollment.delete({ where: { id: enrollment.id } });
+
+    if (otherCount === 0) {
+      await basePrisma.user.delete({ where: { id: student.id } });
+      return res.json({ removed: true, accountDeleted: true });
+    }
+
+    res.json({ removed: true, accountDeleted: false });
   })
 );
 

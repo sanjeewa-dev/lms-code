@@ -28,7 +28,9 @@ type IconName =
   | 'ban'
   | 'trash'
   | 'home'
-  | 'chevron';
+  | 'chevron'
+  | 'spark'
+  | 'chat';
 
 const paths: Record<IconName, JSX.Element> = {
   dashboard: (
@@ -177,6 +179,19 @@ const paths: Record<IconName, JSX.Element> = {
     </>
   ),
   chevron: <path d="m9 6 6 6-6 6" />,
+  spark: (
+    <>
+      <path d="M12 3v3M12 18v3M3 12h3M18 12h3" />
+      <path d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10z" />
+      <path d="m6.5 6.5 2 2M15.5 15.5l2 2M17.5 6.5l-2 2M8.5 15.5l-2 2" />
+    </>
+  ),
+  chat: (
+    <>
+      <path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H7l-4 3V11.5A8.5 8.5 0 1 1 21 11.5z" />
+      <path d="M8 10h8M8 14h5" />
+    </>
+  ),
 };
 
 export function Icon({ name, ...props }: { name: IconName } & SVGProps<SVGSVGElement>) {

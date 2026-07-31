@@ -6,6 +6,8 @@ export const registerSchema = z.object({
   name: z.string().min(2).max(100),
   email: z.string().email(),
   password: passwordSchema,
+  /** Required — students must enroll in a published class at registration. */
+  classId: z.string().min(1),
 });
 
 export const loginSchema = z.object({
@@ -16,11 +18,6 @@ export const loginSchema = z.object({
 // --- Platform (superadmin) ---
 export const createTenantSchema = z.object({
   name: z.string().min(2).max(150),
-  slug: z
-    .string()
-    .min(2)
-    .max(50)
-    .regex(/^[a-z0-9-]+$/, 'Slug may contain only lowercase letters, numbers and hyphens'),
   logoUrl: z.string().url().optional(),
   admin: z.object({
     name: z.string().min(2).max(100),
@@ -29,15 +26,33 @@ export const createTenantSchema = z.object({
   }),
 });
 
+export const updatePlatformUserSchema = z.object({
+  name: z.string().min(2).max(100).optional(),
+  email: z.string().email().optional(),
+  status: z.enum(['pending', 'approved', 'rejected']).optional(),
+});
+
 export const updateTenantSchema = z.object({
   name: z.string().min(2).max(150).optional(),
   logoUrl: z.string().url().nullable().optional(),
   isActive: z.boolean().optional(),
+  plan: z.enum(['pro', 'enterprise']).optional(),
+  planFeatures: z
+    .object({
+      aiStudent: z.boolean().optional(),
+      aiTeacher: z.boolean().optional(),
+      parentTrust: z.boolean().optional(),
+      interventions: z.boolean().optional(),
+      smartJobs: z.boolean().optional(),
+      maxStudents: z.number().int().positive().nullable().optional(),
+      aiTokenLimit: z.number().int().positive().optional(),
+    })
+    .optional(),
 });
 
 export const instituteSettingsSchema = z.object({
   name: z.string().min(2).max(150).optional(),
-  logoUrl: z.string().url().nullable().optional(),
+  logoUrl: z.string().url().nullable().optional().or(z.literal('')),
   contactEmail: z.string().email().nullable().optional().or(z.literal('')),
   contactPhone: z.string().max(40).nullable().optional(),
   bankName: z.string().max(120).nullable().optional(),
@@ -48,6 +63,7 @@ export const instituteSettingsSchema = z.object({
   graceDays: z.coerce.number().int().min(0).max(28).optional(),
   requireMonthlyPayment: z.boolean().optional(),
   payhereMerchantId: z.string().max(120).nullable().optional(),
+  payhereMerchantSecret: z.string().max(200).nullable().optional(),
   payhereEnabled: z.boolean().optional(),
 });
 
@@ -64,6 +80,7 @@ export const teacherCreateSchema = z.object({
   password: passwordSchema,
   subject: z.string().max(120).optional(),
   phone: z.string().max(40).optional(),
+  classIds: z.array(z.string().min(1)).optional(),
 });
 
 export const teacherUpdateSchema = z.object({
@@ -72,6 +89,7 @@ export const teacherUpdateSchema = z.object({
   password: passwordSchema.optional(),
   subject: z.string().max(120).optional(),
   phone: z.string().max(40).optional(),
+  classIds: z.array(z.string().min(1)).optional(),
 });
 
 // --- Profile (self-service) ---
@@ -82,6 +100,7 @@ export const profileUpdateSchema = z.object({
   subject: z.string().max(120).optional().nullable(),
   guardianName: z.string().max(100).optional().nullable(),
   guardianPhone: z.string().max(40).optional().nullable(),
+  guardianEmail: z.string().email().optional().nullable().or(z.literal('')),
   area: z.string().max(100).optional().nullable(),
   district: z.string().max(100).optional().nullable(),
 });
@@ -232,6 +251,26 @@ export const quizSchema = z
     path: ['questions'],
   });
 
+export const quizUpdateSchema = z
+  .object({
+    title: z.string().min(1).max(200).optional(),
+    description: z.string().max(2000).optional(),
+    timeLimitSec: z.coerce.number().int().min(0).optional(),
+    availableFrom: z.coerce.date().nullable().optional(),
+    availableTo: z.coerce.date().nullable().optional(),
+    isPublished: z.coerce.boolean().optional(),
+    questions: z.array(questionInputSchema).min(1).optional(),
+  })
+  .refine(
+    (data) =>
+      data.questions === undefined ||
+      data.questions.every((q) => q.correctIndex < q.options.length),
+    {
+      message: 'correctIndex must be within the options range',
+      path: ['questions'],
+    }
+  );
+
 export const submitAttemptSchema = z.object({
   answers: z
     .array(
@@ -295,6 +334,27 @@ export const classScheduleSchema = z.object({
     .string()
     .transform(normalizeClassTime)
     .pipe(z.string().regex(/^\d{2}:\d{2}$/, 'Time must be HH:MM (24-hour)')),
-  platform: z.enum(['zoom', 'teams', 'google_meet']),
+  platform: z.enum(['zoom', 'teams', 'google_meet', 'jitsi']),
   meetingText: z.string().max(2000).optional(),
+  /** Create only: once (default) or recurring pattern */
+  repeat: z
+    .enum(['once', 'daily', 'weekly', 'weekdays', 'weekends', 'custom'])
+    .optional()
+    .default('once'),
+  /** Inclusive end date for recurring schedules (YYYY-MM-DD) */
+  repeatUntil: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD')
+    .optional(),
+  /** For custom: weekdays as 0=Sun … 6=Sat */
+  customDays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
+});
+
+// --- Chat ---
+export const chatStartSchema = z.object({
+  peerId: z.string().min(1),
+});
+
+export const chatMessageSchema = z.object({
+  body: z.string().trim().min(1).max(2000),
 });

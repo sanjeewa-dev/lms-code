@@ -79,8 +79,30 @@ export function GradebookTab({ classId }: { classId: string }) {
     if (!data) return <p className="text-sm text-slate-500">Unable to load gradebook.</p>;
 
     return (
-      <Card>
-        <div className="mb-4 flex items-center justify-between gap-2">
+      <div className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Card>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Students</p>
+            <p className="mt-1 text-2xl font-extrabold text-slate-900 dark:text-white">{data.rows.length}</p>
+          </Card>
+          <Card>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Assignments</p>
+            <p className="mt-1 text-2xl font-extrabold text-slate-900 dark:text-white">{data.assessments.length}</p>
+          </Card>
+          <Card>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Quizzes</p>
+            <p className="mt-1 text-2xl font-extrabold text-slate-900 dark:text-white">{data.quizzes.length}</p>
+          </Card>
+          <Card>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Columns</p>
+            <p className="mt-1 text-2xl font-extrabold text-slate-900 dark:text-white">
+              {data.assessments.length + data.quizzes.length}
+            </p>
+          </Card>
+        </div>
+
+        <Card className="overflow-hidden rounded-2xl p-0">
+          <div className="flex items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/80 px-5 py-4 dark:border-white/5 dark:bg-white/5">
           <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Gradebook</h3>
           <button
             type="button"
@@ -89,8 +111,8 @@ export function GradebookTab({ classId }: { classId: string }) {
           >
             Export CSV
           </button>
-        </div>
-        <div className="overflow-x-auto">
+          </div>
+          <div className="overflow-x-auto px-5 py-4">
           <table className="w-full min-w-[640px] text-left text-sm">
             <thead className="border-b border-slate-100 text-xs uppercase text-slate-400 dark:border-white/5">
               <tr>
@@ -131,8 +153,9 @@ export function GradebookTab({ classId }: { classId: string }) {
           {data.rows.length === 0 && (
             <p className="py-4 text-sm text-slate-500">No active students yet.</p>
           )}
-        </div>
-      </Card>
+          </div>
+        </Card>
+      </div>
     );
   }
 
@@ -142,6 +165,16 @@ export function GradebookTab({ classId }: { classId: string }) {
 
   return (
     <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Card>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Assignments</p>
+          <p className="mt-1 text-2xl font-extrabold text-slate-900 dark:text-white">{mine.assignments.length}</p>
+        </Card>
+        <Card>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Quizzes</p>
+          <p className="mt-1 text-2xl font-extrabold text-slate-900 dark:text-white">{mine.quizzes.length}</p>
+        </Card>
+      </div>
       <Card>
         <h3 className="mb-3 text-lg font-semibold text-slate-900 dark:text-white">My assignments</h3>
         <ul className="divide-y divide-slate-100 dark:divide-white/5">

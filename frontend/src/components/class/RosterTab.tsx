@@ -23,6 +23,11 @@ interface RosterEntry {
   student: RosterStudent;
 }
 
+type RosterRow = StudentRow & {
+  enrollmentId: string;
+  enrollmentStatus: EnrollmentStatus;
+};
+
 const EMPTY_FORM = {
   name: '',
   email: '',
@@ -70,7 +75,7 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
 
   const institute = tenantQuery.data?.tenant.name ?? t.slug ?? 'Institute';
 
-  const rows: StudentRow[] = useMemo(() => {
+  const rows: RosterRow[] = useMemo(() => {
     const list = rosterQuery.data ?? [];
     return list.map((e, i) => ({
       id: e.student.id,
@@ -81,6 +86,8 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
       createdAt: e.student.createdAt,
       regId: `#${list.length - i}`,
       grade: classTitle,
+      enrollmentId: e.id,
+      enrollmentStatus: e.status,
     }));
   }, [rosterQuery.data, classTitle]);
 
@@ -197,17 +204,26 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
     }
   }
 
-  async function removeStudent(row: StudentRow) {
+  async function removeStudent(row: RosterRow) {
+    const lastClassHint =
+      'If this is their only class, their account will be deleted (students cannot exist without a class).';
     if (
       !window.confirm(
-        `Delete ${row.name}? This permanently removes the student account and unenrolls them from all classes.`
+        `Remove ${row.name} from this class?\n\n${lastClassHint}`
       )
     )
       return;
     setActionError('');
     setBusyId(row.id);
     try {
-      await t.del(`/students/${row.id}`);
+      const { data } = await t.del<{ removed: boolean; accountDeleted: boolean }>(
+        `/classes/${classId}/students/${row.id}`
+      );
+      if (data?.accountDeleted) {
+        setInviteSuccess(`${row.name} removed and account deleted (no remaining classes).`);
+      } else {
+        setInviteSuccess(`${row.name} removed from this class.`);
+      }
       await refresh();
     } catch (err) {
       setActionError(apiErrorMessage(err));
@@ -224,7 +240,7 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm dark:border-white/5 dark:bg-ink-850">
         <div>
           <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Enrolled students</h3>
           <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -247,7 +263,7 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
         <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">{actionError}</p>
       )}
 
-      <Card className="p-0">
+      <Card className="overflow-hidden rounded-2xl p-0">
         {rosterQuery.isLoading ? (
           <Spinner label="Loading students..." />
         ) : rows.length === 0 ? (
@@ -262,7 +278,8 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
                   <th className="px-5 py-3 font-semibold">ID</th>
                   <th className="px-5 py-3 font-semibold">Name</th>
                   <th className="px-5 py-3 font-semibold">Email</th>
-                  <th className="px-5 py-3 font-semibold">Status</th>
+                  <th className="px-5 py-3 font-semibold">Account</th>
+                  <th className="px-5 py-3 font-semibold">Class access</th>
                   <th className="px-5 py-3 text-right font-semibold">Action</th>
                 </tr>
               </thead>
@@ -285,6 +302,9 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
                       <StatusBadge status={r.status} />
                     </td>
                     <td className="px-5 py-3">
+                      <EnrollmentBadge status={r.enrollmentStatus} />
+                    </td>
+                    <td className="px-5 py-3">
                       <div className="flex justify-end gap-1.5">
                         <button
                           onClick={() => openCard(r)}
@@ -296,7 +316,7 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
                         <button
                           onClick={() => setStatus(r, 'approved')}
                           disabled={busyId === r.id || r.status === 'approved'}
-                          title="Approve student"
+                          title="Approve account"
                           className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-600 text-white transition hover:bg-emerald-700 disabled:opacity-40"
                         >
                           <Icon name="check" width={16} height={16} />
@@ -304,7 +324,7 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
                         <button
                           onClick={() => setStatus(r, 'rejected')}
                           disabled={busyId === r.id || r.status === 'rejected'}
-                          title="Reject student"
+                          title="Reject account"
                           className="grid h-8 w-8 place-items-center rounded-lg bg-amber-500 text-white transition hover:bg-amber-600 disabled:opacity-40"
                         >
                           <Icon name="ban" width={16} height={16} />
@@ -312,7 +332,7 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
                         <button
                           onClick={() => removeStudent(r)}
                           disabled={busyId === r.id}
-                          title="Delete student"
+                          title="Remove from class"
                           className="grid h-8 w-8 place-items-center rounded-lg bg-red-600 text-white transition hover:bg-red-700 disabled:opacity-40"
                         >
                           <Icon name="trash" width={16} height={16} />
@@ -685,6 +705,19 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function StatusBadge({ status }: { status: StudentStatus }) {
   const map: Record<StudentStatus, string> = {
     approved: 'bg-emerald-100 text-emerald-700',
+    pending: 'bg-amber-100 text-amber-700',
+    rejected: 'bg-red-100 text-red-700',
+  };
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${map[status]}`}>
+      {status}
+    </span>
+  );
+}
+
+function EnrollmentBadge({ status }: { status: EnrollmentStatus }) {
+  const map: Record<EnrollmentStatus, string> = {
+    active: 'bg-sky-100 text-sky-700',
     pending: 'bg-amber-100 text-amber-700',
     rejected: 'bg-red-100 text-red-700',
   };

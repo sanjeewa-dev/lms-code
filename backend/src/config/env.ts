@@ -31,4 +31,14 @@ export const env = {
     pass: process.env.SMTP_PASS ?? '',
     from: process.env.SMTP_FROM ?? 'Mindspark LMS <noreply@lms.local>',
   },
+  apiPublicUrl: process.env.API_PUBLIC_URL ?? `http://localhost:${process.env.PORT ?? '4000'}`,
+  cronSecret: process.env.CRON_SECRET ?? 'dev-cron-secret',
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',
+  openaiApiKey: process.env.OPENAI_API_KEY ?? '',
+  geminiApiKey: process.env.GEMINI_API_KEY ?? '',
+  jitsi: {
+    host: process.env.JITSI_HOST ?? 'meet.jit.si',
+    appId: process.env.JITSI_APP_ID ?? '',
+    appSecret: process.env.JITSI_APP_SECRET ?? '',
+  },
 };

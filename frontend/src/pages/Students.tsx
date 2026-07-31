@@ -83,12 +83,22 @@ export default function Students() {
 
   const rows: StudentRow[] = useMemo(() => {
     const list = studentsQuery.data ?? [];
-    return list.map((u, i) => ({
-      ...u,
-      regId: `#${list.length - i}`,
-      grade: u.classes && u.classes.length ? u.classes.join(', ') : 'No class',
-      status: (u.status ?? 'approved') as StudentStatus,
-    }));
+    return list.map((u, i) => {
+      const classLabel =
+        u.classEnrollments && u.classEnrollments.length
+          ? u.classEnrollments
+              .map((e) => (e.status === 'active' ? e.title : `${e.title} (${e.status})`))
+              .join(', ')
+          : u.classes && u.classes.length
+            ? u.classes.join(', ')
+            : 'No class';
+      return {
+        ...u,
+        regId: `#${list.length - i}`,
+        grade: classLabel,
+        status: (u.status ?? 'approved') as StudentStatus,
+      };
+    });
   }, [studentsQuery.data]);
 
   const approvedCount = rows.filter((r) => r.status === 'approved').length;
@@ -131,7 +141,7 @@ export default function Students() {
         <div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-white">Students Management</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            View, filter, and manage all registered students.
+            Students belong to classes. View enrollments, account approval, and manage the directory.
           </p>
         </div>
       </div>
@@ -205,8 +215,8 @@ export default function Students() {
                   <th className="px-5 py-3 font-semibold">ID</th>
                   <th className="px-5 py-3 font-semibold">Name</th>
                   <th className="px-5 py-3 font-semibold">Email</th>
-                  <th className="px-5 py-3 font-semibold">Class</th>
-                  <th className="px-5 py-3 font-semibold">Status</th>
+                  <th className="px-5 py-3 font-semibold">Classes</th>
+                  <th className="px-5 py-3 font-semibold">Account</th>
                   <th className="px-5 py-3 text-right font-semibold">Action</th>
                 </tr>
               </thead>

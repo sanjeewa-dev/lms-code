@@ -5,6 +5,7 @@ import { authenticate, requireRole } from '../middleware/auth';
 import { enterTenantContext } from '../middleware/tenant';
 import { uploadSlip } from '../middleware/upload';
 import { persistUploadedFile } from '../services/files';
+import { env } from '../config/env';
 import { paymentSchema, reviewPaymentSchema, payhereInitSchema } from '../validation/schemas';
 import { badRequest, forbidden, notFound } from '../utils/httpError';
 import { storage } from '../services/storage';
@@ -420,7 +421,7 @@ router.post(
         merchant_id: tenant.payhereMerchantId,
         return_url: `${process.env.CLIENT_URL ?? 'http://localhost:5173'}/${req.params.slug}/payments`,
         cancel_url: `${process.env.CLIENT_URL ?? 'http://localhost:5173'}/${req.params.slug}/payments`,
-        notify_url: `${process.env.API_PUBLIC_URL ?? 'http://localhost:4000'}/api/t/${req.params.slug}/payments/payhere/notify`,
+        notify_url: `${env.apiPublicUrl}/api/t/${req.params.slug}/public/payhere/notify`,
         order_id: orderId,
         items: `${enrollment.class.title} (${data.forMonth})`,
         currency: 'LKR',

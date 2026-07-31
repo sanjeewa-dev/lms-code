@@ -46,6 +46,13 @@ enum MeetingPlatform {
   zoom
   teams
   google_meet
+  jitsi
+}
+
+enum SessionStatus {
+  scheduled
+  live
+  ended
 }
 
 enum FileKind {
@@ -89,7 +96,25 @@ enum NotificationType {
   grade_posted
   assignment_due
   schedule_reminder
+  chat_message
   general
+}
+
+enum TenantPlan {
+  pro
+  enterprise
+}
+
+enum JobRunStatus {
+  running
+  success
+  failed
+}
+
+enum EmailLogStatus {
+  sent
+  failed
+  skipped
 }
 
 model Tenant {
@@ -98,6 +123,8 @@ model Tenant {
   name      String
   logoUrl   String?
   isActive  Boolean  @default(true)
+  plan                    TenantPlan @default(pro)
+  planFeatures            Json?
   contactEmail        String?
   contactPhone        String?
   bankName            String?
@@ -108,6 +135,7 @@ model Tenant {
   graceDays               Int     @default(7)
   requireMonthlyPayment   Boolean @default(true)
   payhereMerchantId       String?
+  payhereMerchantSecret   String?
   payhereEnabled          Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -131,6 +159,16 @@ model Tenant {
   classSchedules ClassSchedule[]
   attendances    Attendance[]
   notifications  Notification[]
+  aiUsages       AiUsage[]
+  aiToolHistories AiToolHistory[]
+  interventions  Intervention[]
+  parentTokens   ParentToken[]
+  auditLogs      AuditLog[]
+  jobRuns        JobRun[]
+  emailLogs      EmailLog[]
+  supportSessions SupportSession[]
+  conversations  Conversation[]
+  chatMessages   Message[]
 }
 
 model User {
@@ -146,6 +184,7 @@ model User {
   phones         String[]  @default([])
   guardianName   String?
   guardianPhone  String?
+  guardianEmail  String?
   area           String?
   district       String?
   address        String?
@@ -168,6 +207,16 @@ model User {
   attendancesMarked  Attendance[]    @relation("AttendanceMarker")
   attendances        Attendance[]    @relation("AttendanceStudent")
   notifications      Notification[]
+  aiUsages           AiUsage[]
+  aiToolHistories    AiToolHistory[]
+  interventionsAbout Intervention[]  @relation("InterventionStudent")
+  interventionsBy    Intervention[]  @relation("InterventionCreator")
+  parentTokens       ParentToken[]   @relation("ParentTokenStudent")
+  auditLogs          AuditLog[]
+  supportSessions    SupportSession[] @relation("SupportSessionActor")
+  conversationsAsTeacher Conversation[] @relation("ConversationTeacher")
+  conversationsAsStudent Conversation[] @relation("ConversationStudent")
+  chatMessages       Message[]        @relation("MessageSender")
 
   @@unique([tenantId, email])
   @@index([role])
@@ -247,6 +296,8 @@ model Class {
   noticeClasses  NoticeClass[]
   schedules      ClassSchedule[]
   attendances    Attendance[]
+  aiUsages       AiUsage[]
+  aiToolHistories AiToolHistory[]
 
   @@index([tenantId])
   @@index([teacherId])
@@ -262,12 +313,18 @@ model ClassSchedule {
   classTime   String
   platform    MeetingPlatform
   meetingText String          @default("")
+  status      SessionStatus   @default(scheduled)
+  roomName    String?
+  startedAt   DateTime?
+  endedAt     DateTime?
+  recordingUrl String?
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
   @@index([tenantId])
   @@index([classId])
   @@index([classDate])
+  @@index([status])
 }
 
 model Attendance {
@@ -491,17 +548,104 @@ model QuizAttempt {
 }
 
 model Answer {
-  id            String      @id @default(cuid())
-  tenantId      String
-  tenant        Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  attemptId     String
-  attempt       QuizAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
-  questionId    String
-  question      Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  selectedIndex Int
+  id                String      @id @default(cuid())
+  tenantId          String
+  tenant            Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  attemptId         String
+  attempt           QuizAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId        String
+  question          Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedIndex     Int
+  explanation       String?     @db.Text
+  explanationSteps  Json?
 
   @@unique([attemptId, questionId])
   @@index([tenantId])
+}
+
+/// Monthly AI Student Area quota: 20 tokens per student per class.
+model AiUsage {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  studentId String
+  student   User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classId   String
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  forMonth  String
+  used      Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, classId, forMonth])
+  @@index([tenantId])
+  @@index([classId])
+}
+
+/// Saved AI Student Area tool responses for later review.
+model AiToolHistory {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  studentId String
+  student   User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classId   String
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  tool      String
+  title     String
+  payload   Json
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([studentId, classId, tool, createdAt])
+}
+
+enum InterventionStatus {
+  open
+  in_progress
+  resolved
+  escalated
+}
+
+/// Tracks teacher interventions and follow-ups for at-risk students.
+model Intervention {
+  id          String             @id @default(cuid())
+  tenantId    String
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     User               @relation("InterventionStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User               @relation("InterventionCreator", fields: [createdById], references: [id])
+  reason      String             @db.Text
+  action      String             @db.Text
+  status      InterventionStatus @default(open)
+  followUpDate DateTime?
+  resolvedAt  DateTime?
+  resolvedNote String?           @db.Text
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@index([tenantId])
+  @@index([studentId])
+  @@index([createdById])
+}
+
+/// Parent magic-link tokens for the Parent Trust Center.
+model ParentToken {
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  studentId  String
+  student    User     @relation("ParentTokenStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  token      String   @unique
+  email      String
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([studentId])
+  @@index([token])
 }
 
 model VideoLesson {
@@ -573,5 +717,111 @@ model Event {
   batchLabel String?
   createdAt  DateTime @default(now())
 
+  @@index([tenantId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  actorEmail String
+  action     String
+  tenantId   String?
+  tenant     Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  targetType String?
+  targetId   String?
+  meta       Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([actorId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model JobRun {
+  id         String       @id @default(cuid())
+  job        String
+  status     JobRunStatus @default(running)
+  tenantId   String?
+  tenant     Tenant?      @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  startedAt  DateTime     @default(now())
+  finishedAt DateTime?
+  result     Json?
+  error      String?      @db.Text
+
+  @@index([job])
+  @@index([status])
+  @@index([startedAt])
+  @@index([tenantId])
+}
+
+model EmailLog {
+  id          String         @id @default(cuid())
+  tenantId    String?
+  tenant      Tenant?        @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  to          String
+  subject     String
+  status      EmailLogStatus
+  providerId  String?
+  error       String?        @db.Text
+  relatedType String?
+  relatedId   String?
+  createdAt   DateTime       @default(now())
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model SupportSession {
+  id           String    @id @default(cuid())
+  superadminId String
+  superadmin   User      @relation("SupportSessionActor", fields: [superadminId], references: [id], onDelete: Cascade)
+  tenantId     String
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  reason       String    @db.Text
+  tokenHash    String
+  startedAt    DateTime  @default(now())
+  endedAt      DateTime?
+  expiresAt    DateTime
+
+  @@index([superadminId])
+  @@index([tenantId])
+  @@index([tokenHash])
+}
+
+/// Direct message thread between one staff member (teacher/admin) and one student.
+model Conversation {
+  id            String    @id @default(cuid())
+  tenantId      String
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  teacherId     String
+  teacher       User      @relation("ConversationTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
+  studentId     String
+  student       User      @relation("ConversationStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  lastMessageAt DateTime?
+  createdAt     DateTime  @default(now())
+  messages      Message[]
+
+  @@unique([tenantId, teacherId, studentId])
+  @@index([tenantId, teacherId])
+  @@index([tenantId, studentId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  tenantId       String
+  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  body           String       @db.Text
+  readAt         DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
   @@index([tenantId])
 }

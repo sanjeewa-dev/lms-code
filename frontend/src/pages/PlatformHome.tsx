@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button, Card, Input, Select } from '../components/ui';
 import { apiErrorMessage } from '../api/client';
+import { useDocumentMeta } from '../hooks/useDocumentMeta';
 
 export default function PlatformHome() {
   const { login } = useAuth();
@@ -13,6 +14,12 @@ export default function PlatformHome() {
   const [loading, setLoading] = useState(false);
   const [tenantChoices, setTenantChoices] = useState<{ slug: string; name: string }[] | null>(null);
   const [chosenSlug, setChosenSlug] = useState('');
+
+  useDocumentMeta({
+    title: 'Sign In — Mindspark LMS',
+    description:
+      'Sign in to your Mindspark LMS account to access your classes, quizzes, live sessions, and AI learning tools.',
+  });
 
   async function doLogin(tenantSlug?: string) {
     setError('');
