@@ -37,8 +37,11 @@ router.get(
         ? { teacherId: user.sub }
         : user.role === 'admin' || user.role === 'superadmin'
         ? {}
-        : // Students only see classes they are enrolled in.
-          { enrollments: { some: { studentId: user.sub } } };
+        : // Students only see active (published) classes they are enrolled in.
+          {
+            isPublished: true,
+            enrollments: { some: { studentId: user.sub } },
+          };
 
     const classes = await prisma.class.findMany({
       where,
@@ -96,6 +99,8 @@ router.get(
 
     let enrollment = null;
     if (req.user!.role === 'student') {
+      // Inactive classes are hidden from students entirely.
+      if (!klass.isPublished) throw notFound('Class not found');
       enrollment = await prisma.enrollment.findFirst({
         where: { classId: klass.id, studentId: req.user!.sub },
         include: { payments: { orderBy: { createdAt: 'desc' } } },
@@ -157,15 +162,16 @@ router.patch(
     const updated = await prisma.class.update({
       where: { id: klass.id },
       data: {
-        title: data.title,
-        description: data.description,
-        price: data.price,
-        isPublished: data.isPublished,
-        batchId: data.batchId,
+        ...(data.title !== undefined ? { title: data.title } : {}),
+        ...(data.description !== undefined ? { description: data.description } : {}),
+        ...(data.price !== undefined ? { price: data.price } : {}),
+        ...(data.isPublished !== undefined ? { isPublished: data.isPublished } : {}),
+        ...(data.batchId !== undefined ? { batchId: data.batchId || null } : {}),
       },
       include: {
         teacher: { select: { id: true, name: true } },
         batch: { select: { id: true, name: true } },
+        _count: { select: { enrollments: true } },
       },
     });
     res.json({ class: serializeClass(updated) });

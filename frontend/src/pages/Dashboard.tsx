@@ -199,8 +199,9 @@ export default function Dashboard() {
         )}
 
         <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-white/5 dark:bg-ink-850 sm:p-6">
-          <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-brand-500/10 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-24 left-1/3 h-48 w-48 rounded-full bg-violet-500/10 blur-3xl" />
+          <div className="pointer-events-none absolute -right-10 -top-16 h-72 w-72 rounded-full bg-brand-500/35 blur-3xl dark:bg-brand-400/25" />
+          <div className="pointer-events-none absolute -bottom-20 left-[20%] h-64 w-64 rounded-full bg-rose-500/30 blur-3xl dark:bg-rose-400/20" />
+          <div className="pointer-events-none absolute -left-12 top-0 h-48 w-48 rounded-full bg-violet-500/25 blur-3xl dark:bg-violet-400/15" />
           <div className="relative flex flex-wrap items-end justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-brand-600 dark:text-brand-400">

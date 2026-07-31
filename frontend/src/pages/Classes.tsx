@@ -6,6 +6,8 @@ import { apiErrorMessage } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { Badge, Button, Card, Input, Select, Spinner, Textarea } from '../components/ui';
 import { BrandMark, useInstituteBrand } from '../components/BrandMark';
+import { ClassEditModal } from '../components/class/ClassEditModal';
+import { showToast } from '../components/AppToast';
 import type { Batch, ClassSummary } from '../api/types';
 
 export default function Classes() {
@@ -22,6 +24,7 @@ export default function Classes() {
   const [newBatch, setNewBatch] = useState({ name: '', year: '' });
   const [enrollBusy, setEnrollBusy] = useState<string | null>(null);
   const [enrollMsg, setEnrollMsg] = useState('');
+  const [editing, setEditing] = useState<ClassSummary | null>(null);
 
   const canCreate = user?.role === 'teacher' || user?.role === 'admin';
   const isStudent = user?.role === 'student';
@@ -60,6 +63,7 @@ export default function Classes() {
       setForm({ title: '', description: '', price: '0', batchId: '' });
       setError('');
       queryClient.invalidateQueries({ queryKey: ['classes', slug] });
+      showToast('Class created');
     },
     onError: (err) => setError(apiErrorMessage(err)),
   });
@@ -197,38 +201,59 @@ export default function Classes() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {classesQuery.data?.map((c) => (
-            <Link key={c.id} to={`${base}/classes/${c.id}`}>
-              <Card className="h-full overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:border-brand-300 hover:shadow-md dark:border-white/5 dark:bg-ink-850">
-                <div className="flex h-full flex-col p-5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <BrandMark name={c.title} logoUrl={logoUrl} size="sm" />
-                        <h3 className="truncate font-semibold text-slate-900 dark:text-white">{c.title}</h3>
-                      </div>
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        {c.batch && <Badge tone="slate">{c.batch.name}</Badge>}
-                      </div>
+            <Card
+              key={c.id}
+              className={`relative h-full overflow-hidden rounded-3xl border bg-white shadow-sm transition hover:shadow-md dark:bg-ink-850 ${
+                c.isPublished
+                  ? 'border-slate-200 hover:border-brand-300 dark:border-white/5'
+                  : 'border-amber-200 opacity-90 dark:border-amber-900/40'
+              }`}
+            >
+              <Link to={`${base}/classes/${c.id}`} className="flex h-full flex-col p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <BrandMark name={c.title} logoUrl={logoUrl} size="sm" />
+                      <h3 className="truncate font-semibold text-slate-900 dark:text-white">{c.title}</h3>
                     </div>
-                  </div>
-
-                  <p className="mt-3 line-clamp-3 text-sm text-slate-500 dark:text-slate-400">
-                    {c.description || 'No description.'}
-                  </p>
-
-                  <div className="mt-auto pt-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                        {c.teacher?.name ? `Teacher: ${c.teacher.name}` : 'Teacher assigned'}
-                      </p>
-                      <span className="rounded-full bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200 dark:bg-white/5 dark:text-slate-300 dark:ring-white/10">
-                        Open class
-                      </span>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      {c.batch && <Badge tone="slate">{c.batch.name}</Badge>}
+                      {!c.isPublished && <Badge tone="amber">Inactive</Badge>}
                     </div>
                   </div>
                 </div>
-              </Card>
-            </Link>
+
+                <p className="mt-3 line-clamp-3 text-sm text-slate-500 dark:text-slate-400">
+                  {c.description || 'No description.'}
+                </p>
+
+                <div className="mt-auto pt-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                      {c.teacher?.name ? `Teacher: ${c.teacher.name}` : 'Teacher assigned'}
+                    </p>
+                    <span className="rounded-full bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200 dark:bg-white/5 dark:text-slate-300 dark:ring-white/10">
+                      Open class
+                    </span>
+                  </div>
+                </div>
+              </Link>
+              {canCreate && (
+                <div className="absolute right-3 top-3">
+                  <Button
+                    variant="secondary"
+                    className="!px-2.5 !py-1 !text-xs"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setEditing(c);
+                    }}
+                  >
+                    Edit
+                  </Button>
+                </div>
+              )}
+            </Card>
           ))}
           {classesQuery.data?.length === 0 && (
             <p className="text-sm text-slate-500">
@@ -281,6 +306,13 @@ export default function Classes() {
           )}
         </div>
       )}
+
+      <ClassEditModal
+        open={Boolean(editing)}
+        klass={editing}
+        onClose={() => setEditing(null)}
+        onSaved={() => showToast('Class updated')}
+      />
     </div>
   );
 }
