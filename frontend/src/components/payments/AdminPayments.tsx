@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTenantApi } from '../../hooks/useTenantApi';
 import { apiErrorMessage } from '../../api/client';
-import { Badge, Button, Card, Input, Select, Spinner, statusTone } from '../ui';
+import { Badge, Button, Card, Input, Modal, Select, Spinner, statusTone } from '../ui';
 import { Icon } from '../icons';
 import { currentMonth, formatMonthLabel, monthOptions } from '../../lib/paymentUtils';
 import type { ClassSummary, Payment, PaymentStatus } from '../../api/types';
@@ -310,31 +310,42 @@ export function AdminPayments() {
         </Card>
       )}
 
-      {rejectId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <Card className="w-full max-w-md">
-            <h3 className="mb-3 text-lg font-semibold text-slate-900 dark:text-white">Reject payment</h3>
-            <Input
-              label="Reason (optional)"
-              value={rejectNote}
-              onChange={(e) => setRejectNote(e.target.value)}
-              placeholder="e.g. Amount mismatch, unclear slip"
-            />
-            <div className="mt-4 flex gap-2">
-              <Button
-                variant="danger"
-                onClick={() => submitReview(rejectId, 'reject', rejectNote || undefined)}
-                disabled={reviewMutation.isPending || reviewingId === rejectId}
-              >
-                Confirm reject
-              </Button>
-              <Button variant="secondary" onClick={() => { setRejectId(null); setRejectNote(''); setReviewError(''); }}>
-                Cancel
-              </Button>
-            </div>
-          </Card>
+      <Modal
+        open={Boolean(rejectId)}
+        onClose={() => {
+          setRejectId(null);
+          setRejectNote('');
+          setReviewError('');
+        }}
+        title="Reject payment"
+        className="max-w-md"
+      >
+        <Input
+          label="Reason (optional)"
+          value={rejectNote}
+          onChange={(e) => setRejectNote(e.target.value)}
+          placeholder="e.g. Amount mismatch, unclear slip"
+        />
+        <div className="mt-4 flex gap-2">
+          <Button
+            variant="danger"
+            onClick={() => rejectId && submitReview(rejectId, 'reject', rejectNote || undefined)}
+            disabled={reviewMutation.isPending || reviewingId === rejectId}
+          >
+            Confirm reject
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setRejectId(null);
+              setRejectNote('');
+              setReviewError('');
+            }}
+          >
+            Cancel
+          </Button>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

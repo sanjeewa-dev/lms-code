@@ -35,14 +35,19 @@ function smoothLinePath(pts: { x: number; y: number }[]) {
 export function PerformanceChart({
   points,
   height = 260,
+  color = '#3b82f6',
+  emptyMessage = 'No graded quizzes or assignments yet. Complete work in your classes to see performance here.',
 }: {
   points: PerformancePoint[];
   height?: number;
+  /** Line/area stroke color */
+  color?: string;
+  emptyMessage?: string;
 }) {
   if (!points.length) {
     return (
       <div className="flex h-56 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-400 dark:border-white/10 dark:bg-white/5">
-        No graded quizzes or assignments yet. Complete work in your classes to see performance here.
+        {emptyMessage}
       </div>
     );
   }
@@ -68,8 +73,8 @@ export function PerformanceChart({
       : `${line} L ${coords[coords.length - 1].x} ${pad.top + innerH} L ${coords[0].x} ${pad.top + innerH} Z`;
 
   const yTicks = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
-  const stroke = '#3b82f6';
-  const fillId = 'perfAreaFill';
+  const stroke = color;
+  const fillId = `perfAreaFill-${color.replace('#', '')}`;
 
   return (
     <div className="w-full overflow-x-auto">
@@ -78,7 +83,7 @@ export function PerformanceChart({
         width="100%"
         height={height}
         role="img"
-        aria-label="Performance chart of quiz scores"
+        aria-label="Performance chart"
         className="min-w-full"
       >
         <defs>

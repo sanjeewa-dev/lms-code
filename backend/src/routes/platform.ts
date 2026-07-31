@@ -9,7 +9,9 @@ import {
   changePasswordSchema,
   createTenantAdminSchema,
   createTenantSchema,
+  inviteTenantAdminSchema,
   loginSchema,
+  overrideTenantAdminPasswordSchema,
   profileUpdateSchema,
   updateTenantSchema,
 } from '../validation/schemas';
@@ -17,6 +19,7 @@ import { publicUserFromProfile, serializeProfile } from '../services/profile';
 import { badRequest, conflict, notFound, unauthorized } from '../utils/httpError';
 import { writeAuditLog } from '../services/audit';
 import { resolvePlanFeatures } from '../services/planGates';
+import { inviteTenantAdmin } from '../services/adminInvite';
 
 // Mounted at /api/admin
 const router = Router();
@@ -95,7 +98,7 @@ router.get(
   })
 );
 
-// Create a tenant and its first admin in one transaction.
+// Create a tenant and invite its first admin (they set password via onboarding link).
 router.post(
   '/tenants',
   ...requireSuperadmin,
@@ -103,23 +106,22 @@ router.post(
     const data = createTenantSchema.parse(req.body);
     const slug = await uniqueSlugFromName(data.name);
 
-    const passwordHash = await bcrypt.hash(data.admin.password, 10);
     const tenant = await basePrisma.tenant.create({
       data: {
         name: data.name,
         slug,
         logoUrl: data.logoUrl,
         plan: 'pro',
-        users: {
-          create: {
-            name: data.admin.name,
-            email: data.admin.email,
-            passwordHash,
-            role: 'admin',
-          },
-        },
       },
       include: { _count: { select: { users: true, classes: true } } },
+    });
+
+    await inviteTenantAdmin({
+      tenantId: tenant.id,
+      tenantSlug: tenant.slug,
+      tenantName: tenant.name,
+      invitedById: req.user!.sub,
+      email: data.admin.email,
     });
 
     await writeAuditLog({
@@ -129,9 +131,11 @@ router.post(
       tenantId: tenant.id,
       targetType: 'Tenant',
       targetId: tenant.id,
-      meta: { slug: tenant.slug },
+      meta: { slug: tenant.slug, adminEmail: data.admin.email.toLowerCase().trim() },
       ip: clientIp(req),
     });
+
+    const userCount = await basePrisma.user.count({ where: { tenantId: tenant.id } });
 
     res.status(201).json({
       tenant: {
@@ -142,9 +146,10 @@ router.post(
         isActive: tenant.isActive,
         plan: tenant.plan,
         createdAt: tenant.createdAt,
-        userCount: tenant._count.users,
+        userCount,
         classCount: tenant._count.classes,
       },
+      invited: true,
     });
   })
 );
@@ -189,7 +194,42 @@ router.patch(
   })
 );
 
-// Add another admin to an existing tenant.
+// Invite an institute admin by email — they set up name + password via link.
+router.post(
+  '/tenants/:id/admins/invite',
+  ...requireSuperadmin,
+  asyncHandler(async (req, res) => {
+    const data = inviteTenantAdminSchema.parse(req.body);
+    const tenant = await basePrisma.tenant.findUnique({ where: { id: req.params.id } });
+    if (!tenant) throw notFound('Tenant not found');
+
+    const result = await inviteTenantAdmin({
+      tenantId: tenant.id,
+      tenantSlug: tenant.slug,
+      tenantName: tenant.name,
+      invitedById: req.user!.sub,
+      email: data.email,
+    });
+
+    await writeAuditLog({
+      actorId: req.user!.sub,
+      actorEmail: req.user!.email,
+      action: 'tenant.admin.invite',
+      tenantId: tenant.id,
+      targetType: 'user',
+      targetId: result.admin.id,
+      meta: { email: data.email.toLowerCase().trim() },
+      ip: clientIp(req),
+    });
+
+    res.status(201).json({
+      admin: publicUser(result.admin),
+      invited: true,
+    });
+  })
+);
+
+// Add another admin to an existing tenant (legacy direct create; prefer invite).
 router.post(
   '/tenants/:id/admins',
   ...requireSuperadmin,
@@ -203,7 +243,7 @@ router.post(
     });
     if (existing) throw badRequest('A user with that email already exists in this tenant');
 
-    const passwordHash = await bcrypt.hash(data.password, 10);
+    const passwordHash = data.password ? await bcrypt.hash(data.password, 10) : null;
     const admin = await basePrisma.user.create({
       data: {
         tenantId: tenant.id,
@@ -214,6 +254,42 @@ router.post(
       },
     });
     res.status(201).json({ admin: publicUser(admin) });
+  })
+);
+
+// Override an institute admin password (superadmin forgot-password recovery).
+// Never returns or exposes the previous password.
+router.post(
+  '/tenants/:id/admins/:userId/override-password',
+  ...requireSuperadmin,
+  asyncHandler(async (req, res) => {
+    const data = overrideTenantAdminPasswordSchema.parse(req.body);
+    const tenant = await basePrisma.tenant.findUnique({ where: { id: req.params.id } });
+    if (!tenant) throw notFound('Tenant not found');
+
+    const admin = await basePrisma.user.findFirst({
+      where: { id: req.params.userId, tenantId: tenant.id, role: 'admin' },
+    });
+    if (!admin) throw notFound('Institute admin not found');
+
+    const passwordHash = await bcrypt.hash(data.password, 10);
+    await basePrisma.$transaction([
+      basePrisma.user.update({ where: { id: admin.id }, data: { passwordHash } }),
+      basePrisma.refreshToken.deleteMany({ where: { userId: admin.id } }),
+    ]);
+
+    await writeAuditLog({
+      actorId: req.user!.sub,
+      actorEmail: req.user!.email,
+      action: 'tenant.admin.password_override',
+      tenantId: tenant.id,
+      targetType: 'user',
+      targetId: admin.id,
+      meta: { adminEmail: admin.email, adminName: admin.name },
+      ip: clientIp(req),
+    });
+
+    res.json({ ok: true });
   })
 );
 

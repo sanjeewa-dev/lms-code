@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import { Button, Card, Input } from '../components/ui';
 import { PasswordRequirements } from '../components/PasswordRequirements';
+import { BrandMark, useInstituteBrand } from '../components/BrandMark';
 import { api, apiErrorMessage } from '../api/client';
 import { validatePassword } from '../lib/passwordValidation';
 
@@ -19,6 +20,9 @@ export default function TenantRegister() {
   const { slug } = useParams<{ slug: string }>();
   const [params] = useSearchParams();
   const { registerTenant } = useAuth();
+  const brandQuery = useInstituteBrand(slug);
+  const instituteName = brandQuery.data?.tenant?.name ?? slug;
+  const logoUrl = brandQuery.data?.tenant?.logoUrl;
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -95,11 +99,11 @@ export default function TenantRegister() {
     <div className="flex min-h-screen items-center justify-center bg-hero-gradient px-4">
       <Card className="w-full max-w-md">
         <div className="mb-5 text-center">
-          <div className="brand-chip mx-auto mb-3 h-12 w-12 text-xl font-extrabold">
-            {slug?.[0]?.toUpperCase() ?? 'L'}
+          <div className="mx-auto mb-3 flex justify-center">
+            <BrandMark name={instituteName} logoUrl={logoUrl} size="lg" />
           </div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Register as a student</h1>
-          <p className="text-sm capitalize text-slate-500">Institute: {slug}</p>
+          <p className="text-sm text-slate-500">{instituteName}</p>
           <p className="mt-1 text-xs text-slate-400">You must choose a class to join.</p>
         </div>
         <form onSubmit={onSubmit} className="space-y-4">
@@ -150,7 +154,7 @@ export default function TenantRegister() {
           />
           <PasswordRequirements password={form.password} />
           {error && <p className="text-sm text-red-600">{error}</p>}
-          <Button type="submit" disabled={loading || !form.classId || classes.length === 0} className="w-full">
+          <Button type="submit" disabled={loading || !form.classId || classes.length === 0 || Boolean(validatePassword(form.password))} className="w-full">
             {loading ? 'Creating...' : 'Create account'}
           </Button>
         </form>

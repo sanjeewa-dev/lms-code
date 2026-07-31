@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 import { useTenantApi } from '../hooks/useTenantApi';
 import { api, apiErrorMessage } from '../api/client';
-import { Card, Spinner } from '../components/ui';
+import { Card, Modal, Spinner } from '../components/ui';
 import { Icon } from '../components/icons';
 import type { TenantUser, PublicTenant, StudentStatus } from '../api/types';
 import {
@@ -294,30 +294,15 @@ export default function Students() {
         )}
       </Card>
 
-      {/* ID card modal */}
-      {selected && (
-        <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4"
-          onClick={() => setSelected(null)}
-        >
-          <div
-            className="relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:bg-ink-850"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              onClick={() => setSelected(null)}
-              className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white transition hover:bg-red-600"
-            >
-              ×
-            </button>
-            <h2 className="mb-2 text-center text-lg font-bold text-slate-900 dark:text-white">Student ID Card</h2>
+      <Modal open={Boolean(selected)} onClose={() => setSelected(null)} title="Student ID Card">
+        {selected && (
+          <>
             {selected.freeIdCard && (
               <p className="mb-4 text-center text-xs font-semibold uppercase tracking-wide text-emerald-600">
                 Free card offered
               </p>
             )}
 
-            {/* Card */}
             <div className="grid grid-cols-[140px_1fr] overflow-hidden rounded-xl bg-hero-gradient text-white">
               <div className="flex flex-col items-center justify-center gap-2 border-r border-white/10 p-4 text-center">
                 <span className="brand-chip grid h-14 w-14 text-2xl font-extrabold">{institute[0]}</span>
@@ -340,15 +325,16 @@ export default function Students() {
             </div>
 
             <button
+              type="button"
               onClick={() => qr && downloadIdCard(selected, institute, qr)}
               disabled={!qr}
               className="mx-auto mt-5 flex items-center gap-2 rounded-lg bg-brand-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:opacity-50"
             >
               <Icon name="note" width={16} height={16} /> Download Card
             </button>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
     </div>
   );
 }

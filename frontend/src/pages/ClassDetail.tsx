@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { Navigate, Outlet, useParams, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, Outlet, useParams, useSearchParams } from 'react-router-dom';
 import { useTenantApi } from '../hooks/useTenantApi';
 import { useAuth } from '../context/AuthContext';
 import { Badge, Card, Spinner } from '../components/ui';
 import { BrandMark, useInstituteBrand } from '../components/BrandMark';
+import { Icon } from '../components/icons';
 import { EnrollPanel } from '../components/class/EnrollPanel';
 import type { ClassSummary, Enrollment } from '../api/types';
 import { LEGACY_TAB_TO_SECTION } from './class/classSections';
@@ -61,24 +62,39 @@ export default function ClassDetail() {
 
   return (
     <div className="space-y-6">
-      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-white/5 dark:bg-ink-850">
-        <div className="bg-brand-gradient px-6 py-6 text-white">
-          <div className="flex flex-wrap items-start gap-4">
-            <BrandMark name={klass.title} logoUrl={logoUrl} size="lg" className="ring-white/30" />
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-3">
-                <h1 className="text-2xl font-bold">{klass.title}</h1>
-                <Badge tone="blue">{klass.price > 0 ? `Rs. ${klass.price.toLocaleString()}` : 'Free'}</Badge>
-                {klass.batch && <Badge tone="slate">{klass.batch.name}</Badge>}
+      {onDashboard ? (
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-white/5 dark:bg-ink-850">
+          <div className="bg-brand-gradient px-6 py-6 text-white">
+            <div className="flex flex-wrap items-start gap-4">
+              <BrandMark name={klass.title} logoUrl={logoUrl} size="lg" className="ring-white/30" />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-3">
+                  <h1 className="text-2xl font-bold">{klass.title}</h1>
+                  {klass.batch && <Badge onGradient>{klass.batch.name}</Badge>}
+                </div>
+                <p className="mt-1 text-sm text-white/80">by {klass.teacher?.name}</p>
+                {klass.description && (
+                  <p className="mt-3 max-w-3xl text-sm text-white/85">{klass.description}</p>
+                )}
               </div>
-              <p className="mt-1 text-sm text-white/80">by {klass.teacher?.name}</p>
-              {klass.description && <p className="mt-3 max-w-3xl text-sm text-white/85">{klass.description}</p>}
             </div>
           </div>
-        </div>
 
-        {hasAccess && onDashboard && <Outlet context={outletContext} />}
-      </div>
+          {hasAccess && <Outlet context={outletContext} />}
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            to={classBase}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 transition hover:text-brand-600 dark:text-slate-400 dark:hover:text-brand-400"
+          >
+            <Icon name="chevron" width={14} height={14} className="rotate-180" />
+            Class
+          </Link>
+          <span className="text-slate-300 dark:text-slate-600">/</span>
+          <h1 className="text-lg font-semibold text-slate-900 dark:text-white">{klass.title}</h1>
+        </div>
+      )}
 
       {isStudent && enrollment?.status !== 'active' && <EnrollPanel klass={klass} enrollment={enrollment} />}
 

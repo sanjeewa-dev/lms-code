@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { JitsiMeeting } from '@jitsi/react-sdk';
-import { Button } from './ui';
+import { Button, Modal } from './ui';
 import { Icon } from './icons';
 
 interface LiveClassRoomProps {
@@ -26,7 +26,6 @@ export function LiveClassRoom({
 }: LiveClassRoomProps) {
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [recordingUrl, setRecordingUrl] = useState('');
-  const [apiReady, setApiReady] = useState(false);
 
   const jitsiConfig = {
     startWithAudioMuted: false,
@@ -98,7 +97,7 @@ export function LiveClassRoom({
             TOOLBAR_ALWAYS_VISIBLE: true,
           }}
           userInfo={{ displayName, email: '' }}
-          onApiReady={() => setApiReady(true)}
+          onApiReady={() => undefined}
           onReadyToClose={() => {
             if (isModerator) setShowEndConfirm(true);
             else onLeave?.();
@@ -110,43 +109,42 @@ export function LiveClassRoom({
         />
       </div>
 
-      {/* End class confirm modal (teacher only) */}
-      {showEndConfirm && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-800">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">End live class?</h2>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              This will close the session for all students. Optionally paste a recording link first.
-            </p>
-            <div className="mt-4">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                Recording URL (optional)
-              </label>
-              <input
-                type="url"
-                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-white/10 dark:bg-white/5 dark:text-white"
-                placeholder="https://drive.google.com/..."
-                value={recordingUrl}
-                onChange={(e) => setRecordingUrl(e.target.value)}
-              />
-            </div>
-            <div className="mt-5 flex gap-3">
-              <Button
-                className="!bg-red-600 hover:!bg-red-700"
-                onClick={() => {
-                  onEnd?.(recordingUrl.trim() || null);
-                  setShowEndConfirm(false);
-                }}
-              >
-                End class
-              </Button>
-              <Button variant="secondary" onClick={() => setShowEndConfirm(false)}>
-                Cancel
-              </Button>
-            </div>
-          </div>
+      <Modal
+        open={showEndConfirm}
+        onClose={() => setShowEndConfirm(false)}
+        title="End live class?"
+        className="max-w-md"
+      >
+        <p className="-mt-1 text-sm text-slate-500 dark:text-slate-400">
+          This will close the session for all students. Optionally paste a recording link first.
+        </p>
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+            Recording URL (optional)
+          </label>
+          <input
+            type="url"
+            className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-white/10 dark:bg-white/5 dark:text-white"
+            placeholder="https://drive.google.com/..."
+            value={recordingUrl}
+            onChange={(e) => setRecordingUrl(e.target.value)}
+          />
         </div>
-      )}
+        <div className="mt-5 flex gap-3">
+          <Button
+            className="!bg-red-600 hover:!bg-red-700"
+            onClick={() => {
+              onEnd?.(recordingUrl.trim() || null);
+              setShowEndConfirm(false);
+            }}
+          >
+            End class
+          </Button>
+          <Button variant="secondary" onClick={() => setShowEndConfirm(false)}>
+            Cancel
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }

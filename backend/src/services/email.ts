@@ -150,6 +150,60 @@ export async function sendStudentClassInvite(opts: {
   await sendMail({ to, subject, text, html });
 }
 
+export async function sendAdminInvite(opts: {
+  to: string;
+  instituteName: string;
+  inviteUrl: string;
+  tenantId?: string;
+  relatedId?: string;
+}) {
+  const { to, instituteName, inviteUrl, tenantId, relatedId } = opts;
+  const subject = `You're invited to administer ${instituteName}`;
+  const text = [
+    `Hello,`,
+    '',
+    `You have been invited to become an administrator for ${instituteName} on Mindspark LMS.`,
+    '',
+    `Set up your account here:`,
+    inviteUrl,
+    '',
+    `This link expires in 7 days.`,
+    '',
+    `If you did not expect this email, you can ignore it.`,
+  ].join('\n');
+
+  const html = renderEmailLayout({
+    instituteName,
+    preheader: `Admin invitation for ${instituteName}`,
+    eyebrow: 'Admin invitation',
+    title: `You're invited to administer ${instituteName}`,
+    bodyHtml: [
+      emailParagraph('Hello,'),
+      emailParagraph(
+        `Complete your account setup to become an administrator for <strong>${escapeHtml(instituteName)}</strong>.`
+      ),
+      emailDetailCard([
+        { label: 'Institute', value: instituteName },
+        { label: 'Role', value: 'Institute admin' },
+        { label: 'Expires', value: 'In 7 days' },
+      ]),
+      emailParagraph('If you did not expect this email, you can safely ignore it.', { muted: true }),
+    ].join(''),
+    cta: { label: 'Set up your account', url: inviteUrl },
+    footerNote: `This invitation was sent for ${instituteName}.`,
+  });
+
+  await sendMail({
+    to,
+    subject,
+    text,
+    html,
+    tenantId,
+    relatedType: 'admin_invite',
+    relatedId,
+  });
+}
+
 export async function sendLiveClassStarted(opts: {
   to: string;
   studentName: string;

@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useDarkMode } from '../hooks/useDarkMode';
 import { Icon, type IconName } from './icons';
 import { Breadcrumbs, adminTrails } from './Breadcrumbs';
+import { AppToastHost } from './AppToast';
 
 const links: { to: string; label: string; icon: IconName; end?: boolean }[] = [
   { to: '/admin', label: 'Overview', icon: 'dashboard', end: true },
@@ -73,10 +74,11 @@ export function AdminLayout() {
                 <p className="text-xs text-slate-400">
                   {new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
                 </p>
-                <Link to="/admin/profile" className="hover:text-brand-600">
-                  <h1 className="text-lg font-bold text-slate-900 dark:text-white">
-                    Hi, {user?.name.split(' ')[0]} <span className="align-middle">👋</span>
-                  </h1>
+                <Link
+                  to="/admin/profile"
+                  className="text-sm font-medium text-slate-600 hover:text-brand-600 dark:text-slate-300"
+                >
+                  {user?.name}
                 </Link>
               </div>
             </div>
@@ -96,6 +98,7 @@ export function AdminLayout() {
           <Outlet />
         </main>
       </div>
+      <AppToastHost />
     </div>
   );
 }

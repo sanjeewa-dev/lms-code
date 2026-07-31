@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { useTenantApi } from '../hooks/useTenantApi';
 import { apiErrorMessage } from '../api/client';
 import { Button, Card } from './ui';
@@ -72,24 +73,36 @@ export function WeakTopicsCard() {
       ).data,
   });
 
-  if (query.isLoading || !query.data) return null;
+  if (query.isLoading) return null;
 
   return (
     <Card>
-      <h2 className="mb-1 text-lg font-semibold text-slate-900 dark:text-white">AI study coach</h2>
-      <p className="text-sm text-slate-500 dark:text-slate-400">{query.data.summary}</p>
-      {query.data.weakTopics.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {query.data.weakTopics.map((tpc) => (
-            <span
-              key={tpc.term}
-              className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
-            >
-              {tpc.term} · {tpc.missCount}
-            </span>
-          ))}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h2 className="mb-1 text-lg font-semibold text-slate-900 dark:text-white">AI study coach</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {query.data?.summary ?? 'Keep practising — open AI study tools when you need a boost.'}
+          </p>
+          {query.data && query.data.weakTopics.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {query.data.weakTopics.map((tpc) => (
+                <span
+                  key={tpc.term}
+                  className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
+                >
+                  {tpc.term} · {tpc.missCount}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
-      )}
+        <Link
+          to={`/${t.slug}/ai`}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-700"
+        >
+          Open AI study tools
+        </Link>
+      </div>
     </Card>
   );
 }

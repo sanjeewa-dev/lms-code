@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { useTenantApi } from '../hooks/useTenantApi';
+import { useAuth } from '../context/AuthContext';
 import { apiErrorMessage } from '../api/client';
 import { Button, Spinner, Textarea } from '../components/ui';
 import { Icon } from '../components/icons';
@@ -33,60 +34,36 @@ const TOOLS: {
   title: string;
   description: string;
   cta: string;
-  iconBg: string;
-  iconColor: string;
-  btn: string;
-  accentBar: string;
 }[] = [
   {
     id: 'tutor',
     title: 'AI Tutor Chat',
     description: 'Ask real-time questions about concepts from your selected class.',
     cta: 'Open Tutor',
-    iconBg: 'bg-teal-50 dark:bg-teal-950/40',
-    iconColor: 'text-teal-600',
-    btn: 'bg-teal-600 hover:bg-teal-700 shadow-teal-600/20',
-    accentBar: 'from-teal-500 to-cyan-500',
   },
   {
     id: 'summarizer',
     title: 'Smart Summarizer',
     description: 'Paste lesson notes and get a clear key-point summary.',
     cta: 'Open Summarizer',
-    iconBg: 'bg-rose-50 dark:bg-rose-950/40',
-    iconColor: 'text-rose-600',
-    btn: 'bg-rose-600 hover:bg-rose-700 shadow-rose-600/20',
-    accentBar: 'from-rose-500 to-orange-400',
   },
   {
     id: 'mcq',
     title: 'MCQ Generator',
     description: 'Generate practice questions to test what you know.',
     cta: 'Open Generator',
-    iconBg: 'bg-sky-50 dark:bg-sky-950/40',
-    iconColor: 'text-sky-600',
-    btn: 'bg-sky-600 hover:bg-sky-700 shadow-sky-600/20',
-    accentBar: 'from-sky-500 to-blue-600',
   },
   {
     id: 'flashcards',
     title: 'Flashcards',
     description: 'Turn a topic or notes into quick revision cards.',
     cta: 'Open Flashcards',
-    iconBg: 'bg-amber-50 dark:bg-amber-950/40',
-    iconColor: 'text-amber-600',
-    btn: 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/20',
-    accentBar: 'from-amber-500 to-yellow-500',
   },
   {
     id: 'study-plan',
     title: 'Study Plan',
     description: 'Enter subject, unit, and topic to build a focused 7-day plan.',
     cta: 'Open Study Plan',
-    iconBg: 'bg-violet-50 dark:bg-violet-950/40',
-    iconColor: 'text-violet-600',
-    btn: 'bg-violet-600 hover:bg-violet-700 shadow-violet-600/20',
-    accentBar: 'from-violet-500 to-fuchsia-500',
   },
 ];
 
@@ -281,6 +258,8 @@ function HistorySection({
 
 export default function AiStudentArea() {
   const t = useTenantApi();
+  const { user } = useAuth();
+  const firstName = user?.name?.trim().split(/\s+/)[0] || 'there';
   const qc = useQueryClient();
   const [params, setParams] = useSearchParams();
   const tool = (params.get('tool') as ToolId | null) || null;
@@ -386,14 +365,14 @@ export default function AiStudentArea() {
 
       {!tool ? (
         <>
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-sky-600 via-blue-600 to-indigo-700 p-7 text-white shadow-xl shadow-sky-600/20 sm:p-9">
+          <div className="relative overflow-hidden rounded-3xl bg-brand-600 p-7 text-white shadow-lg sm:p-9">
             <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
-            <div className="pointer-events-none absolute bottom-0 right-10 opacity-20">
+            <div className="pointer-events-none absolute bottom-0 right-10 opacity-15">
               <Icon name="spark" width={120} height={120} />
             </div>
-            <p className="text-sm font-medium text-sky-100">Welcome back</p>
-            <h2 className="mt-1 text-3xl font-extrabold tracking-tight">Hello, Student</h2>
-            <p className="mt-2 max-w-xl text-sm leading-relaxed text-sky-50/95 sm:text-base">
+            <p className="text-sm font-medium text-white/80">Welcome back</p>
+            <h2 className="mt-1 text-3xl font-extrabold tracking-tight">Hello, {firstName}</h2>
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/90 sm:text-base">
               Your real-time Smart AI learning modules are active. Choose a tool to start studying — each
               action uses 1 token for this class.
             </p>
@@ -405,7 +384,7 @@ export default function AiStudentArea() {
                 key={item.id}
                 className="group flex flex-col rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-white/10 dark:bg-ink-850"
               >
-                <div className={`mb-4 grid h-12 w-12 place-items-center rounded-2xl ${item.iconBg} ${item.iconColor}`}>
+                <div className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-brand-50 text-brand-600 dark:bg-brand-900/30 dark:text-brand-300">
                   <Icon name="spark" width={22} height={22} />
                 </div>
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white">{item.title}</h3>
@@ -416,9 +395,9 @@ export default function AiStudentArea() {
                   type="button"
                   disabled={!classId || depleted}
                   onClick={() => setTool(item.id)}
-                  className={`mt-5 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-lg transition disabled:cursor-not-allowed disabled:opacity-45 ${item.btn}`}
+                  className="mt-5 inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-45"
                 >
-                  ▶ {item.cta}
+                  {item.cta}
                 </button>
               </article>
             ))}
@@ -426,12 +405,10 @@ export default function AiStudentArea() {
         </>
       ) : (
         <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-ink-850">
-          <div className={`h-1.5 bg-gradient-to-r ${activeTool?.accentBar ?? 'from-brand-500 to-brand-600'}`} />
+          <div className="h-1.5 bg-brand-600" />
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-white/5">
             <div className="flex items-center gap-3">
-              <div
-                className={`grid h-10 w-10 place-items-center rounded-xl ${activeTool?.iconBg} ${activeTool?.iconColor}`}
-              >
+              <div className="grid h-10 w-10 place-items-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-900/30 dark:text-brand-300">
                 <Icon name="spark" width={18} height={18} />
               </div>
               <div>
@@ -557,7 +534,7 @@ function TutorPanel({ classId, depleted, onError, onQuotaUpdate, onSaved }: Pane
           }}
         />
         <Button
-          className="!rounded-2xl !bg-sky-600 hover:!bg-sky-700 sm:!px-6"
+          className="!rounded-2xl !bg-brand-600 hover:!bg-brand-700 sm:!px-6"
           disabled={depleted || mutation.isPending || !input.trim()}
           onClick={() => mutation.mutate(input.trim())}
         >
@@ -747,7 +724,7 @@ function SummarizerPanel({ classId, depleted, onError, onQuotaUpdate, onSaved }:
         </div>
       </div>
       <Button
-        className="mt-4 w-full !rounded-2xl !bg-rose-600 hover:!bg-rose-700"
+        className="mt-4 w-full !rounded-2xl !bg-brand-600 hover:!bg-brand-700"
         disabled={depleted || mutation.isPending || notes.trim().length < 40}
         onClick={() => mutation.mutate()}
       >
@@ -761,7 +738,7 @@ function SummarizerPanel({ classId, depleted, onError, onQuotaUpdate, onSaved }:
       <HistorySection
         items={historyQuery.data}
         loading={historyQuery.isLoading}
-        renderPayload={(item) => renderSummary(item.payload as typeof result)}
+        renderPayload={(item) => renderSummary((item.payload ?? {}) as NonNullable<typeof result>)}
       />
     </div>
   );
@@ -873,7 +850,7 @@ function McqPanel({ classId, depleted, onError, onQuotaUpdate, onSaved }: PanelP
       </div>
       {q && <div className="mb-4">{renderMcq(q, true)}</div>}
       <Button
-        className="w-full !rounded-2xl !bg-sky-600 hover:!bg-sky-700"
+        className="w-full !rounded-2xl !bg-brand-600 hover:!bg-brand-700"
         disabled={depleted || mutation.isPending}
         onClick={() => mutation.mutate()}
       >
@@ -980,7 +957,7 @@ function FlashcardsPanel({ classId, depleted, onError, onQuotaUpdate, onSaved }:
         </div>
       </div>
       <Button
-        className="mt-4 !rounded-2xl !bg-amber-600 hover:!bg-amber-700"
+        className="mt-4 !rounded-2xl !bg-brand-600 hover:!bg-brand-700"
         disabled={depleted || mutation.isPending || input.trim().length < 8}
         onClick={() => mutation.mutate()}
       >
@@ -1176,7 +1153,7 @@ function StudyPlanPanel({ classId, depleted, onError, onQuotaUpdate, onSaved }: 
         </label>
       </div>
       <Button
-        className="!rounded-2xl !bg-violet-600 hover:!bg-violet-700"
+        className="!rounded-2xl !bg-brand-600 hover:!bg-brand-700"
         disabled={depleted || mutation.isPending || !canGenerate}
         onClick={() => mutation.mutate()}
       >

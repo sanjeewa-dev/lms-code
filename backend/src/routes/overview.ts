@@ -89,21 +89,87 @@ router.get(
   ...staff,
   asyncHandler(async (req, res) => {
     const tenantId = req.tenant!.id;
+    const user = req.user!;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const [students, teachers, classes, videos, notices, events, quizzes, attempts, enrollments, pendingPayments, approved] =
-      await Promise.all([
-        basePrisma.user.count({ where: { tenantId, role: 'student' } }),
-        basePrisma.user.count({ where: { tenantId, role: 'teacher' } }),
-        prisma.class.count({}),
-        prisma.videoLesson.count({}),
-        prisma.notice.count({}),
-        prisma.event.count({}),
-        prisma.quiz.count({}),
-        prisma.quizAttempt.count({}),
-        prisma.enrollment.count({}),
-        prisma.payment.count({ where: { status: 'pending' } }),
-        prisma.payment.findMany({ where: { status: 'approved' }, select: { amount: true } }),
-      ]);
+    const teacherClassFilter =
+      user.role === 'teacher' ? { teacherId: user.sub } : {};
+
+    const [
+      students,
+      teachers,
+      classes,
+      videos,
+      notices,
+      events,
+      quizzes,
+      attempts,
+      enrollments,
+      pendingPayments,
+      approved,
+      openInterventions,
+      liveTodayCount,
+      draftQuizzes,
+    ] = await Promise.all([
+      user.role === 'teacher'
+        ? prisma.enrollment
+            .findMany({
+              where: { status: 'active', class: { teacherId: user.sub } },
+              select: { studentId: true },
+              distinct: ['studentId'],
+            })
+            .then((rows) => rows.length)
+        : basePrisma.user.count({ where: { tenantId, role: 'student' } }),
+      basePrisma.user.count({ where: { tenantId, role: 'teacher' } }),
+      prisma.class.count(user.role === 'teacher' ? { where: { teacherId: user.sub } } : undefined),
+      prisma.videoLesson.count(),
+      prisma.notice.count(),
+      prisma.event.count(),
+      prisma.quiz.count(
+        user.role === 'teacher' ? { where: { class: { teacherId: user.sub } } } : undefined
+      ),
+      prisma.quizAttempt.count(
+        user.role === 'teacher' ? { where: { quiz: { class: { teacherId: user.sub } } } } : undefined
+      ),
+      prisma.enrollment.count(
+        user.role === 'teacher' ? { where: { class: { teacherId: user.sub } } } : undefined
+      ),
+      prisma.payment.count({ where: { status: 'pending' } }),
+      prisma.payment.findMany({ where: { status: 'approved' }, select: { amount: true } }),
+      prisma.intervention.count({
+        where: {
+          status: { in: ['open', 'in_progress', 'escalated'] },
+          ...(user.role === 'teacher'
+            ? {
+                OR: [
+                  { createdById: user.sub },
+                  { student: { enrollments: { some: { status: 'active', class: { teacherId: user.sub } } } } },
+                ],
+              }
+            : {}),
+        },
+      }),
+      prisma.classSchedule.count({
+        where: {
+          OR: [
+            { status: 'live', ...(Object.keys(teacherClassFilter).length ? { class: teacherClassFilter } : {}) },
+            {
+              classDate: { gte: today, lt: tomorrow },
+              ...(Object.keys(teacherClassFilter).length ? { class: teacherClassFilter } : {}),
+            },
+          ],
+        },
+      }),
+      prisma.quiz.count({
+        where: {
+          isPublished: false,
+          ...(user.role === 'teacher' ? { class: { teacherId: user.sub } } : {}),
+        },
+      }),
+    ]);
 
     const revenue = approved.reduce((sum, p) => sum + Number(p.amount), 0);
 
@@ -120,6 +186,87 @@ router.get(
         enrollments,
         pendingPayments,
         revenue,
+        openInterventions,
+        liveTodayCount,
+        draftQuizzes,
+      },
+    });
+  })
+);
+
+/** Student home: pending quizzes + continue-learning hint. */
+router.get(
+  '/me/todo',
+  authenticate,
+  requireRole('student'),
+  asyncHandler(async (req, res) => {
+    const studentId = req.user!.sub;
+    const enrollments = await prisma.enrollment.findMany({
+      where: { studentId, status: 'active' },
+      include: {
+        class: { select: { id: true, title: true, updatedAt: true } },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+    const classIds = enrollments.map((e) => e.classId);
+
+    const quizzes = classIds.length
+      ? await prisma.quiz.findMany({
+          where: { classId: { in: classIds }, isPublished: true },
+          include: {
+            class: { select: { id: true, title: true } },
+            attempts: {
+              where: { studentId, submittedAt: { not: null } },
+              take: 1,
+              select: { id: true, score: true, submittedAt: true },
+            },
+            _count: { select: { questions: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 40,
+        })
+      : [];
+
+    const pendingQuizzes = quizzes
+      .filter((q) => q.attempts.length === 0)
+      .slice(0, 8)
+      .map((q) => ({
+        id: q.id,
+        title: q.title,
+        classId: q.classId,
+        classTitle: q.class.title,
+        questionCount: q._count.questions,
+        timeLimitSec: q.timeLimitSec,
+        totalMarks: q.totalMarks,
+      }));
+
+    const recentAttempt = await prisma.quizAttempt.findFirst({
+      where: { studentId, submittedAt: { not: null } },
+      include: {
+        quiz: { select: { id: true, title: true, totalMarks: true, classId: true } },
+      },
+      orderBy: { submittedAt: 'desc' },
+    });
+
+    const continueClass = enrollments[0]?.class
+      ? { id: enrollments[0].class.id, title: enrollments[0].class.title }
+      : null;
+
+    res.json({
+      todo: {
+        continueClass,
+        pendingQuizzes,
+        recentAttempt: recentAttempt
+          ? {
+              id: recentAttempt.id,
+              score: recentAttempt.score,
+              totalMarks: recentAttempt.quiz.totalMarks,
+              quizTitle: recentAttempt.quiz.title,
+              quizId: recentAttempt.quiz.id,
+              classId: recentAttempt.quiz.classId,
+              submittedAt: recentAttempt.submittedAt,
+            }
+          : null,
       },
     });
   })

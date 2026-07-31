@@ -1,3 +1,4 @@
+import { useEffect, useId, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTenantApi } from '../hooks/useTenantApi';
 import { Spinner } from './ui';
@@ -14,22 +15,56 @@ export function VideoPlayerModal({
   onClose: () => void;
 }) {
   const t = useTenantApi();
+  const titleId = useId();
+  const panelRef = useRef<HTMLDivElement>(null);
+  const previousFocus = useRef<HTMLElement | null>(null);
 
   const playQuery = useQuery({
     queryKey: ['video-play', t.slug, video.id],
     queryFn: async () => (await t.get<VideoPlayConfig>(`/video-lessons/${video.id}/play`)).data,
   });
 
+  useEffect(() => {
+    previousFocus.current = document.activeElement as HTMLElement | null;
+    const closeBtn = panelRef.current?.querySelector<HTMLElement>('button[aria-label="Close player"]');
+    closeBtn?.focus();
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+      previousFocus.current?.focus?.();
+    };
+  }, [onClose]);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
         className="flex w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-black shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
         onContextMenu={(e) => e.preventDefault()}
       >
         <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
           <div className="min-w-0">
-            <h3 className="truncate font-semibold text-white">{video.title}</h3>
+            <h3 id={titleId} className="truncate font-semibold text-white">
+              {video.title}
+            </h3>
             <p className="text-xs text-slate-400">Platform player — external links are hidden</p>
           </div>
           <button

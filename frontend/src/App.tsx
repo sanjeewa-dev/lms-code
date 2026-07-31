@@ -16,6 +16,7 @@ import AdminAudit from './pages/admin/AdminAudit';
 import TenantLanding from './pages/TenantLanding';
 import TenantRegister from './pages/TenantRegister';
 import StudentInvite from './pages/StudentInvite';
+import AdminInvite from './pages/AdminInvite';
 
 import Dashboard from './pages/Dashboard';
 import Classes from './pages/Classes';
@@ -73,6 +74,7 @@ export default function App() {
         <Route index element={<TenantLanding />} />
         <Route path="register" element={<TenantRegister />} />
         <Route path="invite/:token" element={<StudentInvite />} />
+        <Route path="admin-invite/:token" element={<AdminInvite />} />
         <Route path="parent" element={<ParentTrustCenter />} />
 
         <Route

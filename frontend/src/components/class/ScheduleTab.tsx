@@ -416,7 +416,6 @@ export function ScheduleTab({
   const editingSchedule = schedules.find((s) => s.id === editingId);
 
   if (activeRoom) {
-    const sched = schedules.find((s) => s.id === activeRoom.scheduleId);
     return (
       <LiveClassRoom
         roomName={activeRoom.roomName}

@@ -207,9 +207,6 @@ export default function Classes() {
                         <h3 className="truncate font-semibold text-slate-900 dark:text-white">{c.title}</h3>
                       </div>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <Badge tone={c.price > 0 ? 'blue' : 'green'}>
-                          {c.price > 0 ? `Rs. ${c.price.toLocaleString()}` : 'Free'}
-                        </Badge>
                         {c.batch && <Badge tone="slate">{c.batch.name}</Badge>}
                       </div>
                     </div>
@@ -265,10 +262,8 @@ export default function Classes() {
                 >
                   <h3 className="font-semibold text-slate-900 dark:text-white">{c.title}</h3>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    <Badge tone={c.price > 0 ? 'blue' : 'green'}>
-                      {c.price > 0 ? `Rs. ${c.price.toLocaleString()}` : 'Free'}
-                    </Badge>
                     {c.teacher?.name && <Badge tone="slate">{c.teacher.name}</Badge>}
+                    {c.batch && <Badge tone="slate">{c.batch.name}</Badge>}
                   </div>
                   <p className="mt-3 line-clamp-3 flex-1 text-sm text-slate-500">
                     {c.description || 'No description.'}

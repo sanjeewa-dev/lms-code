@@ -73,6 +73,9 @@ export interface AdminStats {
   enrollments: number;
   pendingPayments: number;
   revenue: number;
+  openInterventions?: number;
+  liveTodayCount?: number;
+  draftQuizzes?: number;
 }
 
 export type StudentStatus = 'pending' | 'approved' | 'rejected';

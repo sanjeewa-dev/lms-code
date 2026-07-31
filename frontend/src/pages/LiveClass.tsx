@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { useTenantApi } from '../hooks/useTenantApi';
 import { useAuth } from '../context/AuthContext';
-import { Badge, Card, Spinner } from '../components/ui';
+import { Badge, Card, Modal, Spinner } from '../components/ui';
 import { Icon } from '../components/icons';
 import { EmptyState, PageHeader } from '../components/tenant/TenantUi';
 import { LiveClassRoom } from '../components/LiveClassRoom';
@@ -116,162 +116,145 @@ function InviteModal({
   const canSend = mode === 'class' ? Boolean(selectedClass) : selected.size > 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl dark:bg-slate-800">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-white/10">
-          <div>
-            <h2 className="font-bold text-slate-900 dark:text-white">Invite participants</h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Send join link via notification and email
+    <Modal open title="Invite participants" onClose={onClose}>
+      <p className="-mt-1 mb-3 text-xs text-slate-500 dark:text-slate-400">
+        Send join link via notification and email
+      </p>
+
+      <div className="mb-4 flex gap-2">
+        <button
+          type="button"
+          onClick={() => setMode('students')}
+          className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+            mode === 'students'
+              ? 'bg-brand-600 text-white'
+              : 'border border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5'
+          }`}
+        >
+          Invite students
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('class')}
+          className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+            mode === 'class'
+              ? 'bg-brand-600 text-white'
+              : 'border border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5'
+          }`}
+        >
+          Invite by class
+        </button>
+      </div>
+
+      <div className="max-h-96 overflow-y-auto">
+        {mode === 'class' ? (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              All active students of the selected class will receive a notification and email.
             </p>
+            {classes.length === 0 ? (
+              <p className="text-sm text-red-500">No classes found.</p>
+            ) : (
+              <div className="space-y-2">
+                {classes.map((c) => (
+                  <label
+                    key={c.id}
+                    className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition ${
+                      selectedClass === c.id
+                        ? 'border-brand-400 bg-brand-50 dark:border-brand-600 dark:bg-brand-900/20'
+                        : 'border-slate-200 hover:border-brand-200 dark:border-white/10 dark:hover:border-brand-700'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="invite-class"
+                      value={c.id}
+                      checked={selectedClass === c.id}
+                      onChange={() => setSelectedClass(c.id)}
+                      className="accent-brand-600"
+                    />
+                    <span className="font-medium text-slate-800 dark:text-slate-100">{c.title}</span>
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Search students..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-white/10 dark:bg-white/5 dark:text-white"
+              />
+              <button
+                type="button"
+                onClick={selected.size === filtered.length ? clearAll : selectAll}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300"
+              >
+                {selected.size === filtered.length ? 'Clear all' : 'Select all'}
+              </button>
+            </div>
+            {filtered.length === 0 ? (
+              <p className="text-sm text-slate-400">No students found.</p>
+            ) : (
+              <ul className="space-y-1">
+                {filtered.map((s) => (
+                  <li key={s.id}>
+                    <label className="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-slate-50 dark:hover:bg-white/5">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(s.id)}
+                        onChange={() => toggle(s.id)}
+                        className="h-4 w-4 rounded accent-brand-600"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-slate-800 dark:text-slate-100">{s.name}</p>
+                        <p className="truncate text-xs text-slate-400">{s.email}</p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-white/10 dark:text-slate-400">
+                        {s.classes[0]}
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4 dark:border-white/10">
+        <div>
+          {mode === 'students' && (
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {selected.size} student{selected.size !== 1 ? 's' : ''} selected
+            </p>
+          )}
+          {err && <p className="text-sm text-red-500">{err}</p>}
+        </div>
+        <div className="flex gap-2">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg px-2 py-1 text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10"
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300"
           >
-            Close
-          </button>
-        </div>
-
-        {/* Mode toggle */}
-        <div className="flex gap-2 border-b border-slate-100 px-5 py-3 dark:border-white/10">
-          <button
-            type="button"
-            onClick={() => setMode('students')}
-            className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
-              mode === 'students'
-                ? 'bg-brand-600 text-white'
-                : 'border border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5'
-            }`}
-          >
-            Invite students
+            Cancel
           </button>
           <button
             type="button"
-            onClick={() => setMode('class')}
-            className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
-              mode === 'class'
-                ? 'bg-brand-600 text-white'
-                : 'border border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5'
-            }`}
+            disabled={!canSend || sending}
+            onClick={send}
+            className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:opacity-50"
           >
-            Invite by class
+            {sending ? <Spinner className="h-4 w-4" /> : <Icon name="spark" width={14} height={14} />}
+            {sending ? 'Sending…' : 'Send invite'}
           </button>
-        </div>
-
-        <div className="max-h-96 overflow-y-auto px-5 py-4">
-          {mode === 'class' ? (
-            <div className="space-y-3">
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                All active students of the selected class will receive a notification and email.
-              </p>
-              {classes.length === 0 ? (
-                <p className="text-sm text-red-500">No classes found.</p>
-              ) : (
-                <div className="space-y-2">
-                  {classes.map((c) => (
-                    <label
-                      key={c.id}
-                      className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition ${
-                        selectedClass === c.id
-                          ? 'border-brand-400 bg-brand-50 dark:border-brand-600 dark:bg-brand-900/20'
-                          : 'border-slate-200 hover:border-brand-200 dark:border-white/10 dark:hover:border-brand-700'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="invite-class"
-                        value={c.id}
-                        checked={selectedClass === c.id}
-                        onChange={() => setSelectedClass(c.id)}
-                        className="accent-brand-600"
-                      />
-                      <span className="font-medium text-slate-800 dark:text-slate-100">{c.title}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  placeholder="Search students..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-white/10 dark:bg-white/5 dark:text-white"
-                />
-                <button
-                  type="button"
-                  onClick={selected.size === filtered.length ? clearAll : selectAll}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300"
-                >
-                  {selected.size === filtered.length ? 'Clear all' : 'Select all'}
-                </button>
-              </div>
-              {filtered.length === 0 ? (
-                <p className="text-sm text-slate-400">No students found.</p>
-              ) : (
-                <ul className="space-y-1">
-                  {filtered.map((s) => (
-                    <li key={s.id}>
-                      <label className="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-slate-50 dark:hover:bg-white/5">
-                        <input
-                          type="checkbox"
-                          checked={selected.has(s.id)}
-                          onChange={() => toggle(s.id)}
-                          className="h-4 w-4 rounded accent-brand-600"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-slate-800 dark:text-slate-100">{s.name}</p>
-                          <p className="truncate text-xs text-slate-400">{s.email}</p>
-                        </div>
-                        <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-white/10 dark:text-slate-400">
-                          {s.classes[0]}
-                        </span>
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between border-t border-slate-100 px-5 py-4 dark:border-white/10">
-          <div>
-            {mode === 'students' && (
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                {selected.size} student{selected.size !== 1 ? 's' : ''} selected
-              </p>
-            )}
-            {err && <p className="text-sm text-red-500">{err}</p>}
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={!canSend || sending}
-              onClick={send}
-              className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:opacity-50"
-            >
-              {sending ? <Spinner className="h-4 w-4" /> : <Icon name="spark" width={14} height={14} />}
-              {sending ? 'Sending…' : 'Send invite'}
-            </button>
-          </div>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -325,58 +308,64 @@ function InstantMeetingLauncher({
         Start instant meeting
       </button>
 
-      {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-800">
-            <h2 className="font-bold text-slate-900 dark:text-white">Start instant meeting</h2>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Choose a class to attach this meeting to (for attendance and student access).
-            </p>
-            {classesQuery.isLoading ? (
-              <div className="mt-4 flex justify-center">
-                <Spinner />
-              </div>
-            ) : (
-              <div className="mt-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Class
-                </label>
-                <select
-                  value={selectedClass}
-                  onChange={(e) => setSelectedClass(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand-400 dark:border-white/10 dark:bg-white/5 dark:text-white"
-                >
-                  <option value="">— Select class —</option>
-                  {(classesQuery.data ?? []).map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            {err && <p className="mt-2 text-sm text-red-500">{err}</p>}
-            <div className="mt-5 flex gap-3">
-              <button
-                type="button"
-                disabled={startMutation.isPending}
-                onClick={() => startMutation.mutate()}
-                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
-              >
-                {startMutation.isPending ? <Spinner className="h-4 w-4" /> : <span className="h-2 w-2 rounded-full bg-white" />}
-                Start now
-              </button>
-              <button
-                type="button"
-                onClick={() => { setOpen(false); setErr(''); }}
-                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300"
-              >
-                Cancel
-              </button>
-            </div>
+      <Modal
+        open={open}
+        onClose={() => {
+          setOpen(false);
+          setErr('');
+        }}
+        title="Start instant meeting"
+        className="max-w-md"
+      >
+        <p className="-mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Choose a class to attach this meeting to (for attendance and student access).
+        </p>
+        {classesQuery.isLoading ? (
+          <div className="mt-4 flex justify-center">
+            <Spinner />
           </div>
+        ) : (
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+              Class
+            </label>
+            <select
+              value={selectedClass}
+              onChange={(e) => setSelectedClass(e.target.value)}
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand-400 dark:border-white/10 dark:bg-white/5 dark:text-white"
+            >
+              <option value="">— Select class —</option>
+              {(classesQuery.data ?? []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.title}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {err && <p className="mt-2 text-sm text-red-500">{err}</p>}
+        <div className="mt-5 flex gap-3">
+          <button
+            type="button"
+            disabled={startMutation.isPending}
+            onClick={() => startMutation.mutate()}
+            className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+          >
+            {startMutation.isPending ? <Spinner className="h-4 w-4" /> : <span className="h-2 w-2 rounded-full bg-white" />}
+            Start now
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              setErr('');
+            }}
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300"
+          >
+            Cancel
+          </button>
         </div>
-      )}
+      </Modal>
     </>
   );
 }
@@ -488,6 +477,18 @@ export default function LiveClass() {
               Invite participants
             </button>
           </div>
+        )}
+        {inviteScheduleId && (
+          <InviteModal
+            scheduleId={inviteScheduleId}
+            students={studentsQuery.data?.students ?? []}
+            classes={studentsQuery.data?.classes ?? []}
+            onClose={() => setInviteScheduleId(null)}
+            onSent={(count) => {
+              setInviteScheduleId(null);
+              showToast(`Invite sent to ${count} student${count !== 1 ? 's' : ''} successfully.`);
+            }}
+          />
         )}
       </>
     );

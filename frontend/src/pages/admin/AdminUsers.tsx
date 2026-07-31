@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api, apiErrorMessage } from '../../api/client';
-import { Badge, Button, Card, Input, Spinner } from '../../components/ui';
+import { Badge, Button, Card, Input, Modal, Spinner } from '../../components/ui';
 import { PageHeading } from '../../components/admin/AdminUi';
 
 interface PlatformUser {
@@ -163,11 +163,10 @@ export default function AdminUsers() {
         )}
       </Card>
 
-      {editing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-ink-850">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">Edit user</h2>
-            <p className="text-xs text-slate-400">
+      <Modal open={Boolean(editing)} onClose={() => setEditing(null)} title="Edit user" className="max-w-md">
+        {editing && (
+          <div className="space-y-4">
+            <p className="-mt-2 text-xs text-slate-400">
               {editing.role}
               {editing.tenant ? ` · ${editing.tenant.name}` : ''}
             </p>
@@ -206,8 +205,8 @@ export default function AdminUsers() {
               </Button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
     </div>
   );
 }

@@ -2,11 +2,11 @@ import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTenantApi } from '../hooks/useTenantApi';
 import { apiErrorMessage } from '../api/client';
-import { Badge, Button, Card, Spinner } from '../components/ui';
+import { Badge, Button, Card, Input, Modal, Spinner } from '../components/ui';
 import { Icon } from '../components/icons';
 import { PasswordRequirements } from '../components/PasswordRequirements';
 import { validatePassword } from '../lib/passwordValidation';
-import { EmptyState, FormPanel, PageHeader } from '../components/tenant/TenantUi';
+import { EmptyState, PageHeader } from '../components/tenant/TenantUi';
 import type { ClassSummary, Teacher } from '../api/types';
 
 interface FormState {
@@ -281,23 +281,16 @@ export default function Teachers() {
         )}
       </Card>
 
-      {modalOpen && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4 backdrop-blur-sm">
-          <form
-            onSubmit={submit}
-            className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-ink-850"
-          >
-            <button
-              type="button"
-              onClick={() => !saving && setModalOpen(false)}
-              className="absolute right-4 top-4 text-2xl leading-none text-slate-400 transition hover:text-slate-600"
-            >
-              ×
-            </button>
-            <h2 className="mb-1 text-lg font-bold text-slate-900 dark:text-white">
-              {editing ? 'Edit teacher' : 'Add teacher'}
-            </h2>
-            <p className="mb-5 text-sm text-slate-500">
+      <Modal
+        open={modalOpen}
+        onClose={() => {
+          if (!saving) setModalOpen(false);
+        }}
+        title={editing ? 'Edit teacher' : 'Add teacher'}
+        className="max-h-[90vh] overflow-y-auto"
+      >
+          <form onSubmit={submit}>
+            <p className="-mt-2 mb-5 text-sm text-slate-500">
               {editing ? 'Update details or class assignments.' : 'Create an account and optionally assign classes.'}
             </p>
 
@@ -308,10 +301,16 @@ export default function Teachers() {
               <Field label="Email *">
                 <input type="email" className={inputCls} value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} required />
               </Field>
-              <Field label={editing ? 'Password (leave blank to keep)' : 'Password *'}>
-                <input type="password" className={inputCls} value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} required={!editing} />
-              </Field>
-              {form.password && <PasswordRequirements password={form.password} />}
+              <Input
+                label={editing ? 'Password (leave blank to keep)' : 'Password *'}
+                type="password"
+                value={form.password}
+                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                required={!editing}
+                placeholder="Create a strong password"
+                autoComplete="new-password"
+              />
+              {(!editing || form.password) && <PasswordRequirements password={form.password} />}
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Subject">
                   <input className={inputCls} value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} placeholder="e.g. ICT" />
@@ -359,8 +358,7 @@ export default function Teachers() {
               </Button>
             </div>
           </form>
-        </div>
-      )}
+      </Modal>
     </div>
   );
 }

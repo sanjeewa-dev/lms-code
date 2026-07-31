@@ -19,10 +19,9 @@ export const loginSchema = z.object({
 export const createTenantSchema = z.object({
   name: z.string().min(2).max(150),
   logoUrl: z.string().url().optional(),
+  /** First institute admin — invited by email to complete name + password setup. */
   admin: z.object({
-    name: z.string().min(2).max(100),
     email: z.string().email(),
-    password: passwordSchema,
   }),
 });
 
@@ -70,7 +69,31 @@ export const instituteSettingsSchema = z.object({
 export const createTenantAdminSchema = z.object({
   name: z.string().min(2).max(100),
   email: z.string().email(),
+  /** Optional — omit so password is never set/shown; use override to assign one. */
+  password: passwordSchema.optional(),
+});
+
+/** Superadmin invites an institute admin by email; they complete setup via link. */
+export const inviteTenantAdminSchema = z.object({
+  email: z.string().email(),
+});
+
+export const adminOnboardingSchema = z
+  .object({
+    name: z.string().min(2).max(100),
+    password: passwordSchema,
+    confirmPassword: z.string().max(100),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    message: 'Passwords do not match',
+    path: ['confirmPassword'],
+  });
+
+/** Superadmin override of an institute admin password (never returns the old password). */
+export const overrideTenantAdminPasswordSchema = z.object({
   password: passwordSchema,
+  /** Client must send true after an explicit confirm step. */
+  confirm: z.literal(true),
 });
 
 // --- Teachers (managed by tenant admins) ---

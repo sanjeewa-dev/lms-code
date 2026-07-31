@@ -12,6 +12,7 @@ import tenantAuthRoutes from './routes/tenantAuth';
 import publicTenantRoutes from './routes/publicTenant';
 import payherePublicRoutes from './routes/payherePublic';
 import inviteRoutes from './routes/invites';
+import adminInviteRoutes from './routes/adminInvites';
 import tenantRoutes from './routes/tenant';
 import cronRoutes from './routes/cron';
 
@@ -37,6 +38,7 @@ export function createApp() {
   app.use('/api/t/:slug/public', publicTenantRoutes);
   app.use('/api/t/:slug/public', payherePublicRoutes);
   app.use('/api/t/:slug/invites', inviteRoutes);
+  app.use('/api/t/:slug/admin-invites', adminInviteRoutes);
   app.use('/api/t/:slug', tenantRoutes);
 
   app.use(notFoundHandler);

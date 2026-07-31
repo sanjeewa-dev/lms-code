@@ -5,7 +5,7 @@ import { api, apiErrorMessage } from '../api/client';
 import { Button, Card, Input, Select } from '../components/ui';
 import { SRI_LANKAN_DISTRICTS } from '../lib/districts';
 import { validatePassword } from '../lib/passwordValidation';
-import { PasswordRequirements } from '../components/PasswordRequirements';
+import { PasswordRequirements, passwordMismatchError } from '../components/PasswordRequirements';
 
 interface InviteDetails {
   email: string;
@@ -285,10 +285,20 @@ export default function StudentInvite() {
             value={form.confirmPassword}
             onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
             required
+            error={passwordMismatchError(form.password, form.confirmPassword)}
           />
 
           {error && <p className="text-sm text-red-600">{error}</p>}
-          <Button type="submit" disabled={loading} className="w-full">
+          <Button
+            type="submit"
+            disabled={
+              loading ||
+              !form.password ||
+              !form.confirmPassword ||
+              Boolean(validatePassword(form.password))
+            }
+            className="w-full"
+          >
             {loading ? 'Saving...' : 'Complete registration'}
           </Button>
         </form>

@@ -1,5 +1,6 @@
-import { Link, matchPath, useLocation } from 'react-router-dom';
+import { Link, matchPath, useLocation, useParams } from 'react-router-dom';
 import { Icon } from './icons';
+import { isClassSection, sectionMeta } from '../pages/class/classSections';
 
 export interface Crumb {
   label: string;
@@ -12,30 +13,60 @@ interface Trail {
   trail: Crumb[];
 }
 
+function resolvePathTemplate(template: string, params: Record<string, string | undefined>) {
+  return template.replace(/:([A-Za-z0-9_]+)/g, (_, key: string) => {
+    const value = params[key];
+    return value != null && value !== '' ? value : `:${key}`;
+  });
+}
+
 /**
  * Route-aware breadcrumb trail. `root` is always shown first (with a home
  * icon); the remaining crumbs come from the first `trails` entry whose pattern
- * matches the current path. Relative `to` values are resolved against `base`.
+ * matches the current path. Relative `to` values are resolved against `base`,
+ * and `:param` placeholders are filled from the matched route.
  */
 export function Breadcrumbs({ root, base, trails }: { root: Crumb; base: string; trails: Trail[] }) {
   const { pathname } = useLocation();
+  const routeParams = useParams();
 
-  const match = trails.find((t) =>
-    matchPath({ path: t.pattern ? `${base}/${t.pattern}` : base, end: true }, pathname)
-  );
+  let matchParams: Record<string, string | undefined> = { ...routeParams };
+  let trail: Crumb[] = [];
 
-  const crumbs: Crumb[] = [root, ...(match?.trail ?? [])];
+  for (const t of trails) {
+    const result = matchPath(
+      { path: t.pattern ? `${base}/${t.pattern}` : base, end: true },
+      pathname
+    );
+    if (result) {
+      matchParams = { ...routeParams, ...result.params };
+      trail = t.trail;
+      break;
+    }
+  }
+
+  const crumbs: Crumb[] = [
+    root,
+    ...trail.map((crumb) => {
+      // Prefer real section name over generic "Section"
+      if (crumb.label === 'Section' && isClassSection(matchParams.section)) {
+        return { ...crumb, label: sectionMeta[matchParams.section].label };
+      }
+      return crumb;
+    }),
+  ];
 
   return (
     <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-sm">
       {crumbs.map((crumb, i) => {
         const isLast = i === crumbs.length - 1;
-        const href =
-          crumb.to && !isLast
-            ? crumb.to.startsWith('/')
-              ? crumb.to
-              : `${base}/${crumb.to}`
-            : undefined;
+        const resolvedTo =
+          crumb.to && !isLast ? resolvePathTemplate(crumb.to, matchParams) : undefined;
+        const href = resolvedTo
+          ? resolvedTo.startsWith('/')
+            ? resolvedTo
+            : `${base}/${resolvedTo}`
+          : undefined;
 
         return (
           <span key={`${crumb.label}-${i}`} className="flex items-center gap-1.5">

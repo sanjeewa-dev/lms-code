@@ -156,6 +156,7 @@ model Tenant {
   notices      Notice[]
   events       Event[]
   studentInvites StudentInvite[]
+  adminInvites   AdminInvite[]
   classSchedules ClassSchedule[]
   attendances    Attendance[]
   notifications  Notification[]
@@ -203,6 +204,8 @@ model User {
   refreshTokens      RefreshToken[]
   invitesSent        StudentInvite[] @relation("InvitesSent")
   invitesReceived    StudentInvite[] @relation("InvitesReceived")
+  adminInvitesSent   AdminInvite[]   @relation("AdminInvitesSent")
+  adminInvitesReceived AdminInvite[] @relation("AdminInvitesReceived")
   noticeReads        NoticeRead[]
   attendancesMarked  Attendance[]    @relation("AttendanceMarker")
   attendances        Attendance[]    @relation("AttendanceStudent")
@@ -397,6 +400,24 @@ model StudentInvite {
   @@index([tenantId])
   @@index([email])
   @@index([classId])
+}
+
+model AdminInvite {
+  id          String    @id @default(cuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  token       String    @unique
+  email       String
+  invitedById String
+  invitedBy   User      @relation("AdminInvitesSent", fields: [invitedById], references: [id])
+  userId      String?
+  user        User?     @relation("AdminInvitesReceived", fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([tenantId])
+  @@index([email])
 }
 
 model Enrollment {

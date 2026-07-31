@@ -2,13 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { useTenantApi } from '../hooks/useTenantApi';
 import { useAuth } from '../context/AuthContext';
-import { Card } from '../components/ui';
+import { Card, ErrorBanner } from '../components/ui';
 import { Icon, type IconName } from '../components/icons';
 import { AtRiskPanel } from '../components/AtRiskPanel';
 import { SmartOpsPanel, WeakTopicsCard } from '../components/SmartOpsPanel';
 import { PerformanceChart, type PerformancePoint } from '../components/PerformanceChart';
 import { ClassCalendar } from '../components/ClassCalendar';
-import type { ClassSummary, VideoLesson, Notice, EventItem, AdminStats } from '../api/types';
+import { LiveNowStrip } from '../components/LiveNowStrip';
+import type { ClassSummary, AdminStats } from '../api/types';
 
 type Tone = 'blue' | 'green' | 'purple' | 'amber' | 'pink' | 'sky';
 
@@ -65,27 +66,62 @@ function StatCard({
       </span>
     </div>
   );
-  return to ? <Link to={to}>{body}</Link> : body;
+  return to ? (
+    <Link to={to} className="block self-start">
+      {body}
+    </Link>
+  ) : (
+    body
+  );
 }
 
-function BarChart({ data }: { data: { label: string; value: number; color: string }[] }) {
-  const max = Math.max(1, ...data.map((d) => d.value));
+function ShortcutTile({
+  to,
+  title,
+  hint,
+  icon,
+  tone = 'purple',
+}: {
+  to: string;
+  title: string;
+  hint: string;
+  icon: IconName;
+  tone?: Tone;
+}) {
   return (
-    <div className="flex h-56 items-end gap-4 px-2">
-      {data.map((d) => (
-        <div key={d.label} className="flex flex-1 flex-col items-center gap-2">
-          <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{d.value}</span>
-          <div className="flex w-full items-end justify-center">
-            <div
-              className="w-full max-w-[52px] rounded-t-lg transition-all"
-              style={{ height: `${(d.value / max) * 170 + 6}px`, backgroundColor: d.color }}
-            />
-          </div>
-          <span className="text-center text-xs text-slate-400">{d.label}</span>
-        </div>
-      ))}
-    </div>
+    <Link
+      to={to}
+      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-brand-200 hover:shadow-md dark:border-white/5 dark:bg-ink-850"
+    >
+      <span className={`mb-3 grid h-10 w-10 place-items-center rounded-xl ${toneChip[tone]}`}>
+        <Icon name={icon} width={18} height={18} />
+      </span>
+      <p className="font-semibold text-slate-900 dark:text-white">{title}</p>
+      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{hint}</p>
+    </Link>
   );
+}
+
+interface StudentTodo {
+  continueClass: { id: string; title: string } | null;
+  pendingQuizzes: {
+    id: string;
+    title: string;
+    classId: string;
+    classTitle: string;
+    questionCount: number;
+    timeLimitSec: number;
+    totalMarks: number;
+  }[];
+  recentAttempt: {
+    id: string;
+    score: number | null;
+    totalMarks: number;
+    quizTitle: string;
+    quizId: string;
+    classId: string;
+    submittedAt: string | null;
+  } | null;
 }
 
 export default function Dashboard() {
@@ -93,160 +129,471 @@ export default function Dashboard() {
   const { slug } = useParams<{ slug: string }>();
   const t = useTenantApi();
   const base = `/${slug}`;
-  const isStaff = user?.role === 'admin' || user?.role === 'teacher';
+  const isAdmin = user?.role === 'admin';
+  const isTeacher = user?.role === 'teacher';
+  const isStaff = isAdmin || isTeacher;
+  const isStudent = user?.role === 'student';
 
   const classesQuery = useQuery({
     queryKey: ['classes', slug],
     queryFn: async () => (await t.get<{ classes: ClassSummary[] }>('/classes')).data.classes,
-  });
-  const videosQuery = useQuery({
-    queryKey: ['video-lessons', slug],
-    queryFn: async () => (await t.get<{ videos: VideoLesson[] }>('/video-lessons')).data.videos,
-  });
-  const noticesQuery = useQuery({
-    queryKey: ['notices', slug],
-    queryFn: async () => (await t.get<{ notices: Notice[] }>('/notices')).data.notices,
-  });
-  const eventsQuery = useQuery({
-    queryKey: ['events', slug],
-    queryFn: async () => (await t.get<{ events: EventItem[] }>('/events')).data.events,
   });
   const statsQuery = useQuery({
     queryKey: ['stats', slug],
     enabled: isStaff,
     queryFn: async () => (await t.get<{ stats: AdminStats }>('/stats')).data.stats,
   });
-
+  const chatUnreadQuery = useQuery({
+    queryKey: ['chat-unread', slug],
+    queryFn: async () => (await t.get<{ count: number }>('/chat/unread-count')).data.count,
+  });
+  const atRiskQuery = useQuery({
+    queryKey: ['at-risk', slug],
+    enabled: isStaff,
+    queryFn: async () =>
+      (await t.get<{ students: unknown[] }>('/smart/at-risk')).data.students,
+  });
   const performanceQuery = useQuery({
     queryKey: ['performance-mine', slug],
-    enabled: !isStaff && user?.role === 'student',
+    enabled: isStudent,
     queryFn: async () =>
       (await t.get<{ points: PerformancePoint[] }>('/performance/mine')).data.points,
   });
+  const todoQuery = useQuery({
+    queryKey: ['me-todo', slug],
+    enabled: isStudent,
+    queryFn: async () => (await t.get<{ todo: StudentTodo }>('/me/todo')).data.todo,
+  });
+  const aiQuotaQuery = useQuery({
+    queryKey: ['ai-quota-dash', slug],
+    enabled: isStudent,
+    queryFn: async () => {
+      const classes = (await t.get<{ classes: { classId: string }[] }>('/ai/classes')).data.classes;
+      if (!classes?.length) return null;
+      const { data } = await t.get<{
+        quota: { used: number; limit: number; remaining: number };
+      }>(`/ai/quota?classId=${encodeURIComponent(classes[0].classId)}`);
+      return data.quota;
+    },
+    retry: false,
+  });
 
   const classes = classesQuery.data ?? [];
-  const videos = videosQuery.data ?? [];
-  const notices = noticesQuery.data ?? [];
-  const events = eventsQuery.data ?? [];
+  const s = statsQuery.data;
+  const dash = (n?: number) => (n === undefined ? '—' : n);
+  const chatUnread = chatUnreadQuery.data ?? 0;
+  const quizGenHref = classes[0]
+    ? `${base}/classes/${classes[0].id}/quizzes?ai=1`
+    : `${base}/classes`;
+  const quizGenHint = 'Open a class → Quizzes → AI generate';
 
-  const overview = [
-    { label: 'Classes', value: classes.length, color: '#2563eb' },
-    { label: 'Videos', value: videos.length, color: '#8b5cf6' },
-    { label: 'Notices', value: notices.length, color: '#10b981' },
-    { label: 'Events', value: events.length, color: '#f59e0b' },
-  ];
-
-  if (isStaff) {
-    const s = statsQuery.data;
-    const dash = (n?: number) => (n === undefined ? '-' : n);
+  if (isAdmin) {
     return (
       <div className="space-y-6">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          <StatCard label="Total Students" value={dash(s?.students)} icon="users" tone="blue" to={`${base}/students`} />
-          {user?.role === 'admin' && (
-            <StatCard label="Total Teachers" value={dash(s?.teachers)} icon="teacher" tone="purple" to={`${base}/teachers`} />
-          )}
-          <StatCard label="Classes" value={dash(s?.classes)} icon="classes" tone="sky" to={`${base}/classes`} />
-          <StatCard label="Enrollments" value={dash(s?.enrollments)} icon="note" tone="green" />
-          <StatCard label="MCQ Exams" value={dash(s?.quizzes)} icon="quiz" tone="amber" to={`${base}/classes`} />
-          <StatCard label="Exam Attempts" value={dash(s?.attempts)} icon="chart" tone="pink" />
-          <StatCard label="Video Lessons" value={dash(s?.videos)} icon="videos" tone="purple" to={`${base}/videos`} />
-          <StatCard label="Announcements" value={dash(s?.notices)} icon="notices" tone="green" to={`${base}/notices`} />
-          <StatCard label="Events" value={dash(s?.events)} icon="events" tone="sky" to={`${base}/events`} />
-          <StatCard label="Pending Payments" value={dash(s?.pendingPayments)} icon="payments" tone="amber" to={`${base}/payments`} />
-          <StatCard
-            label="Total Revenue"
-            value={s ? `Rs. ${s.revenue.toLocaleString()}` : '-'}
-            icon="revenue"
-            highlight
-          />
-        </div>
+        {statsQuery.isError && (
+          <ErrorBanner message="Could not load dashboard stats. Try refreshing the page." />
+        )}
 
-        <div className="grid gap-6 lg:grid-cols-3">
-          <Card className="lg:col-span-2">
-            <h2 className="mb-1 text-lg font-semibold text-slate-900 dark:text-white">Content overview</h2>
-            <p className="mb-4 text-sm text-slate-400">Published items across your institute</p>
-            <BarChart data={overview} />
-          </Card>
+        {statsQuery.isLoading ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-[104px] animate-pulse rounded-2xl border border-slate-200 bg-slate-100 dark:border-white/5 dark:bg-ink-850"
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard label="Students" value={dash(s?.students)} icon="users" tone="blue" to={`${base}/students`} />
+            <StatCard
+              label="Pending payments"
+              value={dash(s?.pendingPayments)}
+              icon="payments"
+              tone="amber"
+              to={`${base}/payments`}
+              highlight={(s?.pendingPayments ?? 0) > 0}
+            />
+            <StatCard
+              label="Open interventions"
+              value={dash(s?.openInterventions)}
+              icon="note"
+              tone="pink"
+              to={`${base}/interventions`}
+            />
+            <StatCard
+              label="Live today"
+              value={dash(s?.liveTodayCount)}
+              icon="live"
+              tone="green"
+              to={`${base}/live`}
+            />
+          </div>
+        )}
 
+        <LiveNowStrip />
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          <AtRiskPanel compact />
           <div className="space-y-4">
-            <ClassCalendar />
-            <Card>
-              <h2 className="mb-3 text-lg font-semibold text-slate-900 dark:text-white">Recent classes</h2>
-              {classes.length > 0 ? (
-                <ul className="divide-y divide-slate-100 dark:divide-white/5">
-                  {classes.slice(0, 4).map((c) => (
-                    <li key={c.id} className="flex items-center justify-between py-2.5">
-                      <Link
-                        to={`${base}/classes/${c.id}`}
-                        className="truncate font-medium text-slate-800 hover:text-brand-600 dark:text-slate-200"
-                      >
-                        {c.title}
-                      </Link>
-                      <span className="ml-3 shrink-0 text-sm text-slate-400">
-                        {c.price > 0 ? `Rs. ${c.price.toLocaleString()}` : 'Free'}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-slate-400">No classes yet.</p>
-              )}
-            </Card>
+            <SmartOpsPanel />
+            <div className="grid items-start gap-4 sm:grid-cols-3">
+              <StatCard
+                label="Revenue"
+                value={s ? `Rs. ${s.revenue.toLocaleString()}` : '—'}
+                icon="revenue"
+                highlight
+                to={`${base}/payments`}
+              />
+              <Card className="sm:col-span-2">
+                <h2 className="mb-1 text-lg font-semibold text-slate-900 dark:text-white">Shortcuts</h2>
+                <p className="mb-4 text-sm text-slate-400">AI tools, chat, and follow-ups.</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <ShortcutTile
+                    to={`${base}/ai-copilot`}
+                    title="AI Copilot"
+                    hint="Quiz gen, feedback, weak topics"
+                    icon="spark"
+                    tone="purple"
+                  />
+                  <ShortcutTile
+                    to={quizGenHref}
+                    title="Generate quiz"
+                    hint={quizGenHint}
+                    icon="quiz"
+                    tone="amber"
+                  />
+                  <ShortcutTile
+                    to={`${base}/chat`}
+                    title="Chat"
+                    hint={chatUnread ? `${chatUnread} unread` : 'Message teachers & students'}
+                    icon="chat"
+                    tone="sky"
+                  />
+                  <ShortcutTile
+                    to={`${base}/interventions`}
+                    title="Interventions"
+                    hint={`${s?.openInterventions ?? 0} open follow-ups`}
+                    icon="note"
+                    tone="pink"
+                  />
+                </div>
+              </Card>
+            </div>
           </div>
         </div>
 
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <ClassCalendar />
+          </div>
+          <Card>
+            <h2 className="mb-3 text-lg font-semibold text-slate-900 dark:text-white">Recent classes</h2>
+            {classes.length > 0 ? (
+              <ul className="divide-y divide-slate-100 dark:divide-white/5">
+                {classes.slice(0, 6).map((c) => (
+                  <li key={c.id} className="flex items-center justify-between py-2.5">
+                    <Link
+                      to={`${base}/classes/${c.id}`}
+                      className="truncate font-medium text-slate-800 hover:text-brand-600 dark:text-slate-200"
+                    >
+                      {c.title}
+                    </Link>
+                    {c.batch?.name && (
+                      <span className="ml-3 shrink-0 text-sm text-slate-400">{c.batch.name}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-slate-400">No classes yet.</p>
+            )}
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  if (isTeacher) {
+    const myClasses = classes.filter((c) => c.teacher?.id === user?.id);
+    const teachingList = myClasses.length ? myClasses : classes;
+    const teacherQuizHref = teachingList[0]
+      ? `${base}/classes/${teachingList[0].id}/quizzes?ai=1`
+      : `${base}/classes`;
+
+    return (
+      <div className="space-y-6">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/5 dark:bg-ink-850 sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Teaching today</p>
+              <h2 className="mt-1 text-xl font-bold text-slate-900 dark:text-white">
+                {teachingList[0]?.title ?? 'Your classes'}
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                {dash(s?.students)} students · {dash(s?.classes)} classes · {dash(s?.draftQuizzes)} draft quizzes
+              </p>
+            </div>
+            {teachingList[0] && (
+              <Link
+                to={`${base}/classes/${teachingList[0].id}`}
+                className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+              >
+                Open class hub
+              </Link>
+            )}
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <StatCard label="My students" value={dash(s?.students)} icon="users" tone="blue" to={`${base}/students`} />
+          <StatCard label="My classes" value={dash(s?.classes)} icon="classes" tone="sky" to={`${base}/classes`} />
+          <StatCard
+            label="Open interventions"
+            value={dash(s?.openInterventions)}
+            icon="note"
+            tone="pink"
+            to={`${base}/interventions`}
+          />
+          <StatCard label="Live today" value={dash(s?.liveTodayCount)} icon="live" tone="green" to={`${base}/live`} />
+          <StatCard label="Draft quizzes" value={dash(s?.draftQuizzes)} icon="quiz" tone="amber" to={`${base}/classes`} />
+          <StatCard label="Unread chat" value={chatUnread} icon="chat" tone="purple" to={`${base}/chat`} />
+        </div>
+
+        <LiveNowStrip />
+
         <div className="grid gap-6 lg:grid-cols-2">
-          <AtRiskPanel />
-          {user?.role === 'admin' && <SmartOpsPanel />}
+          <AtRiskPanel compact />
+          <Card>
+            <h2 className="mb-1 text-lg font-semibold text-slate-900 dark:text-white">Needs attention</h2>
+            <p className="mb-4 text-sm text-slate-400">Follow-ups and AI teaching shortcuts.</p>
+            <div className="mb-4 grid grid-cols-2 gap-3">
+              <div className="rounded-xl border border-amber-100 bg-amber-50/80 p-3 dark:border-amber-900/30 dark:bg-amber-950/20">
+                <p className="text-xs font-semibold uppercase text-amber-700 dark:text-amber-300">At risk</p>
+                <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">
+                  {atRiskQuery.data?.length ?? '—'}
+                </p>
+                <p className="text-xs text-slate-500">flagged students</p>
+              </div>
+              <div className="rounded-xl border border-violet-100 bg-violet-50/80 p-3 dark:border-violet-900/30 dark:bg-violet-950/20">
+                <p className="text-xs font-semibold uppercase text-violet-700 dark:text-violet-300">Follow-ups</p>
+                <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">{dash(s?.openInterventions)}</p>
+                <p className="text-xs text-slate-500">open interventions</p>
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <ShortcutTile
+                to={teacherQuizHref}
+                title="Quiz generator"
+                hint="Open a class → Quizzes → AI generate"
+                icon="quiz"
+                tone="amber"
+              />
+              <ShortcutTile
+                to={`${base}/ai-copilot?tool=feedback`}
+                title="Feedback drafter"
+                hint="Grade comments with AI"
+                icon="note"
+                tone="green"
+              />
+              <ShortcutTile
+                to={`${base}/ai-copilot?tool=weak-topics`}
+                title="Weak topics"
+                hint="Class-wide quiz gaps"
+                icon="chart"
+                tone="pink"
+              />
+              <ShortcutTile
+                to={`${base}/ai-copilot?tool=intervention`}
+                title="Intervention radar"
+                hint="AI suggestions for at-risk"
+                icon="spark"
+                tone="purple"
+              />
+            </div>
+          </Card>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <ClassCalendar />
+          </div>
+          <Card>
+            <h2 className="mb-3 text-lg font-semibold text-slate-900 dark:text-white">My classes</h2>
+            {teachingList.length > 0 ? (
+              <ul className="divide-y divide-slate-100 dark:divide-white/5">
+                {teachingList.slice(0, 8).map((c) => (
+                  <li key={c.id} className="py-2.5">
+                    <Link
+                      to={`${base}/classes/${c.id}`}
+                      className="font-medium text-slate-800 hover:text-brand-600 dark:text-slate-200"
+                    >
+                      {c.title}
+                    </Link>
+                    <div className="mt-1 flex flex-wrap gap-2 text-xs">
+                      <Link to={`${base}/classes/${c.id}/quizzes`} className="text-violet-600 hover:underline">
+                        Quizzes
+                      </Link>
+                      <Link to={`${base}/classes/${c.id}/students`} className="text-sky-600 hover:underline">
+                        Students
+                      </Link>
+                      <Link to={`${base}/classes/${c.id}/attendance`} className="text-amber-600 hover:underline">
+                        Attendance
+                      </Link>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-slate-400">No classes assigned yet.</p>
+            )}
+          </Card>
         </div>
       </div>
     );
   }
 
   // Student view
+  const todo = todoQuery.data;
+  const continueClass = todo?.continueClass ?? (classes[0] ? { id: classes[0].id, title: classes[0].title } : null);
   const quickActions: { label: string; icon: IconName; to: string; tone: Tone }[] = [
-    { label: 'My Classes', icon: 'classes', to: `${base}/classes`, tone: 'blue' },
-    { label: 'Watch Videos', icon: 'play', to: `${base}/videos`, tone: 'purple' },
-    { label: 'Submit Payment', icon: 'payments', to: `${base}/payments`, tone: 'pink' },
-    { label: 'Read Announcements', icon: 'notices', to: `${base}/notices`, tone: 'green' },
-    { label: 'Upcoming Events', icon: 'events', to: `${base}/events`, tone: 'amber' },
+    {
+      label: continueClass ? `Continue: ${continueClass.title}` : 'Browse classes',
+      icon: 'classes',
+      to: continueClass ? `${base}/classes/${continueClass.id}` : `${base}/classes`,
+      tone: 'blue',
+    },
+    {
+      label: todo?.pendingQuizzes?.[0] ? `Take: ${todo.pendingQuizzes[0].title}` : 'Class quizzes',
+      icon: 'quiz',
+      to: todo?.pendingQuizzes?.[0]
+        ? `${base}/quizzes/${todo.pendingQuizzes[0].id}/take`
+        : `${base}/classes`,
+      tone: 'amber',
+    },
+    { label: 'Join live', icon: 'live', to: `${base}/live`, tone: 'green' },
+    { label: 'Ask AI tutor', icon: 'spark', to: `${base}/ai?tool=tutor`, tone: 'purple' },
+    { label: chatUnread ? `Chat (${chatUnread})` : 'Chat', icon: 'chat', to: `${base}/chat`, tone: 'sky' },
+    { label: 'Pay fees', icon: 'payments', to: `${base}/payments`, tone: 'pink' },
   ];
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col justify-between gap-4 overflow-hidden rounded-2xl bg-hero-gradient p-6 text-white shadow-lg sm:flex-row sm:items-center sm:p-8">
         <div>
-          <h2 className="text-2xl font-extrabold">Ready to learn?</h2>
+          <h2 className="text-2xl font-extrabold">
+            {continueClass ? `Continue ${continueClass.title}` : 'Ready to learn?'}
+          </h2>
           <p className="mt-1 text-slate-200">
-            You're enrolled in {classes.length} {classes.length === 1 ? 'class' : 'classes'}. Keep the momentum going.
+            {todo?.pendingQuizzes?.length
+              ? `${todo.pendingQuizzes.length} quiz${todo.pendingQuizzes.length === 1 ? '' : 'zes'} waiting for you.`
+              : `You're enrolled in ${classes.length} ${classes.length === 1 ? 'class' : 'classes'}.`}
           </p>
         </div>
         <Link
-          to={`${base}/classes`}
+          to={continueClass ? `${base}/classes/${continueClass.id}` : `${base}/classes`}
           className="inline-flex items-center gap-2 rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-brand-700 shadow transition hover:bg-slate-100"
         >
           Continue learning
         </Link>
       </div>
 
-      <WeakTopicsCard />
+      <LiveNowStrip />
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <WeakTopicsCard />
+        <Card>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">AI study hub</h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                {aiQuotaQuery.data
+                  ? `${aiQuotaQuery.data.remaining} of ${aiQuotaQuery.data.limit} AI tokens left this month`
+                  : 'Tutor, flashcards, and study plans in one place'}
+              </p>
+            </div>
+            <Link
+              to={`${base}/ai`}
+              className="rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-700"
+            >
+              Open AI Area
+            </Link>
+          </div>
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            {(
+              [
+                ['tutor', 'Tutor'],
+                ['flashcards', 'Flashcards'],
+                ['study-plan', 'Study plan'],
+              ] as const
+            ).map(([tool, label]) => (
+              <Link
+                key={tool}
+                to={`${base}/ai?tool=${tool}`}
+                className="rounded-xl border border-slate-200 px-2 py-3 text-center text-xs font-semibold text-slate-700 hover:border-violet-200 hover:bg-violet-50 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5"
+              >
+                {label}
+              </Link>
+            ))}
+          </div>
+        </Card>
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <div className="mb-4 flex items-center gap-2">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-100 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300">
-              <Icon name="chart" width={18} height={18} />
-            </span>
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Performance Chart</h2>
-              <p className="text-sm text-slate-400">Your quiz and assignment scores over time (0–100%)</p>
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="grid h-9 w-9 place-items-center rounded-xl bg-amber-100 text-amber-600">
+                <Icon name="quiz" width={18} height={18} />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Due quizzes</h2>
+                <p className="text-sm text-slate-400">Published quizzes you have not finished</p>
+              </div>
             </div>
           </div>
-          {performanceQuery.isLoading ? (
-            <div className="flex h-56 items-center justify-center text-sm text-slate-400">Loading marks…</div>
+          {todoQuery.isLoading ? (
+            <p className="text-sm text-slate-400">Loading…</p>
+          ) : todo?.pendingQuizzes?.length ? (
+            <ul className="divide-y divide-slate-100 dark:divide-white/5">
+              {todo.pendingQuizzes.map((q) => (
+                <li key={q.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
+                  <div className="min-w-0">
+                    <p className="font-medium text-slate-800 dark:text-slate-100">{q.title}</p>
+                    <p className="text-xs text-slate-400">
+                      {q.classTitle} · {q.questionCount} questions
+                      {q.timeLimitSec > 0 ? ` · ${Math.round(q.timeLimitSec / 60)} min` : ''}
+                    </p>
+                  </div>
+                  <Link
+                    to={`${base}/quizzes/${q.id}/take`}
+                    className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700"
+                  >
+                    Start
+                  </Link>
+                </li>
+              ))}
+            </ul>
           ) : (
-            <PerformanceChart points={performanceQuery.data ?? []} />
+            <p className="text-sm text-slate-500">No pending quizzes. Nice work.</p>
+          )}
+
+          {todo?.recentAttempt && (
+            <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-3 dark:border-white/5 dark:bg-white/5">
+              <p className="text-xs font-semibold uppercase text-slate-400">Recent score</p>
+              <p className="mt-1 text-sm text-slate-800 dark:text-slate-100">
+                {todo.recentAttempt.quizTitle}:{' '}
+                <strong>
+                  {todo.recentAttempt.score ?? 0}/{todo.recentAttempt.totalMarks}
+                </strong>
+              </p>
+              <Link
+                to={`${base}/attempts/${todo.recentAttempt.id}/result`}
+                className="mt-2 inline-block text-xs font-semibold text-violet-600 hover:underline"
+              >
+                Review & explain with AI
+              </Link>
+            </div>
           )}
         </Card>
 
@@ -264,7 +611,7 @@ export default function Dashboard() {
                   <span className={`grid h-9 w-9 place-items-center rounded-lg ${toneChip[a.tone]}`}>
                     <Icon name={a.icon} />
                   </span>
-                  {a.label}
+                  <span className="truncate">{a.label}</span>
                 </Link>
               ))}
             </div>
@@ -272,11 +619,35 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Classes" value={classes.length} icon="classes" tone="blue" to={`${base}/classes`} />
-        <StatCard label="Videos" value={videos.length} icon="videos" tone="purple" to={`${base}/videos`} />
-        <StatCard label="Announcements" value={notices.length} icon="notices" tone="green" to={`${base}/notices`} />
-        <StatCard label="Events" value={events.length} icon="events" tone="amber" to={`${base}/events`} />
+      <Card>
+        <div className="mb-4 flex items-center gap-2">
+          <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-100 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300">
+            <Icon name="chart" width={18} height={18} />
+          </span>
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Performance</h2>
+            <p className="text-sm text-slate-400">Quiz and assignment scores over time (0–100%)</p>
+          </div>
+        </div>
+        {performanceQuery.isLoading ? (
+          <div className="flex h-56 items-center justify-center text-sm text-slate-400">Loading marks…</div>
+        ) : (
+          <PerformanceChart points={performanceQuery.data ?? []} />
+        )}
+      </Card>
+
+      <div className="flex flex-wrap gap-3 text-sm">
+        <Link to={`${base}/notices`} className="font-semibold text-slate-600 hover:text-brand-600 dark:text-slate-300">
+          Announcements
+        </Link>
+        <span className="text-slate-300">·</span>
+        <Link to={`${base}/events`} className="font-semibold text-slate-600 hover:text-brand-600 dark:text-slate-300">
+          Events
+        </Link>
+        <span className="text-slate-300">·</span>
+        <Link to={`${base}/videos`} className="font-semibold text-slate-600 hover:text-brand-600 dark:text-slate-300">
+          Videos
+        </Link>
       </div>
     </div>
   );

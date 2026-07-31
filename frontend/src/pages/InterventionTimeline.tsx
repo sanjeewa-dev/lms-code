@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { useTenantApi } from '../hooks/useTenantApi';
 import { useAuth } from '../context/AuthContext';
 import { apiErrorMessage } from '../api/client';
-import { Button, Spinner } from '../components/ui';
+import { Button, Modal, Spinner } from '../components/ui';
 import { Icon } from '../components/icons';
 
 type InterventionStatus = 'open' | 'in_progress' | 'resolved' | 'escalated';
@@ -59,9 +60,18 @@ function CreateInterventionModal({
   const [followUpDate, setFollowUpDate] = useState('');
   const [err, setErr] = useState('');
 
-  const { data: studentsData } = useQuery<{ students?: { id: string; name: string; email: string }[]; users?: { id: string; name: string; email: string }[] }>({
+  const { data: studentsData } = useQuery<{
+    students?: { id: string; name: string; email: string }[];
+    users?: { id: string; name: string; email: string }[];
+  }>({
     queryKey: ['students-list'],
-    queryFn: () => api.get('/students').then((r) => r.data),
+    queryFn: async () => {
+      const r = await api.get<{
+        students?: { id: string; name: string; email: string }[];
+        users?: { id: string; name: string; email: string }[];
+      }>('/students');
+      return r.data;
+    },
   });
 
   const allStudents: { id: string; name: string; email: string }[] = studentsData?.students ?? studentsData?.users ?? [];
@@ -86,52 +96,61 @@ function CreateInterventionModal({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-ink-850 p-6 shadow-2xl space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-900 dark:text-white">Log Intervention</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">✕</button>
-        </div>
-
+    <Modal open onClose={onClose} title="Log Intervention">
+      <div className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Search Student</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Search Student</label>
           <input
-            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-ink-800 dark:text-white mb-2"
+            className="mb-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-ink-800 dark:text-white"
             placeholder="Type name or email..."
             value={studentSearch}
             onChange={(e) => setStudentSearch(e.target.value)}
           />
           {!selectedStudentId && filtered.length > 0 && (
-            <div className="rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden max-h-36 overflow-y-auto">
+            <div className="max-h-36 overflow-y-auto overflow-hidden rounded-xl border border-slate-200 dark:border-white/10">
               {filtered.map((s) => (
                 <button
                   key={s.id}
+                  type="button"
                   onClick={() => {
                     setSelectedStudentId(s.id);
                     setSelectedStudentName(s.name);
                     setStudentSearch(s.name);
                   }}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-ink-700 dark:text-white border-b border-slate-100 dark:border-white/5 last:border-0"
+                  className="w-full border-b border-slate-100 px-3 py-2 text-left text-sm last:border-0 hover:bg-slate-50 dark:border-white/5 dark:text-white dark:hover:bg-ink-700"
                 >
                   <span className="font-medium">{s.name}</span>
-                  <span className="text-slate-400 ml-2">{s.email}</span>
+                  <span className="ml-2 text-slate-400">{s.email}</span>
                 </button>
               ))}
             </div>
           )}
           {selectedStudentId && (
-            <div className="flex items-center gap-2 rounded-xl bg-violet-50 dark:bg-violet-950/20 px-3 py-2 text-sm text-violet-700 dark:text-violet-300">
+            <div className="flex items-center gap-2 rounded-xl bg-brand-50 px-3 py-2 text-sm text-brand-700 dark:bg-brand-950/20 dark:text-brand-300">
               <Icon name="user" width={14} height={14} />
               {selectedStudentName}
-              <button onClick={() => { setSelectedStudentId(''); setSelectedStudentName(''); setStudentSearch(''); }} className="ml-auto text-violet-400 hover:text-violet-600">✕</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedStudentId('');
+                  setSelectedStudentName('');
+                  setStudentSearch('');
+                }}
+                className="ml-auto text-brand-400 hover:text-brand-600"
+                aria-label="Clear selected student"
+              >
+                ✕
+              </button>
             </div>
           )}
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Reason for Intervention *</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+            Reason for Intervention *
+          </label>
           <textarea
-            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-ink-800 dark:text-white resize-none"
+            className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-ink-800 dark:text-white"
             rows={2}
             placeholder="Why is this student flagged? (low attendance, missing work, etc.)"
             value={reason}
@@ -140,9 +159,11 @@ function CreateInterventionModal({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Action Taken / Planned *</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+            Action Taken / Planned *
+          </label>
           <textarea
-            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-ink-800 dark:text-white resize-none"
+            className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-ink-800 dark:text-white"
             rows={2}
             placeholder="Called guardian, arranged extra session, sent email..."
             value={action}
@@ -151,7 +172,9 @@ function CreateInterventionModal({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Follow-up Date (optional)</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+            Follow-up Date (optional)
+          </label>
           <input
             type="date"
             className="rounded-xl border border-slate-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-ink-800 dark:text-white"
@@ -162,20 +185,25 @@ function CreateInterventionModal({
 
         {err && <p className="text-sm text-red-600">{err}</p>}
 
-        <div className="flex gap-3 justify-end">
-          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 dark:text-slate-300 dark:hover:text-white">
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" onClick={onClose}>
             Cancel
-          </button>
+          </Button>
           <Button
             onClick={() => mut.mutate()}
             disabled={!selectedStudentId || !reason.trim() || !action.trim() || mut.isPending}
-            className="bg-violet-600 hover:bg-violet-700 text-white"
           >
-            {mut.isPending ? <Spinner /> : 'Log Intervention'}
+            {mut.isPending ? (
+              <>
+                <Spinner compact /> Logging…
+              </>
+            ) : (
+              'Log Intervention'
+            )}
           </Button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -203,7 +231,7 @@ function InterventionCard({
     onError: (e) => setErr(apiErrorMessage(e)),
   });
 
-  const canEdit = user?.role === 'admin' || intervention.createdBy.id === user?.sub;
+  const canEdit = user?.role === 'admin' || intervention.createdBy.id === user?.id;
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-ink-850">
@@ -313,17 +341,31 @@ function InterventionCard({
 export default function InterventionTimeline() {
   const api = useTenantApi();
   const qc = useQueryClient();
+  const [params] = useSearchParams();
+  const studentIdParam = params.get('studentId') ?? '';
   const [showCreate, setShowCreate] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterStudent, setFilterStudent] = useState('');
 
   const { data, isLoading } = useQuery<{ interventions: Intervention[] }>({
-    queryKey: ['interventions'],
-    queryFn: () => api.get('/interventions').then((r) => r.data),
+    queryKey: ['interventions', studentIdParam],
+    queryFn: async () =>
+      (
+        await api.get<{ interventions: Intervention[] }>(
+          `/interventions${studentIdParam ? `?studentId=${encodeURIComponent(studentIdParam)}` : ''}`
+        )
+      ).data,
   });
+
+  useEffect(() => {
+    if (!studentIdParam || !data?.interventions?.length) return;
+    const name = data.interventions.find((i) => i.student.id === studentIdParam)?.student.name;
+    if (name) setFilterStudent(name);
+  }, [studentIdParam, data]);
 
   const interventions = data?.interventions ?? [];
   const filtered = interventions.filter((i) => {
+    if (studentIdParam && i.student.id !== studentIdParam) return false;
     if (filterStatus && i.status !== filterStatus) return false;
     if (filterStudent && !i.student.name.toLowerCase().includes(filterStudent.toLowerCase())) return false;
     return true;

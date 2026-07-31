@@ -1,9 +1,10 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useRef, useState, useEffect, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { useTenantApi } from '../hooks/useTenantApi';
 import { apiErrorMessage } from '../api/client';
 import { Button, Spinner, Textarea } from '../components/ui';
-import { Icon } from '../components/icons';
+import { Icon, type IconName } from '../components/icons';
 import { AiQuizGenerator } from '../components/class/AiQuizGenerator';
 
 /** Reads a File as plain text. Best-effort text extraction for PDF via binary scan. */
@@ -281,7 +282,7 @@ function FeedbackPanel({ classes }: { classes: ClassItem[] }) {
         })
         .then((r) => r.data),
     onSuccess: (data) => {
-      setResult(data);
+      setResult(data as NonNullable<typeof result>);
       setErr('');
       qc.invalidateQueries({ queryKey: ['ai-teacher-history', api.slug, classId, 'feedback'] });
     },
@@ -451,7 +452,7 @@ function WeakTopicsPanel({ classes }: { classes: ClassItem[] }) {
   const mut = useMutation({
     mutationFn: () => api.get(`/ai-teacher/weak-topics/${classId}`).then((r) => r.data),
     onSuccess: (res) => {
-      setData(res);
+      setData(res as NonNullable<typeof data>);
       setErr('');
       qc.invalidateQueries({ queryKey: ['ai-teacher-history', api.slug, classId, 'weak-topics'] });
     },
@@ -558,7 +559,7 @@ function InterventionSuggestionsPanel({ classes }: { classes: ClassItem[] }) {
     mutationFn: () =>
       api.get(`/ai-teacher/intervention-suggestions/${classId}`).then((r) => r.data),
     onSuccess: (res) => {
-      setData(res);
+      setData(res as NonNullable<typeof data>);
       setErr('');
       qc.invalidateQueries({ queryKey: ['ai-teacher-history', api.slug, classId, 'intervention'] });
     },
@@ -654,42 +655,56 @@ function InterventionSuggestionsPanel({ classes }: { classes: ClassItem[] }) {
   );
 }
 
-const TOOLS: { id: Tool; title: string; description: string; icon: string }[] = [
+const TOOLS: { id: Tool; title: string; description: string; icon: IconName }[] = [
   {
     id: 'quiz-gen',
     title: 'Quiz Generator',
     description: 'Generate MCQ quiz questions from a topic or lesson notes instantly.',
-    icon: '📝',
+    icon: 'quiz',
   },
   {
     id: 'feedback',
     title: 'Feedback Drafter',
     description: 'Draft constructive rubric-based feedback for student submissions.',
-    icon: '✏️',
+    icon: 'note',
   },
   {
     id: 'weak-topics',
     title: 'Weak Topic Analysis',
     description: 'Analyse quiz answers class-wide to identify topics students struggle with.',
-    icon: '📊',
+    icon: 'chart',
   },
   {
     id: 'intervention',
     title: 'Intervention Radar',
     description: 'Identify at-risk students and get AI-suggested intervention actions.',
-    icon: '🎯',
+    icon: 'spark',
   },
 ];
 
 export default function AiTeacherCopilot() {
   const api = useTenantApi();
-  const [activeTool, setActiveTool] = useState<Tool | null>(null);
+  const [params] = useSearchParams();
+  const toolParam = params.get('tool') as Tool | null;
+  const [activeTool, setActiveTool] = useState<Tool | null>(
+    toolParam && ['quiz-gen', 'feedback', 'weak-topics', 'intervention'].includes(toolParam)
+      ? toolParam
+      : null
+  );
+
+  useEffect(() => {
+    if (toolParam && ['quiz-gen', 'feedback', 'weak-topics', 'intervention'].includes(toolParam)) {
+      setActiveTool(toolParam);
+    }
+  }, [toolParam]);
 
   const { data: classesData, isLoading: classesLoading } = useQuery<{ classes: ClassItem[] }>({
     queryKey: ['teacher-classes'],
     queryFn: () =>
-      api.get('/classes').then((r) => {
-        const all: ClassItem[] = (r.data.classes ?? r.data ?? []).map((c: { id: string; title: string }) => ({
+      api.get<{ classes?: ClassItem[] } | ClassItem[]>('/classes').then((r) => {
+        const payload = r.data;
+        const list = Array.isArray(payload) ? payload : (payload.classes ?? []);
+        const all: ClassItem[] = list.map((c: { id: string; title: string }) => ({
           id: c.id,
           title: c.title,
         }));
@@ -709,7 +724,7 @@ export default function AiTeacherCopilot() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-700 p-7 text-white shadow-lg">
+      <div className="relative overflow-hidden rounded-3xl bg-brand-600 p-7 text-white shadow-lg">
         <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-white/10" />
         <div className="absolute -bottom-10 -left-10 h-40 w-40 rounded-full bg-white/5" />
         <div className="relative">
@@ -718,7 +733,7 @@ export default function AiTeacherCopilot() {
             AI Teacher Copilot
           </div>
           <h1 className="mt-2 text-2xl font-black tracking-tight">Your AI Teaching Assistant</h1>
-          <p className="mt-1 max-w-lg text-sm text-violet-100">
+          <p className="mt-1 max-w-lg text-sm text-white/80">
             Generate quizzes, draft feedback, spot weak topics, and identify students who need support —
             with saved history per tool.
           </p>
@@ -738,18 +753,20 @@ export default function AiTeacherCopilot() {
               key={t.id}
               type="button"
               onClick={() => setActiveTool(t.id)}
-              className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-violet-300 hover:shadow-md dark:border-white/10 dark:bg-ink-850 dark:hover:border-violet-700"
+              className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-brand-300 hover:shadow-md dark:border-white/10 dark:bg-ink-850 dark:hover:border-brand-700"
             >
               <div className="flex items-start gap-4">
-                <span className="text-3xl">{t.icon}</span>
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-900/40 dark:text-brand-300">
+                  <Icon name={t.icon} width={22} height={22} />
+                </span>
                 <div>
-                  <p className="font-bold text-slate-900 transition group-hover:text-violet-700 dark:text-white dark:group-hover:text-violet-300">
+                  <p className="font-bold text-slate-900 transition group-hover:text-brand-700 dark:text-white dark:group-hover:text-brand-300">
                     {t.title}
                   </p>
                   <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{t.description}</p>
                 </div>
               </div>
-              <div className="mt-3 flex items-center gap-1 text-xs font-semibold text-violet-600 dark:text-violet-400">
+              <div className="mt-3 flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400">
                 Open tool <Icon name="chevron" width={14} height={14} />
               </div>
             </button>

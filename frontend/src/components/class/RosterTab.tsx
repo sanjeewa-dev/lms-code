@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorMessage } from '../../api/client';
 import { useTenantApi } from '../../hooks/useTenantApi';
-import { Card, Spinner } from '../ui';
+import { Card, Modal, Spinner } from '../ui';
 import { Icon } from '../icons';
 import type { EnrollmentStatus, PublicTenant, StudentStatus, TenantUser } from '../../api/types';
 import { downloadIdCard, makeQr, type StudentRow } from '../../lib/studentExports';
@@ -347,24 +347,15 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
         )}
       </Card>
 
-      {/* Add student modal */}
-      {modalOpen && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-500/40 p-4">
-          <div className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-ink-850">
-            <button
-              type="button"
-              onClick={() => !saving && setModalOpen(false)}
-              className="absolute right-4 top-4 text-2xl leading-none text-slate-400 transition hover:text-slate-600"
-            >
-              ×
-            </button>
-            <h2 className="mb-1 flex items-center gap-2 text-lg font-bold text-slate-900 dark:text-white">
-              <span className="text-brand-600">
-                <Icon name="users" width={22} height={22} />
-              </span>
-              Add Student to Class
-            </h2>
-            <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
+      <Modal
+        open={modalOpen}
+        onClose={() => {
+          if (!saving) setModalOpen(false);
+        }}
+        title="Add Student to Class"
+        className="max-h-[90vh] overflow-y-auto"
+      >
+            <p className="-mt-2 mb-4 text-sm text-slate-500 dark:text-slate-400">
               Invite a new student or enroll someone who already has an account at your institute.
             </p>
 
@@ -631,24 +622,11 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
                 {formError && <p className="mt-3 text-sm text-red-600">{formError}</p>}
               </div>
             )}
-          </div>
-        </div>
-      )}
+      </Modal>
 
-      {/* ID card modal */}
-      {selected && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={() => setSelected(null)}>
-          <div
-            className="relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:bg-ink-850"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              onClick={() => setSelected(null)}
-              className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white transition hover:bg-red-600"
-            >
-              ×
-            </button>
-            <h2 className="mb-2 text-center text-lg font-bold text-slate-900 dark:text-white">Student ID Card</h2>
+      <Modal open={Boolean(selected)} onClose={() => setSelected(null)} title="Student ID Card">
+        {selected && (
+          <>
             {selected.freeIdCard && (
               <p className="mb-4 text-center text-xs font-semibold uppercase tracking-wide text-emerald-600">
                 Free card offered
@@ -677,15 +655,16 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
             </div>
 
             <button
+              type="button"
               onClick={() => qr && downloadIdCard(selected, institute, qr)}
               disabled={!qr}
               className="mx-auto mt-5 flex items-center gap-2 rounded-lg bg-brand-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:opacity-50"
             >
               <Icon name="note" width={16} height={16} /> Download Card
             </button>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
     </div>
   );
 }

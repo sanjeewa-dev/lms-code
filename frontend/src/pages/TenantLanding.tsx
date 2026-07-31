@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api/client';
@@ -19,6 +20,7 @@ function monthDay(date: string) {
 export default function TenantLanding() {
   const { slug } = useParams<{ slug: string }>();
   const { dark, toggle } = useDarkMode();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const query = useQuery({
     queryKey: ['public', slug],
@@ -26,16 +28,16 @@ export default function TenantLanding() {
     retry: false,
   });
 
-  const tenant = query.data?.tenant;
+  const tenantPreview = query.data?.tenant;
 
   useDocumentMeta({
-    title: tenant
-      ? `${tenant.name} — Online Learning Platform`
+    title: tenantPreview
+      ? `${tenantPreview.name} — Online Learning Platform`
       : `Institute — Mindspark LMS`,
-    description: tenant
-      ? `Welcome to ${tenant.name}. Access your classes, notices, events, and live lessons on our online learning platform.`
+    description: tenantPreview
+      ? `Welcome to ${tenantPreview.name}. Access your classes, notices, events, and live lessons on our online learning platform.`
       : 'Online learning platform powered by Mindspark LMS.',
-    ogImage: tenant?.logoUrl ?? undefined,
+    ogImage: tenantPreview?.logoUrl ?? undefined,
   });
 
   if (query.isLoading)
@@ -45,7 +47,7 @@ export default function TenantLanding() {
       </div>
     );
 
-  if (query.isError || !query.data) {
+  if (query.isError || !query.data?.tenant) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-hero-gradient px-4">
         <div className="max-w-md rounded-2xl bg-white p-8 text-center shadow-2xl dark:bg-ink-850">
@@ -59,7 +61,9 @@ export default function TenantLanding() {
     );
   }
 
+  const tenant = query.data.tenant;
   const { notices, events, videos } = query.data;
+  const hasSpecialNotices = notices.some((n) => Boolean(n.pinned));
   const navItems = [
     { href: '#home', label: 'Home' },
     { href: '#events', label: 'Events' },
@@ -92,6 +96,21 @@ export default function TenantLanding() {
             ))}
           </nav>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="icon-btn md:hidden"
+              onClick={() => setMobileNavOpen((o) => !o)}
+              aria-label={mobileNavOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={mobileNavOpen}
+            >
+              {mobileNavOpen ? (
+                <span className="text-lg leading-none" aria-hidden>
+                  ×
+                </span>
+              ) : (
+                <Icon name="menu" />
+              )}
+            </button>
             <button className="icon-btn" onClick={toggle} aria-label="Toggle theme">
               <Icon name={dark ? 'sun' : 'moon'} />
             </button>
@@ -99,20 +118,38 @@ export default function TenantLanding() {
               to="/login"
               className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-brand-600/30 transition hover:bg-brand-700"
             >
-              Login
+              Sign in
             </Link>
           </div>
         </div>
+        {mobileNavOpen && (
+          <nav className="border-t border-slate-200 px-4 py-3 md:hidden dark:border-white/5">
+            <div className="flex flex-col gap-1">
+              {navItems.map((n) => (
+                <a
+                  key={n.href}
+                  href={n.href}
+                  onClick={() => setMobileNavOpen(false)}
+                  className="rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/5"
+                >
+                  {n.label}
+                </a>
+              ))}
+            </div>
+          </nav>
+        )}
       </header>
 
       {/* Hero */}
       <section id="home" className="relative overflow-hidden bg-hero-gradient">
         <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 20% 30%, #60a5fa 0, transparent 40%), radial-gradient(circle at 80% 70%, #a78bfa 0, transparent 40%)' }} />
         <div className="relative mx-auto max-w-6xl px-4 py-24">
-          <span className="inline-flex items-center gap-2 rounded-full bg-brand-600 px-4 py-1.5 text-xs font-semibold text-white shadow">
-            Special notices
-          </span>
-          <h1 className="mt-6 text-5xl font-extrabold tracking-tight text-white">
+          {hasSpecialNotices && (
+            <span className="inline-flex items-center gap-2 rounded-full bg-brand-600 px-4 py-1.5 text-xs font-semibold text-white shadow">
+              Special notices
+            </span>
+          )}
+          <h1 className={`text-5xl font-extrabold tracking-tight text-white ${hasSpecialNotices ? 'mt-6' : ''}`}>
             Welcome to {tenant.name}
           </h1>
           <p className="mt-4 max-w-2xl text-lg text-slate-300">
@@ -129,45 +166,13 @@ export default function TenantLanding() {
               to="/login"
               className="rounded-lg border border-white/30 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
             >
-              Student login
+              Sign in
             </Link>
           </div>
         </div>
       </section>
 
       <main className="mx-auto max-w-6xl space-y-16 px-4 py-16">
-        {/* Notices */}
-        <section id="notices">
-          <SectionTitle>Special notices</SectionTitle>
-          {notices.length > 0 ? (
-            <div className="space-y-3">
-              {notices.map((n) => (
-                <div
-                  key={n.id}
-                  className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/5 dark:bg-ink-850"
-                >
-                  <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-violet-100 text-violet-600">
-                    <Icon name="notices" />
-                  </span>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-slate-900 dark:text-white">{n.title}</span>
-                      {n.pinned && (
-                        <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-medium text-brand-700">
-                          PINNED
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">{n.body}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <Empty>No notices right now.</Empty>
-          )}
-        </section>
-
         {/* Events */}
         <section id="events">
           <SectionTitle>Recent events</SectionTitle>
@@ -201,7 +206,7 @@ export default function TenantLanding() {
           </div>
         </section>
 
-        {/* Videos */}
+        {/* Videos / Lessons */}
         <section id="videos">
           <SectionTitle>Video lessons</SectionTitle>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -228,6 +233,38 @@ export default function TenantLanding() {
             ))}
             {videos.length === 0 && <Empty>No public videos.</Empty>}
           </div>
+        </section>
+
+        {/* Notices */}
+        <section id="notices">
+          <SectionTitle>Special notices</SectionTitle>
+          {notices.length > 0 ? (
+            <div className="space-y-3">
+              {notices.map((n) => (
+                <div
+                  key={n.id}
+                  className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/5 dark:bg-ink-850"
+                >
+                  <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-violet-100 text-violet-600">
+                    <Icon name="notices" />
+                  </span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-slate-900 dark:text-white">{n.title}</span>
+                      {n.pinned && (
+                        <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-medium text-brand-700">
+                          PINNED
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">{n.body}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <Empty>No notices right now.</Empty>
+          )}
         </section>
       </main>
 

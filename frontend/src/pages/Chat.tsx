@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useTenantApi } from '../hooks/useTenantApi';
 import { useAuth } from '../context/AuthContext';
 import { apiErrorMessage } from '../api/client';
-import { Button, Spinner } from '../components/ui';
+import { Button, Modal, Spinner } from '../components/ui';
 import { Icon } from '../components/icons';
 import { PageHeader } from '../components/tenant/TenantUi';
 import type { ChatContact, ChatConversation, ChatMessage, ChatPeerClass } from '../api/types';
@@ -191,6 +191,13 @@ export default function Chat() {
     setSendError('');
   };
 
+  const clearActiveConversation = () => {
+    const next = new URLSearchParams(params);
+    next.delete('c');
+    setParams(next, { replace: true });
+    setSendError('');
+  };
+
   const onSend = () => {
     const body = draft.trim();
     if (!body || !activeId || sendMutation.isPending) return;
@@ -225,8 +232,12 @@ export default function Chat() {
       )}
 
       <div className="grid min-h-[520px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/5 dark:bg-ink-850 lg:grid-cols-[300px_1fr]">
-        {/* Conversation list */}
-        <aside className="border-b border-slate-100 dark:border-white/5 lg:border-b-0 lg:border-r">
+        {/* Conversation list — mobile: only when no thread selected */}
+        <aside
+          className={`border-b border-slate-100 dark:border-white/5 lg:block lg:border-b-0 lg:border-r ${
+            activeId ? 'hidden' : 'block'
+          }`}
+        >
           <div className="space-y-2 border-b border-slate-100 px-4 py-3 dark:border-white/5">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Conversations</p>
             {listFilterOptions.length > 0 && (
@@ -256,7 +267,7 @@ export default function Chat() {
                 : 'No conversations in this class.'}
             </p>
           ) : (
-            <ul className="max-h-[280px] overflow-y-auto lg:max-h-[calc(520px-88px)]">
+            <ul className="max-h-[calc(520px-88px)] overflow-y-auto">
               {visibleConversations.map((c) => {
                 const selected = c.id === activeId;
                 const classes = classLabel(c.peerClasses);
@@ -309,8 +320,10 @@ export default function Chat() {
           )}
         </aside>
 
-        {/* Thread */}
-        <section className="flex min-h-[360px] flex-col">
+        {/* Thread — mobile: only when a conversation is active */}
+        <section
+          className={`min-h-[360px] flex-col lg:flex ${activeId ? 'flex' : 'hidden'}`}
+        >
           {!activeId ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
               <span className="grid h-12 w-12 place-items-center rounded-2xl bg-sky-100 text-sky-600">
@@ -325,6 +338,15 @@ export default function Chat() {
           ) : (
             <>
               <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3 dark:border-white/5">
+                <button
+                  type="button"
+                  onClick={clearActiveConversation}
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 lg:hidden dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
+                  aria-label="Back to conversations"
+                >
+                  <Icon name="chevron" width={14} height={14} className="rotate-180" />
+                  Back
+                </button>
                 <span className="grid h-9 w-9 place-items-center rounded-full bg-sky-100 text-xs font-bold text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
                   {initials(active?.peer.name ?? '?')}
                 </span>
@@ -411,87 +433,70 @@ export default function Chat() {
         </section>
       </div>
 
-      {/* New chat modal */}
-      {showNew && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-800">
-            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-white/10">
-              <div>
-                <h2 className="font-bold text-slate-900 dark:text-white">New chat</h2>
-                <p className="text-xs text-slate-500">
-                  {isStudent ? 'Choose a teacher to message' : 'Choose a student to message'}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowNew(false);
-                  setClassFilter('');
-                  setContactQ('');
-                }}
-                className="rounded-lg px-2 py-1 text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10"
-              >
-                Close
-              </button>
-            </div>
-            <div className="p-4">
-              {(isStudent || isStaff) && (
-                <select
-                  className="mb-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand-400 dark:border-white/10 dark:bg-white/5 dark:text-white"
-                  value={classFilter}
-                  onChange={(e) => setClassFilter(e.target.value)}
-                  aria-label="Filter by class"
-                >
-                  <option value="">{isStudent ? 'All my classes' : 'All classes'}</option>
-                  {filterClasses.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.title}
-                    </option>
-                  ))}
-                </select>
-              )}
-              <input
-                className="mb-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand-400 dark:border-white/10 dark:bg-white/5 dark:text-white"
-                placeholder="Search by name or email…"
-                value={contactQ}
-                onChange={(e) => setContactQ(e.target.value)}
-              />
-              {contactsQuery.isLoading ? (
-                <div className="flex justify-center py-8">
-                  <Spinner />
-                </div>
-              ) : !(contactsQuery.data?.contacts.length) ? (
-                <p className="py-8 text-center text-sm text-slate-400">No contacts found.</p>
-              ) : (
-                <ul className="max-h-72 space-y-1 overflow-y-auto">
-                  {contactsQuery.data.contacts.map((c) => (
-                    <li key={c.id}>
-                      <button
-                        type="button"
-                        disabled={startMutation.isPending}
-                        onClick={() => startMutation.mutate(c.id)}
-                        className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-slate-50 dark:hover:bg-white/5"
-                      >
-                        <span className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-xs font-bold text-slate-600 dark:bg-white/10 dark:text-slate-300">
-                          {initials(c.name)}
-                        </span>
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">
-                            {c.name}
-                          </p>
-                          <p className="truncate text-xs text-slate-400">
-                            {c.subtitle ?? c.email}
-                          </p>
-                        </div>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+      <Modal
+        open={showNew}
+        onClose={() => {
+          setShowNew(false);
+          setClassFilter('');
+          setContactQ('');
+        }}
+        title="New chat"
+      >
+        <p className="-mt-2 mb-3 text-xs text-slate-500">
+          {isStudent ? 'Choose a teacher to message' : 'Choose a student to message'}
+        </p>
+        {(isStudent || isStaff) && (
+          <select
+            className="mb-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand-400 dark:border-white/10 dark:bg-white/5 dark:text-white"
+            value={classFilter}
+            onChange={(e) => setClassFilter(e.target.value)}
+            aria-label="Filter by class"
+          >
+            <option value="">{isStudent ? 'All my classes' : 'All classes'}</option>
+            {filterClasses.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.title}
+              </option>
+            ))}
+          </select>
+        )}
+        <input
+          className="mb-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand-400 dark:border-white/10 dark:bg-white/5 dark:text-white"
+          placeholder="Search by name or email…"
+          value={contactQ}
+          onChange={(e) => setContactQ(e.target.value)}
+        />
+        {contactsQuery.isLoading ? (
+          <div className="flex justify-center py-8">
+            <Spinner />
           </div>
-        </div>
-      )}
+        ) : !(contactsQuery.data?.contacts.length) ? (
+          <p className="py-8 text-center text-sm text-slate-400">No contacts found.</p>
+        ) : (
+          <ul className="max-h-72 space-y-1 overflow-y-auto">
+            {contactsQuery.data.contacts.map((c) => (
+              <li key={c.id}>
+                <button
+                  type="button"
+                  disabled={startMutation.isPending}
+                  onClick={() => startMutation.mutate(c.id)}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-slate-50 dark:hover:bg-white/5"
+                >
+                  <span className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-xs font-bold text-slate-600 dark:bg-white/10 dark:text-slate-300">
+                    {initials(c.name)}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">
+                      {c.name}
+                    </p>
+                    <p className="truncate text-xs text-slate-400">{c.subtitle ?? c.email}</p>
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Modal>
     </div>
   );
 }

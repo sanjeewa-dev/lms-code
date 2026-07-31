@@ -33,6 +33,7 @@ const TENANT_MODELS = new Set<string>([
   'Attendance',
   'Notification',
   'StudentInvite',
+  'AdminInvite',
   'AiUsage',
   'AiToolHistory',
   'Intervention',

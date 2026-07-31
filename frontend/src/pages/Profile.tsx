@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTenantApi } from '../hooks/useTenantApi';
 import { Badge, Button, Card, Input, Select, Spinner } from '../components/ui';
 import { Icon } from '../components/icons';
-import { PasswordRequirements } from '../components/PasswordRequirements';
+import { PasswordRequirements, passwordMismatchError } from '../components/PasswordRequirements';
 import { validatePassword } from '../lib/passwordValidation';
 import { PageHeader } from '../components/tenant/TenantUi';
 import { SRI_LANKAN_DISTRICTS } from '../lib/districts';
@@ -173,8 +173,16 @@ export default function Profile() {
                   <h2 className="text-xl font-bold">{form.name || 'Your account'}</h2>
                   <p className="text-sm text-white/80">{form.email}</p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {profile && <Badge tone="slate">{profile.role}</Badge>}
-                    {profile?.tenantName && <Badge tone="blue">{profile.tenantName}</Badge>}
+                    {profile && (
+                      <Badge tone="slate" onGradient>
+                        {profile.role}
+                      </Badge>
+                    )}
+                    {profile?.tenantName && (
+                      <Badge tone="blue" onGradient>
+                        {profile.tenantName}
+                      </Badge>
+                    )}
                   </div>
                 </div>
               </div>
@@ -257,10 +265,26 @@ export default function Profile() {
               <Input label="Current password" type="password" value={pwd.current} onChange={(e) => setPwd({ ...pwd, current: e.target.value })} required />
               <Input label="New password" type="password" value={pwd.next} onChange={(e) => setPwd({ ...pwd, next: e.target.value })} required />
               <PasswordRequirements password={pwd.next} />
-              <Input label="Confirm new password" type="password" value={pwd.confirm} onChange={(e) => setPwd({ ...pwd, confirm: e.target.value })} required />
+              <Input
+                label="Confirm new password"
+                type="password"
+                value={pwd.confirm}
+                onChange={(e) => setPwd({ ...pwd, confirm: e.target.value })}
+                required
+                error={passwordMismatchError(pwd.next, pwd.confirm)}
+              />
               {pwdError && <p className="text-sm text-red-600">{pwdError}</p>}
               {pwdSuccess && <p className="text-sm text-emerald-600">{pwdSuccess}</p>}
-              <Button type="submit" disabled={passwordMutation.isPending || !pwd.current || !pwd.next}>
+              <Button
+                type="submit"
+                disabled={
+                  passwordMutation.isPending ||
+                  !pwd.current ||
+                  !pwd.next ||
+                  !pwd.confirm ||
+                  Boolean(validatePassword(pwd.next))
+                }
+              >
                 {passwordMutation.isPending ? 'Updating...' : 'Update password'}
               </Button>
             </form>

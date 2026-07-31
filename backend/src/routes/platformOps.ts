@@ -440,7 +440,7 @@ router.get(
       }),
       basePrisma.user.findMany({
         where: { tenantId: tenant.id, role: 'admin' },
-        select: { id: true, name: true, email: true, createdAt: true },
+        select: { id: true, name: true, email: true, createdAt: true, passwordHash: true },
       }),
       basePrisma.class.findMany({
         where: { tenantId: tenant.id },
@@ -524,7 +524,10 @@ router.get(
         atRiskCount: atRisk.length,
         forMonth,
       },
-      admins,
+      admins: admins.map(({ passwordHash, ...a }) => ({
+        ...a,
+        invitePending: !passwordHash,
+      })),
       classes: classHealth,
       students: studentRows,
       teachers: teacherRows,

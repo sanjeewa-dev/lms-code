@@ -5,6 +5,8 @@ import { useTenantApi } from '../hooks/useTenantApi';
 import { Button, Card, Spinner } from '../components/ui';
 import type { AttemptStart } from '../api/types';
 
+const LEAVE_MSG = 'You have quiz answers that are not submitted. Leave anyway?';
+
 export default function QuizRunner() {
   const { quizId, slug } = useParams<{ quizId: string; slug: string }>();
   const navigate = useNavigate();
@@ -18,6 +20,8 @@ export default function QuizRunner() {
   const submittedRef = useRef(false);
   /** Only auto-submit when the timer counted down during this session. */
   const timerArmedRef = useRef(false);
+  const answersRef = useRef(answers);
+  answersRef.current = answers;
 
   useEffect(() => {
     let active = true;
@@ -33,7 +37,6 @@ export default function QuizRunner() {
           if (left > 0) {
             timerArmedRef.current = true;
           } else {
-            // Time already over from a previous visit — do not silently auto-submit.
             setExpiredOnLoad(true);
           }
         }
@@ -46,6 +49,34 @@ export default function QuizRunner() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quizId]);
+
+  const isDirty = () => Object.keys(answersRef.current).length > 0 && !submittedRef.current;
+
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!isDirty()) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    const onDocClick = (e: MouseEvent) => {
+      if (!isDirty()) return;
+      const el = (e.target as HTMLElement | null)?.closest?.('a[href]');
+      if (!el) return;
+      const href = el.getAttribute('href');
+      if (!href || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:')) return;
+      if (href.startsWith('http') && !href.includes(window.location.host)) return;
+      if (!window.confirm(LEAVE_MSG)) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    document.addEventListener('click', onDocClick, true);
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      document.removeEventListener('click', onDocClick, true);
+    };
+  }, []);
 
   const submit = useMemo(
     () => async () => {
@@ -83,6 +114,12 @@ export default function QuizRunner() {
     return () => clearTimeout(id);
   }, [remaining, submit, expiredOnLoad]);
 
+  function safeGoBack() {
+    if (isDirty() && !window.confirm(LEAVE_MSG)) return;
+    submittedRef.current = true;
+    navigate(-1);
+  }
+
   if (error && !data) return <Card className="text-red-600">{error}</Card>;
   if (!data) return <Spinner label="Starting quiz..." />;
 
@@ -104,7 +141,7 @@ export default function QuizRunner() {
           <Button onClick={submit} disabled={submitting}>
             {submitting ? 'Submitting...' : 'Submit as incomplete'}
           </Button>
-          <Button variant="secondary" onClick={() => navigate(-1)}>
+          <Button variant="secondary" onClick={safeGoBack}>
             Go back
           </Button>
         </div>
@@ -114,7 +151,8 @@ export default function QuizRunner() {
 
   return (
     <div className="space-y-4">
-      <div className="sticky top-0 z-10 flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-ink-850">
+      {/* top-16 clears TenantLayout sticky header (~64px) */}
+      <div className="sticky top-16 z-10 flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-ink-850">
         <div>
           <h1 className="text-lg font-bold text-slate-900 dark:text-white">{data.quiz.title}</h1>
           <p className="text-xs text-slate-500 dark:text-slate-400">

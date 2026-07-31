@@ -8,7 +8,7 @@ import { Icon } from '../icons';
 import type { Material } from '../../api/types';
 
 const inputCls =
-  'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100';
+  'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:focus:ring-brand-900/40';
 
 export function MaterialsTab({ classId, canManage }: { classId: string; canManage: boolean }) {
   const t = useTenantApi();
@@ -182,13 +182,23 @@ export function MaterialsTab({ classId, canManage }: { classId: string; canManag
                   )}
                   {canManage && (
                     <>
-                      <button onClick={() => startEdit(m)} className="icon-btn text-brand-600" title="Edit">
+                      <button
+                        type="button"
+                        onClick={() => startEdit(m)}
+                        className="icon-btn text-brand-600"
+                        title="Edit"
+                        aria-label="Edit material"
+                      >
                         <Icon name="note" width={16} height={16} />
                       </button>
                       <button
-                        onClick={() => { if (window.confirm('Delete this material?')) deleteMutation.mutate(m.id); }}
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm('Delete this material?')) deleteMutation.mutate(m.id);
+                        }}
                         className="icon-btn text-red-500 hover:text-red-700"
                         title="Delete"
+                        aria-label="Delete material"
                       >
                         <Icon name="trash" width={16} height={16} />
                       </button>

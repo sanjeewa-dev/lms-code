@@ -58,7 +58,13 @@ export function AdminStatCard({
       </span>
     </div>
   );
-  return to ? <Link to={to}>{body}</Link> : body;
+  return to ? (
+    <Link to={to} className="block self-start">
+      {body}
+    </Link>
+  ) : (
+    body
+  );
 }
 
 export function PageHeading({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {

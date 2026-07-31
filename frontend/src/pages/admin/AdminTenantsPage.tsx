@@ -3,9 +3,8 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorMessage } from '../../api/client';
 import { Badge, Button, Card, Input, Spinner } from '../../components/ui';
-import { PasswordRequirements } from '../../components/PasswordRequirements';
-import { validatePassword } from '../../lib/passwordValidation';
 import { PageHeading } from '../../components/admin/AdminUi';
+import { showToast } from '../../components/AppToast';
 import type { TenantSummary } from '../../api/types';
 
 export default function AdminTenantsPage() {
@@ -14,9 +13,7 @@ export default function AdminTenantsPage() {
   const [error, setError] = useState('');
   const [form, setForm] = useState({
     name: '',
-    adminName: '',
     adminEmail: '',
-    adminPassword: '',
   });
 
   const tenantsQuery = useQuery({
@@ -25,23 +22,24 @@ export default function AdminTenantsPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async () => {
-      const pwdErr = validatePassword(form.adminPassword);
-      if (pwdErr) throw new Error(pwdErr);
-      return (
-        await api.post('/admin/tenants', {
-          name: form.name,
-          admin: { name: form.adminName, email: form.adminEmail, password: form.adminPassword },
+    mutationFn: async () =>
+      (
+        await api.post<{ tenant: TenantSummary; invited?: boolean }>('/admin/tenants', {
+          name: form.name.trim(),
+          admin: { email: form.adminEmail.trim() },
         })
-      ).data;
-    },
+      ).data,
     onSuccess: () => {
       setShowForm(false);
-      setForm({ name: '', adminName: '', adminEmail: '', adminPassword: '' });
+      setForm({ name: '', adminEmail: '' });
       setError('');
+      showToast('Institute created. Invite email sent to the admin.');
       queryClient.invalidateQueries({ queryKey: ['admin-tenants'] });
     },
-    onError: (err) => setError(apiErrorMessage(err)),
+    onError: (err) => {
+      setError(apiErrorMessage(err));
+      showToast(apiErrorMessage(err), 'error');
+    },
   });
 
   const toggleMutation = useMutation({
@@ -60,7 +58,13 @@ export default function AdminTenantsPage() {
 
       {showForm && (
         <Card>
-          <h2 className="mb-3 text-lg font-semibold text-slate-900 dark:text-white">Create institute + first admin</h2>
+          <h2 className="mb-3 text-lg font-semibold text-slate-900 dark:text-white">
+            Create institute
+          </h2>
+          <p className="mb-3 text-sm text-slate-500">
+            Enter the first admin&apos;s email. They&apos;ll receive an invite to set their name and
+            password.
+          </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <Input
@@ -72,29 +76,24 @@ export default function AdminTenantsPage() {
                 URL slug is generated automatically from the institute name.
               </p>
             </div>
-            <Input label="Admin name" value={form.adminName} onChange={(e) => setForm({ ...form, adminName: e.target.value })} />
-            <Input
-              label="Admin email"
-              type="email"
-              value={form.adminEmail}
-              onChange={(e) => setForm({ ...form, adminEmail: e.target.value })}
-            />
-            <Input
-              label="Admin password"
-              type="password"
-              placeholder="Create a strong password"
-              value={form.adminPassword}
-              onChange={(e) => setForm({ ...form, adminPassword: e.target.value })}
-            />
-            {form.adminPassword && <PasswordRequirements password={form.adminPassword} />}
+            <div className="sm:col-span-2">
+              <Input
+                label="Admin email"
+                type="email"
+                value={form.adminEmail}
+                onChange={(e) => setForm({ ...form, adminEmail: e.target.value })}
+                placeholder="admin@institute.com"
+                autoComplete="off"
+              />
+            </div>
           </div>
           {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
           <Button
             className="mt-3"
             onClick={() => createMutation.mutate()}
-            disabled={createMutation.isPending || !form.name || !form.adminEmail || !form.adminName || !form.adminPassword}
+            disabled={createMutation.isPending || !form.name.trim() || !form.adminEmail.trim()}
           >
-            {createMutation.isPending ? 'Creating...' : 'Create institute'}
+            {createMutation.isPending ? 'Creating…' : 'Create institute & send invite'}
           </Button>
         </Card>
       )}
