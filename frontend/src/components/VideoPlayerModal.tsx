@@ -103,11 +103,13 @@ export function VideoLessonCard({
   video,
   canManage,
   onPlay,
+  onEdit,
   onDelete,
 }: {
   video: VideoLesson;
   canManage: boolean;
   onPlay: () => void;
+  onEdit?: () => void;
   onDelete: () => void;
 }) {
   const providerLabel =
@@ -139,6 +141,15 @@ export function VideoLessonCard({
         </div>
         {video.class?.title && <p className="text-xs text-slate-400">{video.class.title}</p>}
         {video.batch?.name && <p className="text-xs text-slate-400">{video.batch.name}</p>}
+        {video.topic?.title && (
+          <p className="mt-1 text-xs font-medium text-brand-600 dark:text-brand-400">
+            Playlist: {video.topic.title}
+            {video.playlistOrder ? ` · #${video.playlistOrder}` : ''}
+          </p>
+        )}
+        {!video.topic?.title && video.playlistOrder ? (
+          <p className="mt-1 text-xs font-medium text-brand-600 dark:text-brand-400">Order #{video.playlistOrder}</p>
+        ) : null}
         {video.description && (
           <p className="mt-2 line-clamp-2 text-sm text-slate-500">{video.description}</p>
         )}
@@ -151,6 +162,11 @@ export function VideoLessonCard({
             <Icon name="play" width={14} height={14} />
             Watch lesson
           </button>
+          {canManage && onEdit && (
+            <button type="button" onClick={onEdit} className="text-xs font-medium text-brand-600 hover:underline">
+              Edit
+            </button>
+          )}
           {canManage && (
             <button
               type="button"

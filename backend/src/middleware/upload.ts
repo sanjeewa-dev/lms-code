@@ -37,6 +37,9 @@ export const uploadSubmission = makeUploader([...IMAGE_TYPES, ...DOC_TYPES]).sin
 // Class cover image.
 export const uploadCover = makeUploader(IMAGE_TYPES).single('cover');
 
+// Institute logo.
+export const uploadLogo = makeUploader(IMAGE_TYPES).single('logo');
+
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'];
 
 // Uploaded lesson videos (stored on platform, streamed to students).

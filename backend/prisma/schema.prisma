@@ -62,6 +62,7 @@ enum FileKind {
   cover
   avatar
   video
+  logo
 }
 
 enum VideoProvider {
@@ -78,6 +79,11 @@ enum VideoVisibility {
 }
 
 enum NoticeScope {
+  all
+  classes
+}
+
+enum EventScope {
   all
   classes
 }
@@ -153,6 +159,7 @@ model Tenant {
   files        File[]
   batches      Batch[]
   videoLessons VideoLesson[]
+  classTopics  ClassTopic[]
   notices      Notice[]
   events       Event[]
   studentInvites StudentInvite[]
@@ -295,8 +302,10 @@ model Class {
   submissions  Submission[]
   quizzes      Quiz[]
   videoLessons VideoLesson[]
+  topics       ClassTopic[]
   studentInvites StudentInvite[]
   noticeClasses  NoticeClass[]
+  eventClasses   EventClass[]
   schedules      ClassSchedule[]
   attendances    Attendance[]
   aiUsages       AiUsage[]
@@ -669,6 +678,23 @@ model ParentToken {
   @@index([token])
 }
 
+model ClassTopic {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  classId   String
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  title     String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  videos VideoLesson[]
+
+  @@index([tenantId])
+  @@index([classId])
+  @@unique([classId, title])
+}
+
 model VideoLesson {
   id          String          @id @default(cuid())
   tenantId    String
@@ -684,9 +710,14 @@ model VideoLesson {
   class       Class?          @relation(fields: [classId], references: [id])
   batchId     String?
   batch       Batch?          @relation(fields: [batchId], references: [id])
+  topicId     String?
+  topic       ClassTopic?     @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  playlistOrder Int           @default(0)
   createdAt   DateTime        @default(now())
 
   @@index([tenantId])
+  @@index([topicId])
+  @@index([classId, playlistOrder])
 }
 
 model Notice {
@@ -729,16 +760,31 @@ model NoticeRead {
 }
 
 model Event {
-  id         String   @id @default(cuid())
+  id         String     @id @default(cuid())
   tenantId   String
-  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   title      String
-  body       String   @default("")
+  body       String     @default("")
   eventDate  DateTime
   batchLabel String?
-  createdAt  DateTime @default(now())
+  scope      EventScope @default(all)
+  isActive   Boolean    @default(true)
+  createdAt  DateTime   @default(now())
+
+  classes EventClass[]
 
   @@index([tenantId])
+}
+
+model EventClass {
+  id      String @id @default(cuid())
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  classId String
+  class   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, classId])
+  @@index([classId])
 }
 
 model AuditLog {

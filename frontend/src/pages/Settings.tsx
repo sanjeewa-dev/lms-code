@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTenantApi } from '../hooks/useTenantApi';
 import { apiErrorMessage } from '../api/client';
@@ -49,6 +49,7 @@ function SectionCard({
 export default function Settings() {
   const t = useTenantApi();
   const queryClient = useQueryClient();
+  const logoInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState<Partial<InstituteSettings>>({});
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -80,6 +81,26 @@ export default function Settings() {
     onError: (err) => setError(apiErrorMessage(err)),
   });
 
+  const logoUploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const body = new FormData();
+      body.append('logo', file);
+      return (await t.post<{ settings: InstituteSettings }>('/settings/logo', body)).data.settings;
+    },
+    onSuccess: (settings) => {
+      setForm(settings);
+      setError('');
+      setSuccess('Logo uploaded.');
+      if (logoInputRef.current) logoInputRef.current.value = '';
+      queryClient.invalidateQueries({ queryKey: ['settings', t.slug] });
+      queryClient.invalidateQueries({ queryKey: ['public', t.slug] });
+    },
+    onError: (err) => {
+      setSuccess('');
+      setError(apiErrorMessage(err));
+    },
+  });
+
   if (query.isLoading) return <Spinner label="Loading settings..." />;
 
   return (
@@ -94,27 +115,55 @@ export default function Settings() {
       <SectionCard title="General" subtitle="Institute name, logo, and contact details">
         <div className="grid gap-3 sm:grid-cols-2">
           <Input label="Institute name" value={form.name ?? ''} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <div className="sm:col-span-2">
-            <Input
-              label="Logo URL"
-              value={form.logoUrl ?? ''}
-              onChange={(e) => setForm({ ...form, logoUrl: e.target.value })}
-              placeholder="https://example.com/logo.png"
-            />
-            <p className="mt-1 text-xs text-slate-500">
-              Use a direct image link (.png, .jpg, .webp, .svg) — not a webpage URL.
-            </p>
+          <div className="sm:col-span-2 space-y-3">
+            <div>
+              <span className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">
+                Upload logo from device
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="block w-full max-w-md text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-brand-700 hover:file:bg-brand-100 dark:text-slate-300 dark:file:bg-brand-900/40 dark:file:text-brand-200"
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={logoUploadMutation.isPending}
+                  onClick={() => {
+                    const file = logoInputRef.current?.files?.[0];
+                    if (!file) {
+                      setError('Please choose a logo image first.');
+                      setSuccess('');
+                      return;
+                    }
+                    logoUploadMutation.mutate(file);
+                  }}
+                >
+                  {logoUploadMutation.isPending ? 'Uploading...' : 'Upload logo'}
+                </Button>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">JPEG, PNG, WebP, or GIF. Applied immediately after upload.</p>
+            </div>
+            <div>
+              <Input
+                label="Or paste logo URL"
+                value={form.logoUrl ?? ''}
+                onChange={(e) => setForm({ ...form, logoUrl: e.target.value })}
+                placeholder="https://example.com/logo.png"
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                Use a direct image link (.png, .jpg, .webp) — not a webpage URL. Saved with “Save settings”.
+              </p>
+            </div>
           </div>
           {(form.logoUrl || form.name) && (
             <div className="sm:col-span-2 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-white/10 dark:bg-white/5">
               <BrandMark name={form.name} logoUrl={form.logoUrl} size="lg" />
               <div>
                 <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Logo preview</p>
-                <p className="text-xs text-slate-500">
-                  {form.logoUrl?.trim()
-                    ? 'If you see a letter, the URL is not a valid direct image link.'
-                    : 'Shown in the sidebar, classes, and public pages'}
-                </p>
+                <p className="text-xs text-slate-500">Shown in the sidebar, classes, and public pages</p>
               </div>
             </div>
           )}

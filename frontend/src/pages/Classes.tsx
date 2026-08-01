@@ -5,7 +5,6 @@ import { useTenantApi } from '../hooks/useTenantApi';
 import { apiErrorMessage } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { Badge, Button, Card, Input, Select, Spinner, Textarea } from '../components/ui';
-import { BrandMark, useInstituteBrand } from '../components/BrandMark';
 import { ClassEditModal } from '../components/class/ClassEditModal';
 import { showToast } from '../components/AppToast';
 import type { Batch, ClassSummary } from '../api/types';
@@ -28,8 +27,6 @@ export default function Classes() {
 
   const canCreate = user?.role === 'teacher' || user?.role === 'admin';
   const isStudent = user?.role === 'student';
-  const brandQuery = useInstituteBrand(slug);
-  const logoUrl = brandQuery.data?.tenant.logoUrl;
 
   const classesQuery = useQuery({
     queryKey: ['classes', slug],
@@ -210,12 +207,11 @@ export default function Classes() {
               }`}
             >
               <Link to={`${base}/classes/${c.id}`} className="flex h-full flex-col p-5">
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start justify-between gap-3 pr-14">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <BrandMark name={c.title} logoUrl={logoUrl} size="sm" />
-                      <h3 className="truncate font-semibold text-slate-900 dark:text-white">{c.title}</h3>
-                    </div>
+                    <h3 className="brand-chip inline-flex max-w-full items-center rounded-xl px-3 py-1.5 text-sm font-extrabold leading-snug">
+                      <span className="truncate">{c.title}</span>
+                    </h3>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       {c.batch && <Badge tone="slate">{c.batch.name}</Badge>}
                       {!c.isPublished && <Badge tone="amber">Inactive</Badge>}

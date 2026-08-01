@@ -27,6 +27,7 @@ const TENANT_MODELS = new Set<string>([
   'File',
   'Batch',
   'VideoLesson',
+  'ClassTopic',
   'Notice',
   'Event',
   'ClassSchedule',

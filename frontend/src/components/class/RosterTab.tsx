@@ -4,6 +4,7 @@ import { api, apiErrorMessage } from '../../api/client';
 import { useTenantApi } from '../../hooks/useTenantApi';
 import { Card, Modal, Spinner } from '../ui';
 import { Icon } from '../icons';
+import { showToast } from '../AppToast';
 import type { EnrollmentStatus, PublicTenant, StudentStatus, TenantUser } from '../../api/types';
 import { downloadIdCard, makeQr, type StudentRow } from '../../lib/studentExports';
 import { SRI_LANKAN_DISTRICTS } from '../../lib/districts';
@@ -15,6 +16,14 @@ interface RosterStudent {
   status: StudentStatus;
   freeIdCard?: boolean;
   createdAt: string;
+  phone?: string | null;
+  phones?: string[];
+  guardianName?: string | null;
+  guardianPhone?: string | null;
+  guardianEmail?: string | null;
+  area?: string | null;
+  district?: string | null;
+  address?: string | null;
 }
 
 interface RosterEntry {
@@ -26,6 +35,14 @@ interface RosterEntry {
 type RosterRow = StudentRow & {
   enrollmentId: string;
   enrollmentStatus: EnrollmentStatus;
+  phone?: string | null;
+  phones?: string[];
+  guardianName?: string | null;
+  guardianPhone?: string | null;
+  guardianEmail?: string | null;
+  area?: string | null;
+  district?: string | null;
+  address?: string | null;
 };
 
 const EMPTY_FORM = {
@@ -44,16 +61,20 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
   const t = useTenantApi();
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [addMode, setAddMode] = useState<'new' | 'existing'>('new');
   const [existingSearch, setExistingSearch] = useState('');
   const [form, setForm] = useState(EMPTY_FORM);
+  const [editForm, setEditForm] = useState({ ...EMPTY_FORM, guardianEmail: '' });
   const [saving, setSaving] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const [editError, setEditError] = useState('');
   const [actionError, setActionError] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selected, setSelected] = useState<StudentRow | null>(null);
   const [qr, setQr] = useState('');
-  const [inviteSuccess, setInviteSuccess] = useState('');
 
   const rosterQuery = useQuery({
     queryKey: ['roster', t.slug, classId],
@@ -84,6 +105,14 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
       status: e.student.status,
       freeIdCard: e.student.freeIdCard,
       createdAt: e.student.createdAt,
+      phone: e.student.phone,
+      phones: e.student.phones,
+      guardianName: e.student.guardianName,
+      guardianPhone: e.student.guardianPhone,
+      guardianEmail: e.student.guardianEmail,
+      area: e.student.area,
+      district: e.student.district,
+      address: e.student.address,
       regId: `#${list.length - i}`,
       grade: classTitle,
       enrollmentId: e.id,
@@ -123,7 +152,6 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
   async function addStudent(e: React.FormEvent) {
     e.preventDefault();
     setFormError('');
-    setInviteSuccess('');
     setSaving(true);
     try {
       const phones = form.phones.map((p) => p.trim()).filter(Boolean);
@@ -142,20 +170,16 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
       if (form.district) payload.district = form.district;
       if (form.address.trim()) payload.address = form.address.trim();
 
-      const res = await t.post<{ invited: boolean; inviteUrl?: string }>(
-        `/classes/${classId}/students`,
-        payload
-      );
+      const res = await t.post<{ invited: boolean }>(`/classes/${classId}/students`, payload);
       await refresh();
       setForm(EMPTY_FORM);
       setModalOpen(false);
       if (res.data.invited) {
-        setInviteSuccess(
-          `Invitation email sent to ${String(payload.email)}. The student must complete registration before they can sign in.` +
-            (res.data.inviteUrl ? ` (Dev link: ${res.data.inviteUrl})` : '')
+        showToast(
+          `Invitation email sent to ${String(payload.email)}. They must complete registration before signing in.`
         );
       } else {
-        setInviteSuccess(`${String(payload.name)} was enrolled and notified by email.`);
+        showToast(`${String(payload.name)} was enrolled and notified by email.`);
       }
     } catch (err) {
       setFormError(apiErrorMessage(err));
@@ -166,7 +190,6 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
 
   async function enrollExisting(student: TenantUser) {
     setFormError('');
-    setInviteSuccess('');
     setSaving(true);
     setBusyId(student.id);
     try {
@@ -177,11 +200,11 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
       await refresh();
       setModalOpen(false);
       if (res.data.pendingRegistration) {
-        setInviteSuccess(
-          `${student.name} was added to this class. They still need to complete registration before they can sign in.`
+        showToast(
+          `${student.name} was added. They still need to complete registration before signing in.`
         );
       } else {
-        setInviteSuccess(`${student.name} was enrolled and notified by email.`);
+        showToast(`${student.name} was enrolled and notified by email.`);
       }
     } catch (err) {
       setFormError(apiErrorMessage(err));
@@ -220,15 +243,73 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
         `/classes/${classId}/students/${row.id}`
       );
       if (data?.accountDeleted) {
-        setInviteSuccess(`${row.name} removed and account deleted (no remaining classes).`);
+        showToast(`${row.name} removed and account deleted (no remaining classes).`);
       } else {
-        setInviteSuccess(`${row.name} removed from this class.`);
+        showToast(`${row.name} removed from this class.`);
       }
       await refresh();
     } catch (err) {
       setActionError(apiErrorMessage(err));
     } finally {
       setBusyId(null);
+    }
+  }
+
+  async function openEdit(row: RosterRow) {
+    setEditingId(row.id);
+    setEditError('');
+    const phones =
+      row.phones && row.phones.length > 0
+        ? row.phones
+        : row.phone
+          ? [row.phone]
+          : [''];
+    setEditForm({
+      name: row.name,
+      email: row.email,
+      phones: phones.length > 0 ? phones : [''],
+      guardianName: row.guardianName ?? '',
+      guardianPhone: row.guardianPhone ?? '',
+      guardianEmail: row.guardianEmail ?? '',
+      area: row.area ?? '',
+      district: row.district ?? '',
+      address: row.address ?? '',
+      freeIdCard: Boolean(row.freeIdCard),
+    });
+    setEditOpen(true);
+  }
+
+  async function saveStudentEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingId) return;
+    setEditSaving(true);
+    setEditError('');
+    try {
+      const phones = editForm.phones.map((p) => p.trim()).filter(Boolean);
+      await t.patch(`/students/${editingId}`, {
+        name: editForm.name.trim(),
+        email: editForm.email.trim(),
+        phones,
+        phone: phones[0] ?? null,
+        guardianName: editForm.guardianName.trim() || null,
+        guardianPhone: editForm.guardianPhone.trim() || null,
+        guardianEmail: editForm.guardianEmail.trim() || null,
+        area: editForm.area.trim() || null,
+        district: editForm.district.trim() || null,
+        address: editForm.address.trim() || null,
+        freeIdCard: editForm.freeIdCard,
+      });
+      setEditOpen(false);
+      setEditingId(null);
+      showToast('Student details updated');
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['roster', t.slug, classId] }),
+        queryClient.invalidateQueries({ queryKey: ['students', t.slug] }),
+      ]);
+    } catch (err) {
+      setEditError(apiErrorMessage(err));
+    } finally {
+      setEditSaving(false);
     }
   }
 
@@ -254,10 +335,6 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
           <span className="text-lg leading-none">+</span> Add Student
         </button>
       </div>
-
-      {inviteSuccess && (
-        <p className="rounded-lg bg-emerald-50 px-4 py-2 text-sm text-emerald-700">{inviteSuccess}</p>
-      )}
 
       {actionError && (
         <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">{actionError}</p>
@@ -306,6 +383,13 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
                     </td>
                     <td className="px-5 py-3">
                       <div className="flex justify-end gap-1.5">
+                        <button
+                          onClick={() => openEdit(r)}
+                          title="Edit student details"
+                          className="grid h-8 w-8 place-items-center rounded-lg bg-slate-700 text-white transition hover:bg-slate-800 dark:bg-slate-600 dark:hover:bg-slate-500"
+                        >
+                          <Icon name="edit" width={16} height={16} />
+                        </button>
                         <button
                           onClick={() => openCard(r)}
                           title="Student ID card"
@@ -622,6 +706,176 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
                 {formError && <p className="mt-3 text-sm text-red-600">{formError}</p>}
               </div>
             )}
+      </Modal>
+
+      <Modal
+        open={editOpen}
+        onClose={() => {
+          if (!editSaving) {
+            setEditOpen(false);
+            setEditingId(null);
+          }
+        }}
+        title="Edit student details"
+        className="max-h-[90vh] overflow-y-auto"
+      >
+        <form onSubmit={saveStudentEdit} className="space-y-3">
+          <Field label="Student name *">
+            <input
+              className={inputCls}
+              value={editForm.name}
+              onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+              required
+            />
+          </Field>
+          <Field label="Email *">
+            <input
+              type="email"
+              className={inputCls}
+              value={editForm.email}
+              onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
+              required
+            />
+          </Field>
+
+          <div className="space-y-2">
+            <span className="block text-xs font-medium text-slate-500 dark:text-slate-400">Telephone</span>
+            {editForm.phones.map((phone, index) => (
+              <div key={index} className="flex gap-2">
+                <input
+                  className={inputCls}
+                  placeholder={`e.g. 0771234567${index === 0 ? ' (primary)' : ''}`}
+                  value={phone}
+                  onChange={(e) =>
+                    setEditForm((f) => {
+                      const phones = [...f.phones];
+                      phones[index] = e.target.value;
+                      return { ...f, phones };
+                    })
+                  }
+                />
+                {editForm.phones.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditForm((f) => ({
+                        ...f,
+                        phones: f.phones.filter((_, i) => i !== index),
+                      }))
+                    }
+                    className="shrink-0 rounded-lg px-3 text-sm text-red-500 hover:bg-red-50"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            ))}
+            {editForm.phones.length < 5 && (
+              <button
+                type="button"
+                onClick={() => setEditForm((f) => ({ ...f, phones: [...f.phones, ''] }))}
+                className="text-sm font-semibold text-brand-600 hover:underline"
+              >
+                + Add another phone no
+              </button>
+            )}
+          </div>
+
+          <Field label="Address">
+            <textarea
+              className={inputCls}
+              rows={2}
+              value={editForm.address}
+              onChange={(e) => setEditForm((f) => ({ ...f, address: e.target.value }))}
+            />
+          </Field>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Area">
+              <input
+                className={inputCls}
+                value={editForm.area}
+                onChange={(e) => setEditForm((f) => ({ ...f, area: e.target.value }))}
+              />
+            </Field>
+            <Field label="District">
+              <select
+                className={inputCls}
+                value={editForm.district}
+                onChange={(e) => setEditForm((f) => ({ ...f, district: e.target.value }))}
+              >
+                <option value="">Select district</option>
+                {SRI_LANKAN_DISTRICTS.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Guardian name">
+              <input
+                className={inputCls}
+                value={editForm.guardianName}
+                onChange={(e) => setEditForm((f) => ({ ...f, guardianName: e.target.value }))}
+              />
+            </Field>
+            <Field label="Guardian phone">
+              <input
+                className={inputCls}
+                value={editForm.guardianPhone}
+                onChange={(e) => setEditForm((f) => ({ ...f, guardianPhone: e.target.value }))}
+              />
+            </Field>
+          </div>
+          <Field label="Guardian email">
+            <input
+              type="email"
+              className={inputCls}
+              value={editForm.guardianEmail}
+              onChange={(e) => setEditForm((f) => ({ ...f, guardianEmail: e.target.value }))}
+              placeholder="parent@email.com"
+            />
+          </Field>
+
+          <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm dark:border-white/10 dark:bg-white/5">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={editForm.freeIdCard}
+              onChange={(e) => setEditForm((f) => ({ ...f, freeIdCard: e.target.checked }))}
+            />
+            <span>
+              <span className="block font-medium text-slate-800 dark:text-slate-100">Offer free student ID card</span>
+              <span className="mt-0.5 block text-xs text-slate-500">Mark this student as eligible for a free identity card.</span>
+            </span>
+          </label>
+
+          {editError && <p className="text-sm text-red-600">{editError}</p>}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              type="button"
+              disabled={editSaving}
+              onClick={() => {
+                setEditOpen(false);
+                setEditingId(null);
+              }}
+              className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={editSaving || !editForm.name.trim() || !editForm.email.trim()}
+              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+            >
+              {editSaving ? 'Saving...' : 'Save changes'}
+            </button>
+          </div>
+        </form>
       </Modal>
 
       <Modal open={Boolean(selected)} onClose={() => setSelected(null)} title="Student ID Card">

@@ -178,7 +178,7 @@ export default function PlatformHome() {
               <p className="mt-1 text-sm text-slate-400">Sign in to your institute workspace</p>
             </div>
 
-            <form onSubmit={onSubmit} className="space-y-4">
+            <form onSubmit={onSubmit} className="space-y-4 [&_label>span]:text-slate-200">
               <Input
                 label="Email"
                 type="email"

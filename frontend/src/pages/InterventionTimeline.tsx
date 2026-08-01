@@ -47,15 +47,21 @@ function StatusBadge({ status }: { status: InterventionStatus }) {
 function CreateInterventionModal({
   onClose,
   onCreated,
+  initialStudentId = '',
+  initialStudentName = '',
+  initialReason = '',
 }: {
   onClose: () => void;
   onCreated: () => void;
+  initialStudentId?: string;
+  initialStudentName?: string;
+  initialReason?: string;
 }) {
   const api = useTenantApi();
-  const [studentSearch, setStudentSearch] = useState('');
-  const [selectedStudentId, setSelectedStudentId] = useState('');
-  const [selectedStudentName, setSelectedStudentName] = useState('');
-  const [reason, setReason] = useState('');
+  const [studentSearch, setStudentSearch] = useState(initialStudentName);
+  const [selectedStudentId, setSelectedStudentId] = useState(initialStudentId);
+  const [selectedStudentName, setSelectedStudentName] = useState(initialStudentName);
+  const [reason, setReason] = useState(initialReason);
   const [action, setAction] = useState('');
   const [followUpDate, setFollowUpDate] = useState('');
   const [err, setErr] = useState('');
@@ -83,6 +89,16 @@ function CreateInterventionModal({
       )
     : allStudents.slice(0, 10);
 
+  useEffect(() => {
+    if (!initialStudentId || !studentsData) return;
+    const list = studentsData.students ?? studentsData.users ?? [];
+    const match = list.find((s) => s.id === initialStudentId);
+    if (!match) return;
+    setSelectedStudentId(match.id);
+    setSelectedStudentName(match.name);
+    setStudentSearch(match.name);
+  }, [initialStudentId, studentsData]);
+
   const mut = useMutation({
     mutationFn: () =>
       api.post('/interventions', {
@@ -104,7 +120,13 @@ function CreateInterventionModal({
             className="mb-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-ink-800 dark:text-white"
             placeholder="Type name or email..."
             value={studentSearch}
-            onChange={(e) => setStudentSearch(e.target.value)}
+            onChange={(e) => {
+              setStudentSearch(e.target.value);
+              if (selectedStudentId) {
+                setSelectedStudentId('');
+                setSelectedStudentName('');
+              }
+            }}
           />
           {!selectedStudentId && filtered.length > 0 && (
             <div className="max-h-36 overflow-y-auto overflow-hidden rounded-xl border border-slate-200 dark:border-white/10">
@@ -151,7 +173,7 @@ function CreateInterventionModal({
           </label>
           <textarea
             className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-ink-800 dark:text-white"
-            rows={2}
+            rows={5}
             placeholder="Why is this student flagged? (low attendance, missing work, etc.)"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
@@ -341,11 +363,14 @@ function InterventionCard({
 export default function InterventionTimeline() {
   const api = useTenantApi();
   const qc = useQueryClient();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const studentIdParam = params.get('studentId') ?? '';
-  const [showCreate, setShowCreate] = useState(false);
+  const studentNameParam = params.get('studentName') ?? '';
+  const reasonParam = params.get('reason') ?? '';
+  const openParam = params.get('open') === '1';
+  const [showCreate, setShowCreate] = useState(openParam || Boolean(studentIdParam && reasonParam));
   const [filterStatus, setFilterStatus] = useState<string>('');
-  const [filterStudent, setFilterStudent] = useState('');
+  const [filterStudent, setFilterStudent] = useState(studentNameParam);
 
   const { data, isLoading } = useQuery<{ interventions: Intervention[] }>({
     queryKey: ['interventions', studentIdParam],
@@ -362,6 +387,24 @@ export default function InterventionTimeline() {
     const name = data.interventions.find((i) => i.student.id === studentIdParam)?.student.name;
     if (name) setFilterStudent(name);
   }, [studentIdParam, data]);
+
+  useEffect(() => {
+    if (openParam || (studentIdParam && reasonParam)) {
+      setShowCreate(true);
+    }
+  }, [openParam, studentIdParam, reasonParam]);
+
+  function closeCreate() {
+    setShowCreate(false);
+    if (openParam || reasonParam || studentNameParam) {
+      const next = new URLSearchParams(params);
+      next.delete('open');
+      next.delete('reason');
+      next.delete('studentName');
+      // keep studentId so the timeline stays filtered to that student
+      setParams(next, { replace: true });
+    }
+  }
 
   const interventions = data?.interventions ?? [];
   const filtered = interventions.filter((i) => {
@@ -454,7 +497,10 @@ export default function InterventionTimeline() {
 
       {showCreate && (
         <CreateInterventionModal
-          onClose={() => setShowCreate(false)}
+          initialStudentId={studentIdParam}
+          initialStudentName={studentNameParam}
+          initialReason={reasonParam}
+          onClose={closeCreate}
           onCreated={() => qc.invalidateQueries({ queryKey: ['interventions'] })}
         />
       )}

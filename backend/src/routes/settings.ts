@@ -3,6 +3,9 @@ import { basePrisma } from '../lib/prisma';
 import { asyncHandler } from '../utils/asyncHandler';
 import { authenticate, requireRole } from '../middleware/auth';
 import { instituteSettingsSchema } from '../validation/schemas';
+import { uploadLogo } from '../middleware/upload';
+import { persistUploadedFile } from '../services/files';
+import { badRequest } from '../utils/httpError';
 
 const router = Router({ mergeParams: true });
 
@@ -108,6 +111,26 @@ router.patch(
             : emptyToNull(data.payhereMerchantSecret as string | null | undefined),
         payhereEnabled: data.payhereEnabled,
       },
+    });
+
+    res.json({ settings: serializeSettings(updated) });
+  })
+);
+
+router.post(
+  '/settings/logo',
+  authenticate,
+  requireRole('admin'),
+  uploadLogo,
+  asyncHandler(async (req, res) => {
+    if (!req.file) throw badRequest('Please choose a logo image (JPEG, PNG, WebP, or GIF)');
+
+    const file = await persistUploadedFile(req.file, req.user!.sub, 'logo');
+    const logoUrl = `/api/t/${req.tenant!.slug}/public/logo/${file.id}`;
+
+    const updated = await basePrisma.tenant.update({
+      where: { id: req.tenant!.id },
+      data: { logoUrl },
     });
 
     res.json({ settings: serializeSettings(updated) });

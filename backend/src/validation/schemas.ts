@@ -51,7 +51,9 @@ export const updateTenantSchema = z.object({
 
 export const instituteSettingsSchema = z.object({
   name: z.string().min(2).max(150).optional(),
-  logoUrl: z.string().url().nullable().optional().or(z.literal('')),
+  logoUrl: z
+    .union([z.string().url(), z.string().startsWith('/api/'), z.literal(''), z.null()])
+    .optional(),
   contactEmail: z.string().email().nullable().optional().or(z.literal('')),
   contactPhone: z.string().max(40).nullable().optional(),
   bankName: z.string().max(120).nullable().optional(),
@@ -206,6 +208,21 @@ export const studentFreeCardSchema = z.object({
   freeIdCard: z.boolean(),
 });
 
+/** Staff update of student contact / guardian details from class roster. */
+export const studentUpdateSchema = z.object({
+  name: z.string().min(2).max(100).optional(),
+  email: z.string().email().optional(),
+  phone: z.string().max(40).optional().nullable(),
+  phones: z.array(z.string().max(40)).max(5).optional(),
+  guardianName: z.string().max(100).optional().nullable(),
+  guardianPhone: z.string().max(40).optional().nullable(),
+  guardianEmail: z.string().email().optional().nullable().or(z.literal('')),
+  area: z.string().max(120).optional().nullable(),
+  district: z.string().max(80).optional().nullable(),
+  address: z.string().max(500).optional().nullable(),
+  freeIdCard: z.coerce.boolean().optional(),
+});
+
 // --- Payments ---
 export const paymentSchema = z.object({
   // Amount is ignored server-side; class.price is authoritative.
@@ -320,6 +337,15 @@ export const videoLessonSchema = z.object({
   visibility: z.enum(['all', 'class', 'batch']).default('all'),
   classId: z.string().optional(),
   batchId: z.string().optional(),
+  topicId: z.string().optional().nullable(),
+  /** Create a new class topic (playlist) and attach this video to it. Requires classId. */
+  newTopicTitle: z.string().min(1).max(150).optional(),
+  playlistOrder: z.coerce.number().int().min(1).optional(),
+});
+
+export const classTopicSchema = z.object({
+  title: z.string().min(1).max(150),
+  sortOrder: z.coerce.number().int().min(0).optional(),
 });
 
 // --- Notices ---
@@ -337,12 +363,20 @@ export const noticeSchema = z
   });
 
 // --- Events ---
-export const eventSchema = z.object({
-  title: z.string().min(1).max(200),
-  body: z.string().max(5000).optional(),
-  eventDate: z.coerce.date(),
-  batchLabel: z.string().max(100).optional(),
-});
+export const eventSchema = z
+  .object({
+    title: z.string().min(1).max(200),
+    body: z.string().max(5000).optional(),
+    eventDate: z.coerce.date(),
+    batchLabel: z.string().max(100).optional().nullable(),
+    scope: z.enum(['all', 'classes']).default('all'),
+    classIds: z.array(z.string()).optional(),
+    isActive: z.coerce.boolean().optional(),
+  })
+  .refine((data) => data.scope !== 'classes' || (data.classIds && data.classIds.length > 0), {
+    message: 'Select at least one class',
+    path: ['classIds'],
+  });
 
 // --- Class schedules ---
 function normalizeClassTime(value: string) {

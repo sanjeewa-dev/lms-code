@@ -215,10 +215,43 @@ router.get(
     }
     const enrollments = await prisma.enrollment.findMany({
       where: { classId: klass.id },
-      include: { student: { select: { id: true, name: true, email: true, status: true, freeIdCard: true, createdAt: true } } },
+      include: {
+        student: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            status: true,
+            freeIdCard: true,
+            createdAt: true,
+            phone: true,
+            phones: true,
+            guardianName: true,
+            guardianPhone: true,
+            guardianEmail: true,
+            area: true,
+            district: true,
+            address: true,
+          },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
-    res.json({ enrollments });
+    res.json({
+      enrollments: enrollments.map((e) => ({
+        ...e,
+        student: {
+          ...e.student,
+          phone: e.student.phones[0] ?? e.student.phone,
+          phones:
+            e.student.phones.length > 0
+              ? e.student.phones
+              : e.student.phone
+                ? [e.student.phone]
+                : [],
+        },
+      })),
+    });
   })
 );
 
@@ -261,7 +294,6 @@ router.post(
           createdAt: result.student.createdAt,
         },
       },
-      ...(process.env.NODE_ENV !== 'production' && result.inviteUrl ? { inviteUrl: result.inviteUrl } : {}),
     });
   })
 );

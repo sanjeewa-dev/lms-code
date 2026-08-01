@@ -88,6 +88,11 @@ export interface TenantUser {
   email: string;
   phone?: string | null;
   phones?: string[];
+  guardianName?: string | null;
+  guardianPhone?: string | null;
+  guardianEmail?: string | null;
+  area?: string | null;
+  district?: string | null;
   address?: string | null;
   freeIdCard?: boolean;
   status?: StudentStatus;
@@ -288,6 +293,16 @@ export interface Batch {
 export type VideoProvider = 'youtube' | 'vimeo' | 'url' | 'upload';
 export type VideoVisibility = 'all' | 'class' | 'batch';
 
+export interface ClassTopic {
+  id: string;
+  classId: string;
+  title: string;
+  sortOrder?: number;
+  videoCount?: number;
+  class?: { id: string; title: string } | null;
+  createdAt?: string;
+}
+
 export interface VideoLesson {
   id: string;
   title: string;
@@ -297,8 +312,11 @@ export interface VideoLesson {
   visibility: VideoVisibility;
   classId?: string | null;
   batchId?: string | null;
+  topicId?: string | null;
+  playlistOrder?: number;
   class?: { title: string } | null;
   batch?: { name: string } | null;
+  topic?: { id: string; title: string; classId: string } | null;
   createdAt: string;
 }
 
@@ -319,6 +337,9 @@ export interface EventItem {
   body: string;
   eventDate: string;
   batchLabel?: string | null;
+  scope?: 'all' | 'classes';
+  isActive?: boolean;
+  classes?: { id: string; title: string }[];
 }
 
 export interface PublicTenant {

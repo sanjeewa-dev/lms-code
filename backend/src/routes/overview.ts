@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { prisma, basePrisma } from '../lib/prisma';
 import { asyncHandler } from '../utils/asyncHandler';
 import { authenticate, requireRole } from '../middleware/auth';
-import { teacherCreateSchema, teacherUpdateSchema, studentFreeCardSchema } from '../validation/schemas';
+import { teacherCreateSchema, teacherUpdateSchema, studentFreeCardSchema, studentUpdateSchema } from '../validation/schemas';
 import { badRequest, conflict, notFound } from '../utils/httpError';
 
 const router = Router({ mergeParams: true });
@@ -288,6 +288,7 @@ router.get(
         phones: true,
         guardianName: true,
         guardianPhone: true,
+        guardianEmail: true,
         area: true,
         district: true,
         address: true,
@@ -344,6 +345,87 @@ router.patch(
       select: { id: true, name: true, email: true, status: true, createdAt: true },
     });
     res.json({ student: updated });
+  })
+);
+
+// Update student details (from class roster / directory).
+router.patch(
+  '/students/:id',
+  ...staff,
+  asyncHandler(async (req, res) => {
+    const tenantId = req.tenant!.id;
+    const student = await basePrisma.user.findFirst({
+      where: { id: req.params.id, tenantId, role: 'student' },
+    });
+    if (!student) throw notFound('Student not found');
+
+    const data = studentUpdateSchema.parse(req.body);
+
+    if (data.email && data.email !== student.email) {
+      const clash = await basePrisma.user.findFirst({
+        where: { tenantId, email: data.email, id: { not: student.id } },
+      });
+      if (clash) throw conflict('A user with that email already exists in this institute');
+    }
+
+    const phones =
+      data.phones !== undefined
+        ? data.phones.map((p) => p.trim()).filter(Boolean)
+        : undefined;
+    const primaryPhone =
+      phones !== undefined
+        ? phones[0] ?? null
+        : data.phone !== undefined
+          ? data.phone?.trim() || null
+          : undefined;
+
+    const updated = await basePrisma.user.update({
+      where: { id: student.id },
+      data: {
+        name: data.name,
+        email: data.email,
+        phone: primaryPhone,
+        phones: phones,
+        guardianName:
+          data.guardianName !== undefined ? data.guardianName?.trim() || null : undefined,
+        guardianPhone:
+          data.guardianPhone !== undefined ? data.guardianPhone?.trim() || null : undefined,
+        guardianEmail:
+          data.guardianEmail !== undefined
+            ? data.guardianEmail === '' || data.guardianEmail === null
+              ? null
+              : data.guardianEmail.trim()
+            : undefined,
+        area: data.area !== undefined ? data.area?.trim() || null : undefined,
+        district: data.district !== undefined ? data.district?.trim() || null : undefined,
+        address: data.address !== undefined ? data.address?.trim() || null : undefined,
+        freeIdCard: data.freeIdCard,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        phones: true,
+        guardianName: true,
+        guardianPhone: true,
+        guardianEmail: true,
+        area: true,
+        district: true,
+        address: true,
+        freeIdCard: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+
+    res.json({
+      student: {
+        ...updated,
+        phone: updated.phones[0] ?? updated.phone,
+        phones: updated.phones.length > 0 ? updated.phones : updated.phone ? [updated.phone] : [],
+      },
+    });
   })
 );
 

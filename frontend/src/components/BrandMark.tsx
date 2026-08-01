@@ -59,12 +59,12 @@ export function BrandMark({
 
   return (
     <span
-      className={`inline-flex shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-white/10 ${dims} ${className}`}
+      className={`inline-flex shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-slate-100 ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-white/10 ${dims} ${className}`}
     >
       <img
         src={trimmedUrl}
         alt={label}
-        className="h-full w-full object-contain p-0.5"
+        className="h-full w-full object-cover"
         onError={() => setFailed(true)}
       />
     </span>

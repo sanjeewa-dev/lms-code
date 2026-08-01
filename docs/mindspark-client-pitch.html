@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mindspark LMS — Client Pitch</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --brand: #2563eb;
+      --brand-dark: #1d4ed8;
+      --ink: #0f172a;
+      --ink-soft: #1e293b;
+      --slate: #64748b;
+      --line: rgba(148, 163, 184, 0.25);
+      --surface: #ffffff;
+      --muted: #f1f5f9;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      font-family: Outfit, system-ui, sans-serif;
+      background: #020617;
+      color: var(--ink);
+      overflow: hidden;
+    }
+
+    .deck {
+      height: 100%;
+      width: 100%;
+      position: relative;
+    }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: none;
+      padding: clamp(2rem, 5vw, 4.5rem);
+      background: var(--surface);
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .slide.active { display: flex; }
+
+    .slide.dark {
+      background: linear-gradient(145deg, #0b1120 0%, #0f172a 50%, #172554 100%);
+      color: #f8fafc;
+    }
+
+    .eyebrow {
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--brand);
+      margin-bottom: 1rem;
+    }
+
+    .slide.dark .eyebrow { color: #93c5fd; }
+
+    h1 {
+      font-size: clamp(2.4rem, 5.5vw, 4.2rem);
+      font-weight: 800;
+      line-height: 1.08;
+      letter-spacing: -0.03em;
+      max-width: 16ch;
+    }
+
+    h2 {
+      font-size: clamp(1.8rem, 3.8vw, 2.75rem);
+      font-weight: 750;
+      letter-spacing: -0.025em;
+      line-height: 1.15;
+      margin-bottom: 0.75rem;
+      max-width: 22ch;
+    }
+
+    .lede {
+      font-size: clamp(1.05rem, 1.8vw, 1.35rem);
+      line-height: 1.55;
+      color: var(--slate);
+      max-width: 42rem;
+      margin-top: 1rem;
+      font-weight: 450;
+    }
+
+    .slide.dark .lede { color: #94a3b8; }
+
+    .tagline {
+      margin-top: 1.25rem;
+      font-size: 1.15rem;
+      font-weight: 500;
+      color: #93c5fd;
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      margin-bottom: 2rem;
+    }
+
+    .brand-mark {
+      width: 3.25rem;
+      height: 3.25rem;
+      border-radius: 0.85rem;
+      overflow: hidden;
+      flex-shrink: 0;
+      background: #fff;
+      display: grid;
+      place-items: center;
+    }
+
+    .brand-mark img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .brand-name {
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .chrome-logo {
+      width: 1.35rem;
+      height: 1.35rem;
+      border-radius: 0.3rem;
+      object-fit: contain;
+      background: #fff;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+      margin-top: 2rem;
+      max-width: 56rem;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      margin-top: 2rem;
+      max-width: 64rem;
+    }
+
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.9rem;
+      margin-top: 2rem;
+      max-width: 68rem;
+    }
+
+    @media (max-width: 900px) {
+      .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 1rem;
+      padding: 1.25rem 1.35rem;
+      background: var(--muted);
+    }
+
+    .slide.dark .card {
+      background: rgba(255, 255, 255, 0.04);
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .card h3 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 0.4rem;
+      letter-spacing: -0.01em;
+    }
+
+    .card p, .card li {
+      font-size: 0.95rem;
+      line-height: 1.5;
+      color: var(--slate);
+    }
+
+    .slide.dark .card p,
+    .slide.dark .card li { color: #94a3b8; }
+
+    .card ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .card li::before {
+      content: "";
+      display: inline-block;
+      width: 0.4rem;
+      height: 0.4rem;
+      border-radius: 50%;
+      background: var(--brand);
+      margin-right: 0.55rem;
+      vertical-align: middle;
+    }
+
+    .role {
+      border-left: 3px solid var(--brand);
+      padding-left: 1rem;
+    }
+
+    .role strong {
+      display: block;
+      font-size: 1rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .role span {
+      font-size: 0.9rem;
+      color: var(--slate);
+      line-height: 1.45;
+    }
+
+    .feature-list {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem 2rem;
+      margin-top: 1.75rem;
+      max-width: 48rem;
+    }
+
+    .feature-list li {
+      list-style: none;
+      font-size: 1.05rem;
+      font-weight: 500;
+      padding: 0.55rem 0;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+    }
+
+    .feature-list li::before {
+      content: "";
+      width: 0.5rem;
+      height: 0.5rem;
+      border-radius: 2px;
+      background: var(--brand);
+      flex-shrink: 0;
+    }
+
+    .cta-box {
+      margin-top: 2rem;
+      padding: 1.5rem 1.75rem;
+      border-radius: 1rem;
+      background: rgba(37, 99, 235, 0.12);
+      border: 1px solid rgba(37, 99, 235, 0.25);
+      max-width: 36rem;
+    }
+
+    .cta-box p {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #dbeafe;
+      margin-bottom: 0.5rem;
+    }
+
+    .cta-box span {
+      color: #94a3b8;
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+
+    .chrome {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.85rem 1.25rem;
+      background: rgba(2, 6, 23, 0.72);
+      backdrop-filter: blur(10px);
+      color: #e2e8f0;
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+
+    .chrome-left, .chrome-right {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .progress {
+      flex: 1;
+      max-width: 14rem;
+      height: 3px;
+      background: rgba(148, 163, 184, 0.25);
+      border-radius: 999px;
+      overflow: hidden;
+      margin: 0 1rem;
+    }
+
+    .progress > span {
+      display: block;
+      height: 100%;
+      background: var(--brand);
+      width: 0%;
+      transition: width 0.25s ease;
+    }
+
+    button.nav {
+      appearance: none;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: transparent;
+      color: #e2e8f0;
+      border-radius: 0.5rem;
+      padding: 0.4rem 0.75rem;
+      font: inherit;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    button.nav:hover { background: rgba(255, 255, 255, 0.08); }
+    button.nav:disabled { opacity: 0.35; cursor: default; }
+
+    .hint { opacity: 0.65; }
+
+    .slide-inner {
+      width: min(1100px, 100%);
+      margin: 0 auto;
+    }
+
+    .problem-list {
+      margin-top: 1.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.9rem;
+      max-width: 40rem;
+    }
+
+    .problem-list li {
+      list-style: none;
+      font-size: 1.15rem;
+      font-weight: 500;
+      line-height: 1.4;
+      padding-left: 1.1rem;
+      border-left: 3px solid #f87171;
+    }
+
+    .slide.dark .problem-list li { color: #e2e8f0; }
+
+    .closing-list {
+      margin-top: 1.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+      max-width: 36rem;
+    }
+
+    .closing-list li {
+      list-style: none;
+      font-size: 1.15rem;
+      font-weight: 500;
+      display: flex;
+      gap: 0.75rem;
+      align-items: baseline;
+    }
+
+    .closing-list .n {
+      color: var(--brand);
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      min-width: 1.5rem;
+    }
+
+    .slide.dark .closing-list .n { color: #93c5fd; }
+  </style>
+</head>
+<body>
+  <div class="deck" id="deck">
+
+    <!-- 1. Title -->
+    <section class="slide dark active" data-title="Title">
+      <div class="slide-inner">
+        <div class="brand-row">
+          <div class="brand-mark">
+            <img src="mindspark-logo.png" alt="Mindspark" />
+          </div>
+          <div class="brand-name">Mindspark LMS</div>
+        </div>
+        <p class="eyebrow">Client presentation</p>
+        <h1>One platform. Every institute. Smarter learning.</h1>
+        <p class="tagline">Learn smarter. Teach clearer.</p>
+        <p class="lede">A multi-tenant learning platform for institutes and tutors — classes, live teaching, assessments, payments, and AI tools in one product.</p>
+      </div>
+    </section>
+
+    <!-- 2. Problem -->
+    <section class="slide dark" data-title="Problem">
+      <div class="slide-inner">
+        <p class="eyebrow">The challenge</p>
+        <h2>Institutes juggle too many tools</h2>
+        <p class="lede">Teaching, content, live classes, fees, and parent updates often live in separate apps — with little visibility into who is falling behind.</p>
+        <ul class="problem-list">
+          <li>Materials shared as unprotected files that get forwarded freely</li>
+          <li>Payments handled outside the system, hard to track and approve</li>
+          <li>No early signal when a student is at risk</li>
+          <li>Parents left without a clear, trusted view of progress</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 3. Solution -->
+    <section class="slide" data-title="Solution">
+      <div class="slide-inner">
+        <p class="eyebrow">The solution</p>
+        <h2>Mindspark brings teaching, ops, and insight together</h2>
+        <p class="lede">Each institute gets its own branded space — students, classes, payments, and data fully isolated — on a shared SaaS platform you can scale.</p>
+        <div class="grid-3">
+          <div class="card">
+            <h3>Teach</h3>
+            <p>Classes, materials, live rooms, quizzes, assignments, and gradebooks in one hub.</p>
+          </div>
+          <div class="card">
+            <h3>Operate</h3>
+            <p>Enrollment, attendance, fees, bank slips / PayHere, ID cards, and institute branding.</p>
+          </div>
+          <div class="card">
+            <h3>Improve</h3>
+            <p>AI study tools for students, teacher copilot, at-risk signals, and a Parent Trust Center.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. Who it's for -->
+    <section class="slide" data-title="Roles">
+      <div class="slide-inner">
+        <p class="eyebrow">Built for everyone in the institute</p>
+        <h2>Role-based portals that fit real workflows</h2>
+        <div class="grid-2" style="margin-top:2rem">
+          <div class="role">
+            <strong>Institute admin</strong>
+            <span>Users, teachers, settings, branding, payments, and full oversight.</span>
+          </div>
+          <div class="role">
+            <strong>Teacher</strong>
+            <span>Class hub, roster, attendance, grading, live class, chat, and AI Copilot.</span>
+          </div>
+          <div class="role">
+            <strong>Student</strong>
+            <span>Enroll, learn, take quizzes, join live sessions, pay fees, and use AI Study.</span>
+          </div>
+          <div class="role">
+            <strong>Parent</strong>
+            <span>Token-based Trust Center: attendance, quiz performance, and payment summary.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. Learning core -->
+    <section class="slide" data-title="Learning">
+      <div class="slide-inner">
+        <p class="eyebrow">Learning core</p>
+        <h2>Everything a class needs in one place</h2>
+        <ul class="feature-list">
+          <li>Classes &amp; batches with pricing</li>
+          <li>Protected, watermarked materials</li>
+          <li>Video lessons (YouTube / Vimeo)</li>
+          <li>Schedules, notices &amp; events</li>
+          <li>MCQ quizzes with auto-grading</li>
+          <li>Assignments &amp; teacher grading</li>
+          <li>Gradebook with export</li>
+          <li>Attendance tracking</li>
+          <li>Live class (Jitsi + Zoom / Meet)</li>
+          <li>In-app chat &amp; notifications</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 6. AI -->
+    <section class="slide dark" data-title="AI">
+      <div class="slide-inner">
+        <p class="eyebrow">Differentiation</p>
+        <h2>AI that helps both sides of the classroom</h2>
+        <div class="grid-2">
+          <div class="card">
+            <h3>Student — AI Study</h3>
+            <ul>
+              <li>Tutor chat</li>
+              <li>Smart summarizer</li>
+              <li>MCQ &amp; flashcard generators</li>
+              <li>Personal study plan</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Teacher — AI Copilot</h3>
+            <ul>
+              <li>Quiz generator</li>
+              <li>Feedback drafter</li>
+              <li>Weak topic analysis</li>
+              <li>Intervention radar</li>
+            </ul>
+          </div>
+        </div>
+        <p class="lede" style="margin-top:1.5rem">Plus at-risk student detection and intervention tracking — so support happens before dropout, not after.</p>
+      </div>
+    </section>
+
+    <!-- 7. Payments & local ops -->
+    <section class="slide" data-title="Operations">
+      <div class="slide-inner">
+        <p class="eyebrow">Built for real institute operations</p>
+        <h2>Payments, branding, and parent trust</h2>
+        <div class="grid-3">
+          <div class="card">
+            <h3>Payments</h3>
+            <p>Bank-slip upload with approval, PayHere checkout, monthly fees, grace days, and revenue visibility.</p>
+          </div>
+          <div class="card">
+            <h3>White-label</h3>
+            <p>Each institute gets its own URL, logo, and public landing page — your brand, their identity.</p>
+          </div>
+          <div class="card">
+            <h3>Local polish</h3>
+            <p>Student ID cards with QR, guardian details, district fields, and a Parent Trust Center.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 8. Why Mindspark -->
+    <section class="slide" data-title="Why us">
+      <div class="slide-inner">
+        <p class="eyebrow">Why Mindspark</p>
+        <h2>Not just another content host</h2>
+        <div class="grid-2">
+          <div class="card">
+            <h3>True multi-tenant SaaS</h3>
+            <p>Isolated institute data on one scalable platform — provision, brand, and grow tenants confidently.</p>
+          </div>
+          <div class="card">
+            <h3>Content protection</h3>
+            <p>View-only materials rendered server-side with watermarks — originals never exposed for download.</p>
+          </div>
+          <div class="card">
+            <h3>Teach + intervene</h3>
+            <p>From live class to weak topics and parent updates — operational learning, not file sharing.</p>
+          </div>
+          <div class="card">
+            <h3>AI with quotas &amp; control</h3>
+            <p>Study and copilot tools tracked at platform level so usage stays visible and manageable.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 9. Close -->
+    <section class="slide dark" data-title="Next steps">
+      <div class="slide-inner">
+        <p class="eyebrow">Next steps</p>
+        <h2>Ready when you are</h2>
+        <ol class="closing-list">
+          <li><span class="n">01</span> Walk through a live demo of your institute flow</li>
+          <li><span class="n">02</span> Map your classes, fees, and roles onto Mindspark</li>
+          <li><span class="n">03</span> Pilot with one batch — then scale across the institute</li>
+        </ol>
+        <div class="cta-box">
+          <p>Let’s make teaching clearer — and learning smarter.</p>
+          <span>Mindspark LMS · multi-tenant platform for institutes &amp; tutors</span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="chrome">
+    <div class="chrome-left">
+      <img class="chrome-logo" src="mindspark-logo.png" alt="" />
+      <span>Mindspark LMS</span>
+      <span class="hint">← → or Space · F for fullscreen</span>
+    </div>
+    <div class="progress" aria-hidden="true"><span id="bar"></span></div>
+    <div class="chrome-right">
+      <span id="counter">1 / 9</span>
+      <button type="button" class="nav" id="prev" aria-label="Previous slide">Prev</button>
+      <button type="button" class="nav" id="next" aria-label="Next slide">Next</button>
+    </div>
+  </div>
+
+  <script>
+    const slides = [...document.querySelectorAll('.slide')];
+    const counter = document.getElementById('counter');
+    const bar = document.getElementById('bar');
+    const prevBtn = document.getElementById('prev');
+    const nextBtn = document.getElementById('next');
+    let i = 0;
+
+    function show(n) {
+      i = Math.max(0, Math.min(slides.length - 1, n));
+      slides.forEach((s, idx) => s.classList.toggle('active', idx === i));
+      counter.textContent = `${i + 1} / ${slides.length}`;
+      bar.style.width = `${((i + 1) / slides.length) * 100}%`;
+      prevBtn.disabled = i === 0;
+      nextBtn.disabled = i === slides.length - 1;
+      history.replaceState(null, '', `#${i + 1}`);
+    }
+
+    prevBtn.addEventListener('click', () => show(i - 1));
+    nextBtn.addEventListener('click', () => show(i + 1));
+
+    document.addEventListener('keydown', (e) => {
+      if (['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter'].includes(e.key)) {
+        e.preventDefault();
+        show(i + 1);
+      } else if (['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'].includes(e.key)) {
+        e.preventDefault();
+        show(i - 1);
+      } else if (e.key === 'Home') {
+        show(0);
+      } else if (e.key === 'End') {
+        show(slides.length - 1);
+      } else if (e.key.toLowerCase() === 'f') {
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+        else document.exitFullscreen?.();
+      }
+    });
+
+    const hash = parseInt(location.hash.slice(1), 10);
+    show(Number.isFinite(hash) && hash >= 1 ? hash - 1 : 0);
+  </script>
+</body>
+</html>

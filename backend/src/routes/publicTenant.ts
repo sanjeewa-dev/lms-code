@@ -3,6 +3,8 @@ import { prisma } from '../lib/prisma';
 import { asyncHandler } from '../utils/asyncHandler';
 import { resolveTenant, enterTenantContext } from '../middleware/tenant';
 import { resolveParentToken } from '../services/parentTrust';
+import { storage } from '../services/storage';
+import { notFound } from '../utils/httpError';
 
 // Mounted at /api/t/:slug/public - no authentication required.
 const router = Router({ mergeParams: true });
@@ -19,7 +21,11 @@ router.get(
         orderBy: [{ pinned: 'desc' }, { publishedAt: 'desc' }],
         take: 10,
       }),
-      prisma.event.findMany({ orderBy: { eventDate: 'desc' }, take: 10 }),
+      prisma.event.findMany({
+        where: { scope: 'all', isActive: true },
+        orderBy: { eventDate: 'desc' },
+        take: 10,
+      }),
       prisma.videoLesson.findMany({
         where: { visibility: 'all' },
         orderBy: { createdAt: 'desc' },
@@ -34,6 +40,22 @@ router.get(
       events,
       videos: videos.map(({ videoUrl: _videoUrl, ...video }) => video),
     });
+  })
+);
+
+/** Public institute logo image (no auth). */
+router.get(
+  '/logo/:fileId',
+  asyncHandler(async (req, res) => {
+    const file = await prisma.file.findFirst({
+      where: { id: req.params.fileId, kind: 'logo' },
+    });
+    if (!file) throw notFound('Logo not found');
+
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader('Content-Disposition', `inline; filename="${file.originalName.replace(/"/g, '')}"`);
+    storage.createReadStream(file.storageKey).pipe(res);
   })
 );
 

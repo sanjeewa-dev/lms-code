@@ -25,8 +25,12 @@ export interface AtRiskStudent {
   classTitles: string[];
   reasons: AtRiskReason[];
   attendanceRate: number | null;
+  attendancePresent: number;
+  attendanceSessions: number;
   missingAssignments: number;
+  missingAssignmentTitles: string[];
   quizAveragePct: number | null;
+  quizAttemptCount: number;
   whatsappUrl: string | null;
 }
 
@@ -83,7 +87,8 @@ export async function computeAtRiskStudents(tenantId: string): Promise<AtRiskStu
 
     const assessments = await basePrisma.material.findMany({
       where: { classId: { in: classIds }, kind: 'assessment', dueDate: { lte: new Date() } },
-      select: { id: true },
+      select: { id: true, title: true },
+      orderBy: { dueDate: 'desc' },
     });
     const submitted = await basePrisma.submission.findMany({
       where: {
@@ -93,7 +98,9 @@ export async function computeAtRiskStudents(tenantId: string): Promise<AtRiskStu
       select: { assessmentId: true },
     });
     const submittedIds = new Set(submitted.map((s) => s.assessmentId));
-    const missingAssignments = assessments.filter((a) => !submittedIds.has(a.id)).length;
+    const missingList = assessments.filter((a) => !submittedIds.has(a.id));
+    const missingAssignments = missingList.length;
+    const missingAssignmentTitles = missingList.slice(0, 5).map((a) => a.title);
     if (missingAssignments >= 2) reasons.push('missing_assignments');
 
     const attempts = await basePrisma.quizAttempt.findMany({
@@ -105,6 +112,7 @@ export async function computeAtRiskStudents(tenantId: string): Promise<AtRiskStu
       include: { quiz: { select: { totalMarks: true } } },
     });
     let quizAveragePct: number | null = null;
+    const quizAttemptCount = attempts.length;
     if (attempts.length >= 2) {
       const pcts = attempts
         .filter((a) => a.quiz.totalMarks > 0 && a.score != null)
@@ -118,6 +126,7 @@ export async function computeAtRiskStudents(tenantId: string): Promise<AtRiskStu
     if (reasons.length === 0) continue;
 
     const msg = `Hello ${student.guardianName || 'Guardian'}, this is a message from the institute about ${student.name}'s progress. Please check in — attendance/fees/assignments may need attention.`;
+
     results.push({
       studentId,
       name: student.name,
@@ -128,9 +137,13 @@ export async function computeAtRiskStudents(tenantId: string): Promise<AtRiskStu
       classIds,
       classTitles,
       reasons,
-      attendanceRate: attendanceRate != null ? Math.round(attendanceRate * 100) : null,
+      attendanceRate: attendanceRate == null ? null : Math.round(attendanceRate * 100),
+      attendancePresent: present,
+      attendanceSessions: attendance.length,
       missingAssignments,
-      quizAveragePct: quizAveragePct != null ? Math.round(quizAveragePct) : null,
+      missingAssignmentTitles,
+      quizAveragePct: quizAveragePct == null ? null : Math.round(quizAveragePct),
+      quizAttemptCount,
       whatsappUrl: waLink(student.guardianPhone, msg),
     });
   }
@@ -155,10 +168,19 @@ export async function nudgeAtRiskStudent(opts: {
     ? risk.reasons
         .map((r) =>
           r === 'low_attendance'
-            ? `low attendance (${risk.attendanceRate}%)`
+            ? `low attendance (${risk.attendanceRate}%` +
+              (risk.attendanceSessions
+                ? `; ${risk.attendancePresent}/${risk.attendanceSessions} sessions`
+                : '') +
+              `)`
             : r === 'missing_assignments'
-              ? `${risk.missingAssignments} missing assignments`
-              : `low quiz average (${risk.quizAveragePct}%)`
+              ? `${risk.missingAssignments} missing assignments` +
+                (risk.missingAssignmentTitles.length
+                  ? ` — ${risk.missingAssignmentTitles.join(', ')}`
+                  : '')
+              : `low quiz average (${risk.quizAveragePct}%` +
+                (risk.quizAttemptCount ? ` over ${risk.quizAttemptCount} attempts` : '') +
+                `)`
         )
         .join('; ')
     : 'progress concerns';

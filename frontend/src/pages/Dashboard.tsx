@@ -521,51 +521,98 @@ export default function Dashboard() {
   // Student view
   const todo = todoQuery.data;
   const continueClass = todo?.continueClass ?? (classes[0] ? { id: classes[0].id, title: classes[0].title } : null);
-  const quickActions: { label: string; icon: IconName; to: string; tone: Tone }[] = [
-    {
-      label: continueClass ? `Continue: ${continueClass.title}` : 'Browse classes',
-      icon: 'classes',
-      to: continueClass ? `${base}/classes/${continueClass.id}` : `${base}/classes`,
-      tone: 'blue',
-    },
-    {
-      label: todo?.pendingQuizzes?.[0] ? `Take: ${todo.pendingQuizzes[0].title}` : 'Class quizzes',
-      icon: 'quiz',
-      to: todo?.pendingQuizzes?.[0]
-        ? `${base}/quizzes/${todo.pendingQuizzes[0].id}/take`
-        : `${base}/classes`,
-      tone: 'amber',
-    },
-    { label: 'Join live', icon: 'live', to: `${base}/live`, tone: 'green' },
-    { label: 'Ask AI tutor', icon: 'spark', to: `${base}/ai?tool=tutor`, tone: 'purple' },
-    { label: chatUnread ? `Chat (${chatUnread})` : 'Chat', icon: 'chat', to: `${base}/chat`, tone: 'sky' },
-    { label: 'Pay fees', icon: 'payments', to: `${base}/payments`, tone: 'pink' },
-  ];
+  const firstName = user?.name?.split(' ')[0] ?? 'there';
+  const pendingCount = todo?.pendingQuizzes?.length ?? 0;
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col justify-between gap-4 overflow-hidden rounded-2xl bg-hero-gradient p-6 text-white shadow-lg sm:flex-row sm:items-center sm:p-8">
-        <div>
-          <h2 className="text-2xl font-extrabold">
-            {continueClass ? `Continue ${continueClass.title}` : 'Ready to learn?'}
-          </h2>
-          <p className="mt-1 text-slate-200">
-            {todo?.pendingQuizzes?.length
-              ? `${todo.pendingQuizzes.length} quiz${todo.pendingQuizzes.length === 1 ? '' : 'zes'} waiting for you.`
-              : `You're enrolled in ${classes.length} ${classes.length === 1 ? 'class' : 'classes'}.`}
-          </p>
+      <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-white/5 dark:bg-ink-850 sm:p-6">
+        <div className="pointer-events-none absolute -right-10 -top-16 h-72 w-72 rounded-full bg-brand-500/35 blur-3xl dark:bg-brand-400/25" />
+        <div className="pointer-events-none absolute -bottom-20 left-[20%] h-64 w-64 rounded-full bg-rose-500/30 blur-3xl dark:bg-rose-400/20" />
+        <div className="pointer-events-none absolute -left-12 top-0 h-48 w-48 rounded-full bg-violet-500/25 blur-3xl dark:bg-violet-400/15" />
+        <div className="relative flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-brand-600 dark:text-brand-400">
+              Student dashboard
+            </p>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
+              {continueClass ? `Continue ${continueClass.title}` : `Welcome back, ${firstName}`}
+            </h1>
+            <p className="mt-1.5 max-w-xl text-sm text-slate-500 dark:text-slate-400">
+              {pendingCount
+                ? `${pendingCount} quiz${pendingCount === 1 ? '' : 'zes'} waiting for you.`
+                : `You're enrolled in ${classes.length} ${classes.length === 1 ? 'class' : 'classes'}.`}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              to={continueClass ? `${base}/classes/${continueClass.id}` : `${base}/classes`}
+              className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-brand-600/20 transition hover:bg-brand-700"
+            >
+              Continue learning
+            </Link>
+            <Link
+              to={`${base}/ai`}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-200 dark:hover:bg-white/10"
+            >
+              Open AI Area
+            </Link>
+          </div>
         </div>
-        <Link
-          to={continueClass ? `${base}/classes/${continueClass.id}` : `${base}/classes`}
-          className="inline-flex items-center gap-2 rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-brand-700 shadow transition hover:bg-slate-100"
-        >
-          Continue learning
-        </Link>
       </div>
 
       <LiveNowStrip />
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <ShortcutTile
+          to={continueClass ? `${base}/classes/${continueClass.id}` : `${base}/classes`}
+          title={continueClass ? 'Continue class' : 'Browse classes'}
+          hint={continueClass?.title ?? 'Find a class to join'}
+          icon="classes"
+          tone="blue"
+        />
+        <ShortcutTile
+          to={
+            todo?.pendingQuizzes?.[0]
+              ? `${base}/quizzes/${todo.pendingQuizzes[0].id}/take`
+              : `${base}/classes`
+          }
+          title="Quizzes"
+          hint={pendingCount ? `${pendingCount} due` : 'No quizzes due'}
+          icon="quiz"
+          tone="amber"
+        />
+        <ShortcutTile
+          to={`${base}/live`}
+          title="Join live"
+          hint="Live class room"
+          icon="live"
+          tone="green"
+        />
+        <ShortcutTile
+          to={`${base}/ai?tool=tutor`}
+          title="AI tutor"
+          hint="Ask questions anytime"
+          icon="spark"
+          tone="purple"
+        />
+        <ShortcutTile
+          to={`${base}/chat`}
+          title="Chat"
+          hint={chatUnread ? `${chatUnread} unread` : 'Message your class'}
+          icon="chat"
+          tone="sky"
+        />
+        <ShortcutTile
+          to={`${base}/payments`}
+          title="Pay fees"
+          hint="Upload slips or pay online"
+          icon="payments"
+          tone="pink"
+        />
+      </div>
+
+      <div className="grid items-start gap-6 lg:grid-cols-2">
         <WeakTopicsCard />
         <Card>
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -579,7 +626,7 @@ export default function Dashboard() {
             </div>
             <Link
               to={`${base}/ai`}
-              className="rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-700"
+              className="rounded-xl bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-700"
             >
               Open AI Area
             </Link>
@@ -595,7 +642,7 @@ export default function Dashboard() {
               <Link
                 key={tool}
                 to={`${base}/ai?tool=${tool}`}
-                className="rounded-xl border border-slate-200 px-2 py-3 text-center text-xs font-semibold text-slate-700 hover:border-violet-200 hover:bg-violet-50 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5"
+                className="rounded-xl border border-slate-200 px-2 py-3 text-center text-xs font-semibold text-slate-700 transition hover:border-violet-200 hover:bg-violet-50 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5"
               >
                 {label}
               </Link>
@@ -604,8 +651,11 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
+      <div className="grid items-stretch gap-6 lg:grid-cols-12">
+        <div className="lg:col-span-5">
+          <ClassCalendar size="full" />
+        </div>
+        <Card className="flex h-full flex-col lg:col-span-7">
           <div className="mb-4 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <span className="grid h-9 w-9 place-items-center rounded-xl bg-amber-100 text-amber-600">
@@ -640,7 +690,13 @@ export default function Dashboard() {
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-slate-500">No pending quizzes. Nice work.</p>
+            <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-6 py-10 text-center dark:border-white/10 dark:bg-white/5">
+              <span className="mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-amber-100 text-amber-600">
+                <Icon name="quiz" />
+              </span>
+              <p className="font-medium text-slate-700 dark:text-slate-200">No pending quizzes</p>
+              <p className="mt-1 text-sm text-slate-400">You&apos;re all caught up. Nice work.</p>
+            </div>
           )}
 
           {todo?.recentAttempt && (
@@ -661,58 +717,73 @@ export default function Dashboard() {
             </div>
           )}
         </Card>
-
-        <div className="space-y-4">
-          <ClassCalendar />
-          <Card>
-            <h2 className="mb-3 text-lg font-semibold text-slate-900 dark:text-white">Quick actions</h2>
-            <div className="space-y-2">
-              {quickActions.map((a) => (
-                <Link
-                  key={a.label}
-                  to={a.to}
-                  className="flex items-center gap-3 rounded-xl border border-slate-200 p-3 text-sm font-medium text-slate-700 transition hover:border-brand-200 hover:bg-slate-50 dark:border-white/5 dark:text-slate-200 dark:hover:bg-white/5"
-                >
-                  <span className={`grid h-9 w-9 place-items-center rounded-lg ${toneChip[a.tone]}`}>
-                    <Icon name={a.icon} />
-                  </span>
-                  <span className="truncate">{a.label}</span>
-                </Link>
-              ))}
-            </div>
-          </Card>
-        </div>
       </div>
 
-      <Card>
-        <div className="mb-4 flex items-center gap-2">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-100 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300">
-            <Icon name="chart" width={18} height={18} />
-          </span>
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Performance</h2>
-            <p className="text-sm text-slate-400">Quiz and assignment scores over time (0–100%)</p>
+      <div className="grid items-start gap-6 lg:grid-cols-12">
+        <Card className="lg:col-span-7">
+          <div className="mb-4 flex items-center gap-2">
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-100 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300">
+              <Icon name="chart" width={18} height={18} />
+            </span>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Performance</h2>
+              <p className="text-sm text-slate-400">Quiz and assignment scores over time (0–100%)</p>
+            </div>
           </div>
-        </div>
-        {performanceQuery.isLoading ? (
-          <div className="flex h-56 items-center justify-center text-sm text-slate-400">Loading marks…</div>
-        ) : (
-          <PerformanceChart points={performanceQuery.data ?? []} />
-        )}
-      </Card>
+          {performanceQuery.isLoading ? (
+            <div className="flex h-56 items-center justify-center text-sm text-slate-400">Loading marks…</div>
+          ) : (
+            <PerformanceChart points={performanceQuery.data ?? []} />
+          )}
+        </Card>
 
-      <div className="flex flex-wrap gap-3 text-sm">
-        <Link to={`${base}/notices`} className="font-semibold text-slate-600 hover:text-brand-600 dark:text-slate-300">
-          Announcements
-        </Link>
-        <span className="text-slate-300">·</span>
-        <Link to={`${base}/events`} className="font-semibold text-slate-600 hover:text-brand-600 dark:text-slate-300">
-          Events
-        </Link>
-        <span className="text-slate-300">·</span>
-        <Link to={`${base}/videos`} className="font-semibold text-slate-600 hover:text-brand-600 dark:text-slate-300">
-          Videos
-        </Link>
+        <Card className="lg:col-span-5">
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">My classes</h2>
+              <p className="text-sm text-slate-400">Jump back into class hubs</p>
+            </div>
+            <Link to={`${base}/classes`} className="text-sm font-semibold text-brand-600 hover:underline">
+              View all
+            </Link>
+          </div>
+          {classes.length > 0 ? (
+            <ul className="divide-y divide-slate-100 dark:divide-white/5">
+              {classes.slice(0, 6).map((c) => (
+                <li key={c.id}>
+                  <Link
+                    to={`${base}/classes/${c.id}`}
+                    className="flex items-center justify-between gap-3 py-3 transition hover:bg-slate-50/80 dark:hover:bg-white/5"
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-sky-100 text-sky-600">
+                        <Icon name="classes" width={16} height={16} />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-slate-800 dark:text-slate-100">{c.title}</p>
+                        {c.teacher?.name && (
+                          <p className="truncate text-xs text-slate-400">{c.teacher.name}</p>
+                        )}
+                      </div>
+                    </div>
+                    <Icon name="chevron" width={14} height={14} className="shrink-0 text-slate-300" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-6 py-10 text-center dark:border-white/10 dark:bg-white/5">
+              <p className="font-medium text-slate-700 dark:text-slate-200">No classes yet</p>
+              <p className="mt-1 text-sm text-slate-400">Browse published classes to get started.</p>
+              <Link
+                to={`${base}/classes`}
+                className="mt-4 inline-flex rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+              >
+                Browse classes
+              </Link>
+            </div>
+          )}
+        </Card>
       </div>
     </div>
   );
