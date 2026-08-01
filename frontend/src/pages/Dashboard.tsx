@@ -266,11 +266,11 @@ export default function Dashboard() {
               to={`${base}/live`}
             />
             <StatCard
-              label="Revenue"
+              label="Approved revenue"
               value={s ? `Rs. ${s.revenue.toLocaleString()}` : '—'}
               icon="revenue"
               highlight
-              to={`${base}/payments`}
+              to={`${base}/payments?status=approved&forMonth=`}
             />
           </div>
         )}

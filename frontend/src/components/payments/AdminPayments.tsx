@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { useTenantApi } from '../../hooks/useTenantApi';
 import { apiErrorMessage } from '../../api/client';
 import { Badge, Button, Card, Input, Modal, Select, Spinner, statusTone } from '../ui';
@@ -14,11 +15,24 @@ function formatDateTime(iso: string) {
   });
 }
 
+function initialStatus(params: URLSearchParams): PaymentStatus | '' {
+  const value = params.get('status');
+  if (value === 'pending' || value === 'approved' || value === 'rejected') return value;
+  if (params.has('status') && value === '') return '';
+  return 'pending';
+}
+
+function initialMonth(params: URLSearchParams): string {
+  if (params.has('forMonth')) return params.get('forMonth') ?? '';
+  return currentMonth();
+}
+
 export function AdminPayments() {
   const t = useTenantApi();
   const queryClient = useQueryClient();
-  const [status, setStatus] = useState<PaymentStatus | ''>('pending');
-  const [forMonth, setForMonth] = useState(currentMonth());
+  const [searchParams] = useSearchParams();
+  const [status, setStatus] = useState<PaymentStatus | ''>(() => initialStatus(searchParams));
+  const [forMonth, setForMonth] = useState(() => initialMonth(searchParams));
   const [classId, setClassId] = useState('');
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [rejectNote, setRejectNote] = useState('');
@@ -108,7 +122,9 @@ export function AdminPayments() {
   const pendingCount = pendingQuery.data ?? 0;
   const payments = query.data ?? [];
   const summary = summaryQuery.data;
-  const monthLabel = summary?.forMonthLabel ?? formatMonthLabel(forMonth);
+  const monthLabel = forMonth
+    ? summary?.forMonthLabel ?? formatMonthLabel(forMonth)
+    : 'All months';
 
   return (
     <div className="space-y-4">
