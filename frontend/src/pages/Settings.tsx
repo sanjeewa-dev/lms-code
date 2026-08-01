@@ -125,26 +125,18 @@ export default function Settings() {
                   ref={logoInputRef}
                   type="file"
                   accept="image/jpeg,image/png,image/webp,image/gif"
-                  className="block w-full max-w-md text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-brand-700 hover:file:bg-brand-100 dark:text-slate-300 dark:file:bg-brand-900/40 dark:file:text-brand-200"
-                />
-                <Button
-                  type="button"
-                  variant="secondary"
                   disabled={logoUploadMutation.isPending}
-                  onClick={() => {
-                    const file = logoInputRef.current?.files?.[0];
-                    if (!file) {
-                      setError('Please choose a logo image first.');
-                      setSuccess('');
-                      return;
-                    }
-                    logoUploadMutation.mutate(file);
+                  className="block w-full max-w-md text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-brand-700 hover:file:bg-brand-100 dark:text-slate-300 dark:file:bg-brand-900/40 dark:file:text-brand-200"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) logoUploadMutation.mutate(file);
                   }}
-                >
-                  {logoUploadMutation.isPending ? 'Uploading...' : 'Upload logo'}
-                </Button>
+                />
+                {logoUploadMutation.isPending && (
+                  <span className="text-sm text-slate-500">Uploading...</span>
+                )}
               </div>
-              <p className="mt-1 text-xs text-slate-500">JPEG, PNG, WebP, or GIF. Applied immediately after upload.</p>
+              <p className="mt-1 text-xs text-slate-500">JPEG, PNG, WebP, or GIF. Uploads as soon as you choose a file.</p>
             </div>
             <div>
               <Input
