@@ -5,14 +5,32 @@ import { basePrisma } from '../lib/prisma';
 import { asyncHandler } from '../utils/asyncHandler';
 import { verifyRefreshToken } from '../lib/jwt';
 import { authenticate } from '../middleware/auth';
-import { badRequest, unauthorized } from '../utils/httpError';
-import { issueTokens, publicUser } from '../services/auth';
+import { unauthorized } from '../utils/httpError';
+import {
+  assertUserMayAuthenticate,
+  issueTokens,
+  publicUser,
+} from '../services/auth';
 import { loginSchema } from '../validation/schemas';
 import { getActiveSupportSession } from '../services/supportSession';
+import { hashToken } from '../utils/cryptoTokens';
+import { clearRefreshCookie, REFRESH_COOKIE, setRefreshCookie } from '../utils/authCookies';
 
 const router = Router();
 
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 50, standardHeaders: true, legacyHeaders: false });
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const refreshLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 /**
  * Unified sign-in. Resolves the account by email + password across the whole
@@ -36,42 +54,28 @@ router.post(
     for (const u of users) {
       if (u.role !== 'superadmin' && u.tenant && !u.tenant.isActive) continue;
       if (!u.passwordHash) continue;
+      if (u.status !== 'approved' && u.role !== 'superadmin') continue;
       if (await bcrypt.compare(password, u.passwordHash)) matched.push(u);
     }
 
+    // Uniform message avoids account-state enumeration.
     if (matched.length === 0) {
-      const incomplete = users.find((u) => !u.passwordHash && u.role === 'student');
-      if (incomplete) {
-        throw unauthorized(
-          'Please complete your registration using the invite link sent to your email.'
-        );
-      }
       throw unauthorized('Invalid email or password');
     }
 
-    // Non-superadmins must be approved (rejected = inactivated).
-    const allowed = matched.filter((u) => u.role === 'superadmin' || u.status === 'approved');
-    if (allowed.length === 0) {
-      const status = matched[0].status;
-      throw unauthorized(
-        status === 'pending'
-          ? 'Your account is pending approval by the institute.'
-          : 'Your account has been inactivated. Please contact your institute or platform support.'
-      );
-    }
-
-    if (allowed.length > 1) {
+    if (matched.length > 1) {
       res.json({
         multiple: true,
-        tenants: allowed
+        tenants: matched
           .filter((m) => m.tenant)
           .map((m) => ({ slug: m.tenant!.slug, name: m.tenant!.name })),
       });
       return;
     }
 
-    const user = allowed[0];
+    const user = matched[0];
     const tokens = await issueTokens(user);
+    setRefreshCookie(res, tokens.refreshToken);
     res.json({
       user: publicUser(user),
       ...tokens,
@@ -82,19 +86,29 @@ router.post(
 
 router.post(
   '/refresh',
+  refreshLimiter,
   asyncHandler(async (req, res) => {
-    const token = req.body?.refreshToken as string | undefined;
-    if (!token) throw badRequest('refreshToken is required');
+    const token =
+      (typeof req.body?.refreshToken === 'string' ? req.body.refreshToken : undefined) ||
+      (typeof req.cookies?.[REFRESH_COOKIE] === 'string' ? req.cookies[REFRESH_COOKIE] : undefined);
+    if (!token) throw unauthorized('Invalid refresh token');
 
     let payload: { sub: string };
     try {
       payload = verifyRefreshToken(token);
     } catch {
+      clearRefreshCookie(res);
       throw unauthorized('Invalid refresh token');
     }
 
-    const stored = await basePrisma.refreshToken.findUnique({ where: { token } });
-    if (!stored || stored.expiresAt < new Date()) {
+    const tokenHash = hashToken(token);
+    const stored = await basePrisma.refreshToken.findFirst({
+      where: {
+        OR: [{ token: tokenHash }, { token }], // support legacy plaintext rows during rollout
+      },
+    });
+    if (!stored || stored.expiresAt < new Date() || stored.userId !== payload.sub) {
+      clearRefreshCookie(res);
       throw unauthorized('Refresh token expired or revoked');
     }
 
@@ -102,10 +116,22 @@ router.post(
       where: { id: payload.sub },
       include: { tenant: true },
     });
-    if (!user) throw unauthorized('User no longer exists');
+    if (!user) {
+      clearRefreshCookie(res);
+      throw unauthorized('Invalid refresh token');
+    }
 
-    await basePrisma.refreshToken.delete({ where: { token } }).catch(() => undefined);
+    try {
+      assertUserMayAuthenticate(user);
+    } catch {
+      await basePrisma.refreshToken.deleteMany({ where: { userId: user.id } });
+      clearRefreshCookie(res);
+      throw unauthorized('Invalid refresh token');
+    }
+
+    await basePrisma.refreshToken.delete({ where: { id: stored.id } }).catch(() => undefined);
     const tokens = await issueTokens(user);
+    setRefreshCookie(res, tokens.refreshToken);
     res.json({ user: publicUser(user), ...tokens });
   })
 );
@@ -113,8 +139,16 @@ router.post(
 router.post(
   '/logout',
   asyncHandler(async (req, res) => {
-    const token = req.body?.refreshToken as string | undefined;
-    if (token) await basePrisma.refreshToken.deleteMany({ where: { token } });
+    const token =
+      (typeof req.body?.refreshToken === 'string' ? req.body.refreshToken : undefined) ||
+      (typeof req.cookies?.[REFRESH_COOKIE] === 'string' ? req.cookies[REFRESH_COOKIE] : undefined);
+    if (token) {
+      const tokenHash = hashToken(token);
+      await basePrisma.refreshToken.deleteMany({
+        where: { OR: [{ token: tokenHash }, { token }] },
+      });
+    }
+    clearRefreshCookie(res);
     res.status(204).send();
   })
 );

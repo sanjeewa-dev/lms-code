@@ -6,6 +6,7 @@ import { authenticate } from '../middleware/auth';
 import { publicUserFromProfile, serializeProfile } from '../services/profile';
 import { changePasswordSchema, profileUpdateSchema } from '../validation/schemas';
 import { badRequest, conflict, notFound, unauthorized } from '../utils/httpError';
+import { revokeRefreshTokensForUser } from '../services/auth';
 
 const router = Router({ mergeParams: true });
 
@@ -100,6 +101,7 @@ router.post(
       where: { id: user.id },
       data: { passwordHash },
     });
+    await revokeRefreshTokensForUser(user.id);
 
     res.json({ ok: true });
   })

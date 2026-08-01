@@ -1,15 +1,11 @@
-import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { basePrisma } from '../lib/prisma';
 import { env } from '../config/env';
 import { badRequest, forbidden, notFound } from '../utils/httpError';
 import { writeAuditLog } from './audit';
+import { hashToken } from '../utils/cryptoTokens';
 
 const SUPPORT_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
-
-function hashToken(token: string) {
-  return crypto.createHash('sha256').update(token).digest('hex');
-}
 
 export async function startSupportSession(opts: {
   superadminId: string;
@@ -54,9 +50,10 @@ export async function startSupportSession(opts: {
       name: superadmin.name,
       tenantId: tenant.id,
       supportSessionId: session.id,
+      typ: 'access',
     },
     env.jwt.accessSecret,
-    { expiresIn: '2h' }
+    { expiresIn: '2h', algorithm: 'HS256' }
   );
 
   await basePrisma.supportSession.update({

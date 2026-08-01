@@ -8,6 +8,7 @@ import type { AccessTokenPayload } from '../lib/jwt';
 import { signWatchToken, verifyAccessToken, verifyWatchToken } from '../lib/jwt';
 import { extractYouTubeId, extractVimeoId } from '../lib/videoEmbed';
 import { studentHasContentAccess } from '../services/access';
+import { assertSafeOutboundUrl } from '../utils/safeUrl';
 
 const router = Router({ mergeParams: true });
 
@@ -17,6 +18,7 @@ const manage = [authenticate, requireRole('teacher', 'admin')];
 router.get(
   '/batches',
   authenticate,
+  requireRole('admin', 'teacher'),
   asyncHandler(async (_req, res) => {
     const batches = await prisma.batch.findMany({
       orderBy: [{ year: 'desc' }, { name: 'asc' }],
@@ -437,7 +439,8 @@ router.get(
     await assertVideoAccess(req.user!, video, req.tenant!.id);
 
     const range = req.headers.range;
-    const upstream = await fetch(video.videoUrl, {
+    const safeUrl = assertSafeOutboundUrl(video.videoUrl);
+    const upstream = await fetch(safeUrl, {
       headers: range ? { Range: range } : {},
     });
 

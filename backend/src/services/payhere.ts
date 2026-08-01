@@ -4,6 +4,7 @@ import { createNotification } from './notifications';
 import { currentBillingMonth } from './access';
 import { badRequest, notFound } from '../utils/httpError';
 import { runWithContext } from '../lib/tenantContext';
+import { timingSafeEqualString } from '../utils/cryptoTokens';
 
 /** PayHere MD5 signature verification (sandbox + live). */
 export function verifyPayHereSignature(opts: {
@@ -21,12 +22,20 @@ export function verifyPayHereSignature(opts: {
     .update(opts.merchantId + opts.orderId + opts.amount + opts.currency + opts.statusCode + secretHash)
     .digest('hex')
     .toUpperCase();
-  return local === opts.md5sig.toUpperCase();
+  const expected = opts.md5sig.toUpperCase();
+  return timingSafeEqualString(local, expected);
+}
+
+function amountsEqual(a: string | number, b: string | number): boolean {
+  const na = Number(a);
+  const nb = Number(b);
+  if (!Number.isFinite(na) || !Number.isFinite(nb)) return false;
+  return Math.abs(na - nb) < 0.005;
 }
 
 /**
  * Process PayHere IPN notify payload. status_code 2 = success.
- * custom_1 = enrollmentId, custom_2 = forMonth
+ * Prefers server-side pending payment bound by order_id; amount must match class price.
  */
 export async function processPayHereNotify(tenantId: string, body: Record<string, string>) {
   const tenant = await basePrisma.tenant.findFirst({ where: { id: tenantId } });
@@ -40,7 +49,7 @@ export async function processPayHereNotify(tenantId: string, body: Record<string
   const merchantId = body.merchant_id;
   const orderId = body.order_id;
   const amount = body.payhere_amount;
-  const currency = body.payhere_currency;
+  const currency = body.currency || body.payhere_currency;
   const statusCode = body.status_code;
   const md5sig = body.md5sig;
 
@@ -63,81 +72,60 @@ export async function processPayHereNotify(tenantId: string, body: Record<string
   });
   if (!valid) throw badRequest('Invalid PayHere signature');
 
-  // 2 = success
   if (statusCode !== '2') {
     return { ok: true, ignored: true, statusCode };
   }
 
-  const enrollmentId = body.custom_1;
-  const forMonth = body.custom_2 || currentBillingMonth();
-  if (!enrollmentId) throw badRequest('Missing enrollment reference');
-
-  const enrollment = await basePrisma.enrollment.findFirst({
-    where: { id: enrollmentId, tenantId },
-    include: { class: { select: { title: true, price: true } } },
+  let pending = await basePrisma.payment.findFirst({
+    where: { tenantId, orderId },
+    include: { enrollment: { include: { class: { select: { title: true, price: true } } } } },
   });
-  if (!enrollment) throw notFound('Enrollment not found');
 
-  const existing = await basePrisma.payment.findFirst({
-    where: {
-      enrollmentId,
-      forMonth,
+  // Legacy fallback: locate by custom fields only if order was never bound (should be rare).
+  if (!pending) {
+    const enrollmentId = body.custom_1;
+    const forMonth = body.custom_2 || currentBillingMonth();
+    if (!enrollmentId) throw badRequest('Missing enrollment reference');
+    pending = await basePrisma.payment.findFirst({
+      where: { tenantId, enrollmentId, forMonth, status: 'pending' },
+      include: { enrollment: { include: { class: { select: { title: true, price: true } } } } },
+    });
+    if (pending) {
+      pending = await basePrisma.payment.update({
+        where: { id: pending.id },
+        data: { orderId },
+        include: { enrollment: { include: { class: { select: { title: true, price: true } } } } },
+      });
+    }
+  }
+
+  if (!pending) throw notFound('Payment order not found');
+  if (pending.status === 'approved') {
+    return { ok: true, paymentId: pending.id, alreadyApproved: true };
+  }
+  if (pending.status !== 'pending') {
+    throw badRequest('Payment is not awaiting approval');
+  }
+
+  const expectedAmount = Number(pending.enrollment.class.price).toFixed(2);
+  if (!amountsEqual(amount, expectedAmount) || !amountsEqual(Number(pending.amount), expectedAmount)) {
+    throw badRequest('Paid amount does not match class fee');
+  }
+
+  const enrollment = pending.enrollment;
+  const forMonth = pending.forMonth;
+  const paymentType = pending.paymentType;
+
+  const approved = await basePrisma.payment.update({
+    where: { id: pending.id },
+    data: {
       status: 'approved',
+      amount: expectedAmount,
+      reviewedAt: new Date(),
+      note: `PayHere order ${orderId}`,
+      orderId,
     },
   });
-  if (existing) return { ok: true, paymentId: existing.id, alreadyApproved: true };
-
-  // Prefer a pending placeholder if student started checkout after uploading nothing;
-  // otherwise create an approved online payment (no slip file — use a stub file record).
-  let pending = await basePrisma.payment.findFirst({
-    where: { enrollmentId, forMonth, status: 'pending' },
-  });
-
-  const paymentType = enrollment.status === 'active' ? 'monthly' : 'enrollment';
-  const paidAmount = Number(amount);
-
-  if (pending) {
-    pending = await basePrisma.payment.update({
-      where: { id: pending.id },
-      data: {
-        status: 'approved',
-        amount: paidAmount,
-        reviewedAt: new Date(),
-        note: `PayHere order ${orderId}`,
-      },
-    });
-  } else {
-    // Create a minimal slip file placeholder so Payment.slipFileId FK is satisfied.
-    const admin = await basePrisma.user.findFirst({
-      where: { tenantId, role: { in: ['admin', 'teacher'] } },
-      select: { id: true },
-    });
-    const ownerId = admin?.id ?? enrollment.studentId;
-    const slip = await basePrisma.file.create({
-      data: {
-        tenantId,
-        ownerId,
-        storageKey: `payhere/${orderId}.txt`,
-        originalName: `payhere-${orderId}.txt`,
-        mimeType: 'text/plain',
-        size: 0,
-        kind: 'slip',
-      },
-    });
-    pending = await basePrisma.payment.create({
-      data: {
-        tenantId,
-        enrollmentId,
-        amount: paidAmount,
-        slipFileId: slip.id,
-        paymentType,
-        forMonth,
-        status: 'approved',
-        reviewedAt: new Date(),
-        note: `PayHere order ${orderId}`,
-      },
-    });
-  }
 
   if (paymentType === 'enrollment' && enrollment.status !== 'active') {
     await basePrisma.enrollment.update({
@@ -157,5 +145,5 @@ export async function processPayHereNotify(tenantId: string, body: Record<string
     });
   });
 
-  return { ok: true, paymentId: pending.id };
+  return { ok: true, paymentId: approved.id };
 }

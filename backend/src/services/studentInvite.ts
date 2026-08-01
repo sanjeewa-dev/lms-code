@@ -4,6 +4,7 @@ import { basePrisma } from '../lib/prisma';
 import { env } from '../config/env';
 import { sendStudentClassInvite, sendStudentEnrolledNotice } from './email';
 import { badRequest, conflict, notFound } from '../utils/httpError';
+import { hashToken } from '../utils/cryptoTokens';
 import type { studentInviteSchema, studentOnboardingSchema } from '../validation/schemas';
 import type { z } from 'zod';
 
@@ -139,7 +140,7 @@ export async function inviteStudentToClass(opts: {
     data: {
       tenantId,
       classId,
-      token,
+      token: hashToken(token),
       email,
       name: data.name.trim(),
       phone: primaryPhone,
@@ -240,13 +241,13 @@ export async function enrollExistingStudentInClass(opts: {
 }
 
 export async function getInviteForToken(tenantId: string, token: string) {
-  const invite = await basePrisma.studentInvite.findFirst({
-    where: { tenantId, token },
-    include: {
-      class: { select: { title: true } },
-      tenant: { select: { name: true, slug: true } },
-    },
-  });
+  const include = {
+    class: { select: { title: true } },
+    tenant: { select: { name: true, slug: true } },
+  } as const;
+  const invite =
+    (await basePrisma.studentInvite.findFirst({ where: { tenantId, token: hashToken(token) }, include })) ??
+    (await basePrisma.studentInvite.findFirst({ where: { tenantId, token }, include }));
   if (!invite) throw notFound('Invitation not found');
   if (invite.usedAt) throw badRequest('This invitation has already been used');
   if (invite.expiresAt < new Date()) throw badRequest('This invitation has expired');
@@ -272,10 +273,10 @@ export async function getInviteForToken(tenantId: string, token: string) {
 }
 
 export async function acceptInvite(tenantId: string, token: string, data: OnboardingInput) {
-  const invite = await basePrisma.studentInvite.findFirst({
-    where: { tenantId, token },
-    include: { user: true },
-  });
+  const include = { user: true } as const;
+  const invite =
+    (await basePrisma.studentInvite.findFirst({ where: { tenantId, token: hashToken(token) }, include })) ??
+    (await basePrisma.studentInvite.findFirst({ where: { tenantId, token }, include }));
   if (!invite) throw notFound('Invitation not found');
   if (invite.usedAt) throw badRequest('This invitation has already been used');
   if (invite.expiresAt < new Date()) throw badRequest('This invitation has expired');

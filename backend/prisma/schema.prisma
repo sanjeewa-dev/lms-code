@@ -168,6 +168,7 @@ model Tenant {
   attendances    Attendance[]
   notifications  Notification[]
   aiUsages       AiUsage[]
+  aiStaffUsages  AiStaffUsage[]
   aiToolHistories AiToolHistory[]
   interventions  Intervention[]
   parentTokens   ParentToken[]
@@ -218,6 +219,7 @@ model User {
   attendances        Attendance[]    @relation("AttendanceStudent")
   notifications      Notification[]
   aiUsages           AiUsage[]
+  aiStaffUsages      AiStaffUsage[]
   aiToolHistories    AiToolHistory[]
   interventionsAbout Intervention[]  @relation("InterventionStudent")
   interventionsBy    Intervention[]  @relation("InterventionCreator")
@@ -460,6 +462,8 @@ model Payment {
   paymentType  PaymentType   @default(monthly)
   forMonth     String        @default("2026-01") // YYYY-MM billing period
   status       PaymentStatus @default(pending)
+  /// PayHere (or other gateway) order id — bound at checkout init
+  orderId      String?       @unique
   reviewedById String?
   reviewedBy   User?         @relation("PaymentReviewer", fields: [reviewedById], references: [id])
   reviewedAt   DateTime?
@@ -610,6 +614,22 @@ model AiUsage {
   @@unique([studentId, classId, forMonth])
   @@index([tenantId])
   @@index([classId])
+}
+
+/// Monthly AI usage for teachers/admins (copilot tools).
+model AiStaffUsage {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  forMonth  String
+  used      Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, forMonth])
+  @@index([tenantId])
 }
 
 /// Saved AI Student Area tool responses for later review.

@@ -11,6 +11,7 @@ import { env } from '../config/env';
  */
 export interface StorageService {
   save(buffer: Buffer, originalName: string): Promise<string>;
+  saveFromPath(sourcePath: string, originalName: string): Promise<string>;
   read(storageKey: string): Promise<Buffer>;
   createReadStream(storageKey: string): fs.ReadStream;
   remove(storageKey: string): Promise<void>;
@@ -29,6 +30,13 @@ class LocalStorageService implements StorageService {
     const ext = path.extname(originalName).toLowerCase();
     const key = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`;
     await fsp.writeFile(path.join(this.baseDir, key), buffer);
+    return key;
+  }
+
+  async saveFromPath(sourcePath: string, originalName: string): Promise<string> {
+    const ext = path.extname(originalName).toLowerCase();
+    const key = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`;
+    await fsp.copyFile(sourcePath, path.join(this.baseDir, key));
     return key;
   }
 

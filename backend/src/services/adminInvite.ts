@@ -4,6 +4,7 @@ import { basePrisma } from '../lib/prisma';
 import { env } from '../config/env';
 import { sendAdminInvite } from './email';
 import { badRequest, conflict, notFound } from '../utils/httpError';
+import { hashToken } from '../utils/cryptoTokens';
 
 const INVITE_DAYS = 7;
 
@@ -56,7 +57,7 @@ export async function inviteTenantAdmin(opts: {
     data: {
       tenantId: opts.tenantId,
       email,
-      token,
+      token: hashToken(token),
       invitedById: opts.invitedById,
       userId: admin.id,
       expiresAt,
@@ -76,10 +77,15 @@ export async function inviteTenantAdmin(opts: {
 }
 
 export async function getAdminInviteForToken(tenantId: string, token: string) {
-  const invite = await basePrisma.adminInvite.findFirst({
-    where: { tenantId, token },
-    include: { tenant: { select: { name: true, slug: true } } },
-  });
+  const invite =
+    (await basePrisma.adminInvite.findFirst({
+      where: { tenantId, token: hashToken(token) },
+      include: { tenant: { select: { name: true, slug: true } } },
+    })) ??
+    (await basePrisma.adminInvite.findFirst({
+      where: { tenantId, token },
+      include: { tenant: { select: { name: true, slug: true } } },
+    }));
   if (!invite) throw notFound('Invitation not found');
   if (invite.usedAt) throw badRequest('This invitation has already been used');
   if (invite.expiresAt < new Date()) throw badRequest('This invitation has expired');
@@ -98,9 +104,9 @@ export async function acceptAdminInvite(
   token: string,
   data: { name: string; password: string }
 ) {
-  const invite = await basePrisma.adminInvite.findFirst({
-    where: { tenantId, token },
-  });
+  const invite =
+    (await basePrisma.adminInvite.findFirst({ where: { tenantId, token: hashToken(token) } })) ??
+    (await basePrisma.adminInvite.findFirst({ where: { tenantId, token } }));
   if (!invite) throw notFound('Invitation not found');
   if (invite.usedAt) throw badRequest('This invitation has already been used');
   if (invite.expiresAt < new Date()) throw badRequest('This invitation has expired');

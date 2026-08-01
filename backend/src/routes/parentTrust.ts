@@ -16,6 +16,8 @@ router.post(
       tenantSlug: req.tenant!.slug,
       tenantName: req.tenant!.name,
       studentId: req.params.studentId,
+      actorRole: req.user!.role,
+      actorId: req.user!.sub,
     });
     res.json(result);
   })

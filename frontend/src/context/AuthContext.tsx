@@ -95,7 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   function logout() {
     const refreshToken = tokenStore.refresh;
-    if (refreshToken) api.post('/auth/logout', { refreshToken }).catch(() => undefined);
+    api.post('/auth/logout', refreshToken ? { refreshToken } : {}).catch(() => undefined);
     tokenStore.endSupport();
     tokenStore.clear();
     setUser(null);

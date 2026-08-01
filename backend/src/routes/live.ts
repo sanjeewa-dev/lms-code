@@ -215,6 +215,9 @@ router.post(
       include: { class: true },
     });
     if (!schedule || schedule.status !== 'live') throw notFound('Active session not found');
+    if (req.user!.role === 'teacher' && schedule.class.teacherId !== req.user!.sub) {
+      throw forbidden('You can only invite students to your own live classes');
+    }
 
     const teacher = await prisma.user.findUnique({ where: { id: req.user!.sub } });
     const joinUrl = `${env.clientUrl}/${req.tenant!.slug}/live`;
@@ -224,17 +227,25 @@ router.post(
     let targets: { id: string; name: string; email: string }[] = [];
 
     if (inviteClassId) {
+      if (inviteClassId !== schedule.classId) {
+        throw forbidden('Invites must target the live session class');
+      }
       const enrollments = await prisma.enrollment.findMany({
-        where: { classId: inviteClassId, tenantId: req.tenant!.id, status: 'active' },
+        where: { classId: schedule.classId, tenantId: req.tenant!.id, status: 'active' },
         include: { student: true },
       });
       targets = enrollments.map((e) => ({ id: e.student.id, name: e.student.name, email: e.student.email }));
     } else if (studentIds?.length) {
-      const users = await prisma.user.findMany({
-        where: { id: { in: studentIds }, tenantId: req.tenant!.id },
-        select: { id: true, name: true, email: true },
+      const enrollments = await prisma.enrollment.findMany({
+        where: {
+          classId: schedule.classId,
+          tenantId: req.tenant!.id,
+          status: 'active',
+          studentId: { in: studentIds },
+        },
+        include: { student: { select: { id: true, name: true, email: true } } },
       });
-      targets = users;
+      targets = enrollments.map((e) => e.student);
     }
 
     if (!targets.length) {

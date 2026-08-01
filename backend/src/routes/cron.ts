@@ -4,14 +4,16 @@ import { env } from '../config/env';
 import { unauthorized } from '../utils/httpError';
 import { runFeeRemindersAllTenants, runParentDigestsAllTenants } from '../services/smartJobs';
 import { runTrackedJob } from '../services/jobRuns';
+import { timingSafeEqualString } from '../utils/cryptoTokens';
 
 const router = Router();
 
-function requireCronSecret(req: { headers: Record<string, unknown>; query: Record<string, unknown> }) {
+function requireCronSecret(req: { headers: Record<string, unknown> }) {
   const header = req.headers['x-cron-secret'];
-  const query = req.query.secret;
-  const provided = (typeof header === 'string' ? header : null) || (typeof query === 'string' ? query : null);
-  if (!provided || provided !== env.cronSecret) throw unauthorized('Invalid cron secret');
+  const provided = typeof header === 'string' ? header : null;
+  if (!provided || !timingSafeEqualString(provided, env.cronSecret)) {
+    throw unauthorized('Invalid cron secret');
+  }
 }
 
 router.post(

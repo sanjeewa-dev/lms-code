@@ -10,6 +10,7 @@ import {
 } from './email';
 import { env } from '../config/env';
 import { assertFeature } from './planGates';
+import { hashToken } from '../utils/cryptoTokens';
 
 const TOKEN_TTL_HOURS = 48;
 
@@ -19,6 +20,8 @@ export async function sendParentMagicLink(opts: {
   tenantSlug: string;
   tenantName: string;
   studentId: string;
+  actorRole?: string;
+  actorId?: string;
 }) {
   const tenant = await basePrisma.tenant.findUnique({ where: { id: opts.tenantId } });
   if (!tenant) throw notFound('Institute not found');
@@ -28,6 +31,18 @@ export async function sendParentMagicLink(opts: {
     where: { id: opts.studentId, tenantId: opts.tenantId, role: 'student' },
   });
   if (!student) throw notFound('Student not found');
+  if (opts.actorRole === 'teacher') {
+    const enrollment = await basePrisma.enrollment.findFirst({
+      where: {
+        tenantId: opts.tenantId,
+        studentId: student.id,
+        status: 'active',
+        class: { teacherId: opts.actorId },
+      },
+      select: { id: true },
+    });
+    if (!enrollment) throw forbidden('You can only send parent links for students in your active classes');
+  }
 
   const guardianEmail = student.guardianEmail?.trim();
   if (!guardianEmail) throw forbidden('Student has no guardian email set. Update in Profile.');
@@ -44,7 +59,7 @@ export async function sendParentMagicLink(opts: {
     data: {
       tenantId: opts.tenantId,
       studentId: opts.studentId,
-      token,
+      token: hashToken(token),
       email: guardianEmail,
       expiresAt,
     },
@@ -89,16 +104,21 @@ export async function sendParentMagicLink(opts: {
 
 /** Resolve a parent token and return the student's report data. */
 export async function resolveParentToken(token: string, tenantId: string) {
-  const record = await basePrisma.parentToken.findUnique({ where: { token } });
+  const tokenHash = hashToken(token);
+  const record =
+    (await basePrisma.parentToken.findUnique({ where: { token: tokenHash } })) ??
+    // Temporary compatibility for links issued before token-at-rest hashing.
+    (await basePrisma.parentToken.findUnique({ where: { token } }));
   if (!record) throw forbidden('Invalid or expired link.');
   if (record.tenantId !== tenantId) throw forbidden('Invalid or expired link.');
   if (record.expiresAt < new Date()) throw forbidden('This link has expired. Ask for a new one.');
+  if (record.usedAt) throw forbidden('This link has already been used. Ask for a new one.');
 
-  // Mark as used
-  await basePrisma.parentToken.update({
-    where: { token },
-    data: { usedAt: record.usedAt ?? new Date() },
+  const consumed = await basePrisma.parentToken.updateMany({
+    where: { id: record.id, usedAt: null },
+    data: { usedAt: new Date() },
   });
+  if (consumed.count !== 1) throw forbidden('This link has already been used. Ask for a new one.');
 
   const studentId = record.studentId;
   const since = new Date();
@@ -110,7 +130,6 @@ export async function resolveParentToken(token: string, tenantId: string) {
       select: {
         id: true,
         name: true,
-        email: true,
         guardianName: true,
         guardianPhone: true,
       },

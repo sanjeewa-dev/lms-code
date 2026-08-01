@@ -1,7 +1,9 @@
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
 import morgan from 'morgan';
+import rateLimit from 'express-rate-limit';
 import { env } from './config/env';
 import { errorHandler, notFoundHandler } from './middleware/error';
 
@@ -19,7 +21,17 @@ import cronRoutes from './routes/cron';
 export function createApp() {
   const app = express();
 
+  app.use(helmet());
   app.use(cors({ origin: env.clientUrl, credentials: true }));
+  app.use(
+    '/api',
+    rateLimit({
+      windowMs: 60 * 1000,
+      max: 600,
+      standardHeaders: true,
+      legacyHeaders: false,
+    })
+  );
   app.use(express.json({ limit: '2mb' }));
   app.use(cookieParser());
   if (env.nodeEnv !== 'test') app.use(morgan('dev'));

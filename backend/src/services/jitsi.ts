@@ -1,11 +1,12 @@
 import * as crypto from 'crypto';
 import { env } from '../config/env';
+import { badRequest } from '../utils/httpError';
 
 /**
  * Generates a Jitsi Meet JWT token for secure room access.
  *
- * If JITSI_APP_ID / JITSI_APP_SECRET are not configured, returns null —
- * the room still works on public meet.jit.si but without moderator enforcement.
+ * Development may use an unauthenticated room. Production requires Jitsi JWT
+ * credentials so room membership and moderator permissions are enforced.
  */
 export function makeJitsiToken(opts: {
   roomName: string;
@@ -16,7 +17,12 @@ export function makeJitsiToken(opts: {
   const appId = env.jitsi.appId;
   const appSecret = env.jitsi.appSecret;
 
-  if (!appId || !appSecret) return null;
+  if (!appId || !appSecret) {
+    if (env.nodeEnv === 'production') {
+      throw badRequest('Jitsi credentials must be configured in production');
+    }
+    return null;
+  }
 
   const now = Math.floor(Date.now() / 1000);
 
@@ -57,9 +63,9 @@ export function makeJitsiToken(opts: {
   return `${header}.${payload}.${signature}`;
 }
 
-/** Generates a deterministic, URL-safe room name for a schedule entry. */
-export function makeRoomName(tenantSlug: string, scheduleId: string): string {
-  return `ms-${tenantSlug}-${scheduleId}`.replace(/[^a-zA-Z0-9-]/g, '-');
+/** Generates an unguessable room name for a schedule entry. */
+export function makeRoomName(_tenantSlug: string, _scheduleId: string): string {
+  return `ms-${crypto.randomBytes(12).toString('hex')}`;
 }
 
 function base64url(str: string): string {

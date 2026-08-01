@@ -4,7 +4,7 @@ import rateLimit from 'express-rate-limit';
 import { basePrisma } from '../lib/prisma';
 import { asyncHandler } from '../utils/asyncHandler';
 import { authenticate, requireRole } from '../middleware/auth';
-import { issueTokens, publicUser } from '../services/auth';
+import { issueTokens, publicUser, revokeRefreshTokensForUser } from '../services/auth';
 import {
   changePasswordSchema,
   createTenantAdminSchema,
@@ -20,11 +20,12 @@ import { badRequest, conflict, notFound, unauthorized } from '../utils/httpError
 import { writeAuditLog } from '../services/audit';
 import { resolvePlanFeatures } from '../services/planGates';
 import { inviteTenantAdmin } from '../services/adminInvite';
+import { setRefreshCookie } from '../utils/authCookies';
 
 // Mounted at /api/admin
 const router = Router();
 
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 50, standardHeaders: true, legacyHeaders: false });
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false });
 
 function clientIp(req: { ip?: string; headers: Record<string, unknown> }) {
   const fwd = req.headers['x-forwarded-for'];
@@ -67,6 +68,7 @@ router.post(
     const valid = await bcrypt.compare(data.password, user.passwordHash);
     if (!valid) throw unauthorized('Invalid email or password');
     const tokens = await issueTokens(user);
+    setRefreshCookie(res, tokens.refreshToken);
     res.json({ user: publicUser(user), ...tokens });
   })
 );
@@ -369,6 +371,7 @@ router.post(
       where: { id: user.id },
       data: { passwordHash: await bcrypt.hash(data.newPassword, 10) },
     });
+    await revokeRefreshTokensForUser(user.id);
 
     res.json({ ok: true });
   })

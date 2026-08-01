@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import multer from 'multer';
 import { env } from '../config/env';
 import { badRequest } from '../utils/httpError';
@@ -44,9 +46,18 @@ const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'];
 
 // Uploaded lesson videos (stored on platform, streamed to students).
 export const uploadVideo = multer({
-  storage: multer.memoryStorage(),
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      const directory = path.join(env.uploadDir, 'tmp');
+      fs.mkdirSync(directory, { recursive: true });
+      cb(null, directory);
+    },
+    filename: (_req, file, cb) => {
+      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${path.extname(file.originalname)}`);
+    },
+  }),
   limits: {
-    fileSize: parseInt(process.env.MAX_VIDEO_UPLOAD_MB ?? '500', 10) * 1024 * 1024,
+    fileSize: parseInt(process.env.MAX_VIDEO_UPLOAD_MB ?? '100', 10) * 1024 * 1024,
   },
   fileFilter: (_req, file, cb) => {
     if (VIDEO_TYPES.includes(file.mimetype)) {

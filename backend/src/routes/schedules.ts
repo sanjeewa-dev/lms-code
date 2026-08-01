@@ -8,6 +8,7 @@ import { forbidden, notFound, badRequest } from '../utils/httpError';
 import { makeJitsiToken, makeRoomName } from '../services/jitsi';
 import { env } from '../config/env';
 import { sendLiveClassStarted } from '../services/email';
+import { assertHttpsPublicUrl } from '../utils/safeUrl';
 
 const router = Router({ mergeParams: true });
 
@@ -311,7 +312,11 @@ router.post(
     });
     if (!existing) throw notFound('Schedule not found');
 
-    const recordingUrl: string | null = req.body.recordingUrl ?? null;
+    const rawRecordingUrl = req.body.recordingUrl;
+    const recordingUrl =
+      typeof rawRecordingUrl === 'string' && rawRecordingUrl.trim()
+        ? assertHttpsPublicUrl(rawRecordingUrl.trim())
+        : null;
 
     const schedule = await prisma.classSchedule.update({
       where: { id: existing.id },

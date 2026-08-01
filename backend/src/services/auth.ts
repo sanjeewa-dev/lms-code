@@ -1,6 +1,8 @@
 import { basePrisma } from '../lib/prisma';
 import { signAccessToken, signRefreshToken } from '../lib/jwt';
+import { hashToken } from '../utils/cryptoTokens';
 import type { Role, User } from '@prisma/client';
+import { unauthorized } from '../utils/httpError';
 
 export function publicUser(user: {
   id: string;
@@ -29,6 +31,29 @@ export function publicUser(user: {
   };
 }
 
+/** Shared gate for login + refresh. */
+export function assertUserMayAuthenticate(user: {
+  id: string;
+  role: Role;
+  status: string;
+  passwordHash: string | null;
+  tenant?: { isActive: boolean } | null;
+}) {
+  if (user.role !== 'superadmin' && user.tenant && !user.tenant.isActive) {
+    throw unauthorized('Invalid email or password');
+  }
+  if (!user.passwordHash) {
+    throw unauthorized('Invalid email or password');
+  }
+  if (user.status !== 'approved') {
+    throw unauthorized('Invalid email or password');
+  }
+}
+
+export async function revokeRefreshTokensForUser(userId: string) {
+  await basePrisma.refreshToken.deleteMany({ where: { userId } });
+}
+
 export async function issueTokens(user: User) {
   const accessToken = signAccessToken({
     sub: user.id,
@@ -40,7 +65,7 @@ export async function issueTokens(user: User) {
   const refreshToken = signRefreshToken(user.id);
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   await basePrisma.refreshToken.create({
-    data: { token: refreshToken, userId: user.id, expiresAt },
+    data: { token: hashToken(refreshToken), userId: user.id, expiresAt },
   });
   return { accessToken, refreshToken };
 }

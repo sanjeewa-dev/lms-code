@@ -412,15 +412,44 @@ router.post(
     await assertNoDuplicatePayment(enrollment.id, data.forMonth);
     const amount = Number(enrollment.class.price).toFixed(2);
     const orderId = `ph_${enrollment.id}_${data.forMonth}_${Date.now()}`;
+    const paymentType = enrollment.status === 'active' ? 'monthly' : 'enrollment';
 
-    // Sandbox checkout fields — institute completes payment on PayHere hosted page.
+    // Create a server-side pending payment bound to order_id + expected amount.
+    const slip = await basePrisma.file.create({
+      data: {
+        tenantId: req.tenant!.id,
+        ownerId: req.user!.sub,
+        storageKey: `payhere/${orderId}.txt`,
+        originalName: `payhere-${orderId}.txt`,
+        mimeType: 'text/plain',
+        size: 0,
+        kind: 'slip',
+      },
+    });
+    await prisma.payment.create({
+      data: {
+        tenantId: req.tenant!.id,
+        enrollmentId: enrollment.id,
+        amount,
+        slipFileId: slip.id,
+        paymentType,
+        forMonth: data.forMonth,
+        status: 'pending',
+        orderId,
+        note: 'PayHere checkout initiated',
+      },
+    });
+
+    const sandbox = env.payhereSandbox;
     res.json({
       checkout: {
-        sandbox: true,
-        action: 'https://sandbox.payhere.lk/pay/checkout',
+        sandbox,
+        action: sandbox
+          ? 'https://sandbox.payhere.lk/pay/checkout'
+          : 'https://www.payhere.lk/pay/checkout',
         merchant_id: tenant.payhereMerchantId,
-        return_url: `${process.env.CLIENT_URL ?? 'http://localhost:5173'}/${req.params.slug}/payments`,
-        cancel_url: `${process.env.CLIENT_URL ?? 'http://localhost:5173'}/${req.params.slug}/payments`,
+        return_url: `${env.clientUrl}/${req.params.slug}/payments`,
+        cancel_url: `${env.clientUrl}/${req.params.slug}/payments`,
         notify_url: `${env.apiPublicUrl}/api/t/${req.params.slug}/public/payhere/notify`,
         order_id: orderId,
         items: `${enrollment.class.title} (${data.forMonth})`,

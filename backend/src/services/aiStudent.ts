@@ -71,25 +71,6 @@ async function requireQuotaThenRun<T>(opts: {
   const limit = getAiTokenLimit(tenant);
   const forMonth = currentBillingMonth();
 
-  const existing = await prisma.aiUsage.findUnique({
-    where: {
-      studentId_classId_forMonth: {
-        studentId: opts.studentId,
-        classId: opts.classId,
-        forMonth,
-      },
-    },
-  });
-  if ((existing?.used ?? 0) >= limit) {
-    throw paymentRequired(
-      `Monthly AI token limit reached (${limit}/${limit}) for this class. Resets next month.`,
-      { used: existing?.used ?? limit, limit, forMonth }
-    );
-  }
-
-  // Only consume after a successful Anthropic-backed result (run must throw on failure).
-  const result = await opts.run();
-
   await prisma.aiUsage.upsert({
     where: {
       studentId_classId_forMonth: {
@@ -103,10 +84,41 @@ async function requireQuotaThenRun<T>(opts: {
       studentId: opts.studentId,
       classId: opts.classId,
       forMonth,
-      used: 1,
+      used: 0,
     },
-    update: { used: { increment: 1 } },
+    update: {},
   });
+  const reserved = await prisma.aiUsage.updateMany({
+    where: {
+      studentId: opts.studentId,
+      classId: opts.classId,
+      forMonth,
+      used: { lt: limit },
+    },
+    data: { used: { increment: 1 } },
+  });
+  if (reserved.count !== 1) {
+    throw paymentRequired(
+      `Monthly AI token limit reached (${limit}/${limit}) for this class. Resets next month.`,
+      { used: limit, limit, forMonth }
+    );
+  }
+
+  let result: T;
+  try {
+    result = await opts.run();
+  } catch (error) {
+    await prisma.aiUsage.updateMany({
+      where: {
+        studentId: opts.studentId,
+        classId: opts.classId,
+        forMonth,
+        used: { gt: 0 },
+      },
+      data: { used: { decrement: 1 } },
+    });
+    throw error;
+  }
 
   const quota = await getAiQuota(opts);
   return { result, quota };

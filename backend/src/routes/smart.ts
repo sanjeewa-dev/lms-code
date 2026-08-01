@@ -9,6 +9,7 @@ import {
 import { computeAtRiskStudents, nudgeAtRiskStudent } from '../services/atRisk';
 import { explainQuizQuestion, weakTopicsForStudent } from '../services/aiCoach';
 import { z } from 'zod';
+import { forbidden } from '../utils/httpError';
 
 const router = Router({ mergeParams: true });
 
@@ -59,6 +60,18 @@ router.post(
   authenticate,
   requireRole('admin', 'teacher'),
   asyncHandler(async (req, res) => {
+    if (req.user!.role === 'teacher') {
+      const enrollment = await basePrisma.enrollment.findFirst({
+        where: {
+          tenantId: req.tenant!.id,
+          studentId: req.params.studentId,
+          status: 'active',
+          class: { teacherId: req.user!.sub },
+        },
+        select: { id: true },
+      });
+      if (!enrollment) throw forbidden('You can only nudge students in your active classes');
+    }
     const tenant = await basePrisma.tenant.findFirst({ where: { id: req.tenant!.id } });
     const result = await nudgeAtRiskStudent({
       tenantId: req.tenant!.id,

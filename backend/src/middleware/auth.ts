@@ -23,7 +23,7 @@ export function authenticate(req: Request, _res: Response, next: NextFunction) {
 export function requireRole(...roles: Role[]) {
   return (req: Request, _res: Response, next: NextFunction) => {
     if (!req.user) return next(unauthorized());
-    if (!roles.includes(req.user.role)) {
+    if (!roles.includes(req.user.role) && !(req.user.role === 'superadmin' && roles.includes('admin'))) {
       return next(forbidden('You do not have permission to perform this action'));
     }
     return next();

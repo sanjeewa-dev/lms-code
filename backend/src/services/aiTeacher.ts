@@ -2,8 +2,40 @@ import { prisma } from '../lib/prisma';
 import { callAnthropic, parseJsonObject } from './anthropic';
 import { forbidden, notFound, badRequest } from '../utils/httpError';
 import { assertFeature } from './planGates';
+import { currentBillingMonth } from './access';
+import { env } from '../config/env';
 
 export type TeacherAiToolId = 'quiz-gen' | 'feedback' | 'weak-topics' | 'intervention';
+
+async function requireTeacherQuotaThenRun<T>(opts: {
+  tenantId: string;
+  userId: string;
+  run: () => Promise<T>;
+}): Promise<T> {
+  const forMonth = currentBillingMonth();
+  const limit = env.teacherAiMonthlyLimit;
+  await prisma.aiStaffUsage.upsert({
+    where: { userId_forMonth: { userId: opts.userId, forMonth } },
+    create: { tenantId: opts.tenantId, userId: opts.userId, forMonth, used: 0 },
+    update: {},
+  });
+  const reserved = await prisma.aiStaffUsage.updateMany({
+    where: { userId: opts.userId, forMonth, used: { lt: limit } },
+    data: { used: { increment: 1 } },
+  });
+  if (reserved.count !== 1) {
+    throw forbidden(`Monthly teacher AI limit reached (${limit}). Resets next month.`);
+  }
+  try {
+    return await opts.run();
+  } catch (error) {
+    await prisma.aiStaffUsage.updateMany({
+      where: { userId: opts.userId, forMonth, used: { gt: 0 } },
+      data: { used: { decrement: 1 } },
+    });
+    throw error;
+  }
+}
 
 async function assertTeacherClass(teacherId: string, classId: string, tenantId: string) {
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
@@ -133,7 +165,11 @@ Generate exactly ${count} multiple-choice questions. Return JSON:
   ]
 }`;
 
-  const raw = await callAnthropic({ system, user, maxTokens: 2000 });
+  const raw = await requireTeacherQuotaThenRun({
+    tenantId: opts.tenantId,
+    userId: opts.teacherId,
+    run: () => callAnthropic({ system, user, maxTokens: 2000 }),
+  });
   if (!raw) throw badRequest('AI service unavailable. Please check your API key.');
 
   const parsed = parseJsonObject<{ title: string; questions: unknown[] }>(raw);
@@ -184,7 +220,11 @@ Draft feedback. Return JSON:
   "improvements": ["improvement 1", "improvement 2"]
 }`;
 
-  const raw = await callAnthropic({ system, user, maxTokens: 600 });
+  const raw = await requireTeacherQuotaThenRun({
+    tenantId: opts.tenantId,
+    userId: opts.teacherId,
+    run: () => callAnthropic({ system, user, maxTokens: 600 }),
+  });
   if (!raw) throw badRequest('AI service unavailable. Please check your API key.');
 
   const parsed = parseJsonObject<{
@@ -272,7 +312,11 @@ Identify the top weak topics. Return JSON:
   ]
 }`;
 
-  const raw = await callAnthropic({ system, user, maxTokens: 800 });
+  const raw = await requireTeacherQuotaThenRun({
+    tenantId: opts.tenantId,
+    userId: opts.teacherId,
+    run: () => callAnthropic({ system, user, maxTokens: 800 }),
+  });
   let result: {
     summary: string;
     weakTopics: unknown[];
@@ -391,7 +435,11 @@ For each student, suggest one short, actionable intervention. Return JSON:
   ]
 }`;
 
-  const raw = await callAnthropic({ system, user, maxTokens: 600 });
+  const raw = await requireTeacherQuotaThenRun({
+    tenantId: opts.tenantId,
+    userId: opts.teacherId,
+    run: () => callAnthropic({ system, user, maxTokens: 600 }),
+  });
   const parsed = raw
     ? parseJsonObject<{
         interventions: { studentName: string; suggestion: string; priority: string }[];

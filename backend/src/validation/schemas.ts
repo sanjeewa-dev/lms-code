@@ -333,7 +333,9 @@ export const videoLessonSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(2000).optional(),
   provider: z.enum(['youtube', 'vimeo', 'url']).default('youtube'),
-  videoUrl: z.string().url(),
+  videoUrl: z.string().url().refine((url) => new URL(url).protocol === 'https:', {
+    message: 'Video URL must use HTTPS',
+  }),
   visibility: z.enum(['all', 'class', 'batch']).default('all'),
   classId: z.string().optional(),
   batchId: z.string().optional(),

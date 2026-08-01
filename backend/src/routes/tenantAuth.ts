@@ -6,14 +6,15 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { loginSchema, registerSchema } from '../validation/schemas';
 import { issueTokens, publicUser } from '../services/auth';
 import { resolveTenant, enterTenantContext } from '../middleware/tenant';
-import { badRequest, unauthorized, notFound } from '../utils/httpError';
+import { unauthorized, notFound, badRequest } from '../utils/httpError';
+import { setRefreshCookie } from '../utils/authCookies';
 
 // Mounted at /api/t/:slug/auth
 const router = Router({ mergeParams: true });
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 50,
+  max: 10,
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -80,24 +81,19 @@ router.post(
     const user = await basePrisma.user.findFirst({
       where: { tenantId, email: data.email },
     });
-    if (!user) throw unauthorized('Invalid email or password');
+    if (!user) throw unauthorized('Invalid credentials');
 
     if (!user.passwordHash) {
-      throw unauthorized('Please complete your registration using the invite link sent to your email.');
+      throw unauthorized('Invalid credentials');
     }
 
     const valid = await bcrypt.compare(data.password, user.passwordHash);
-    if (!valid) throw unauthorized('Invalid email or password');
+    if (!valid) throw unauthorized('Invalid credentials');
 
-    if (user.role === 'student' && user.status !== 'approved') {
-      throw unauthorized(
-        user.status === 'pending'
-          ? 'Your account is pending approval by the institute.'
-          : 'Your account has been rejected. Please contact your institute.'
-      );
-    }
+    if (user.status !== 'approved') throw unauthorized('Invalid credentials');
 
     const tokens = await issueTokens(user);
+    setRefreshCookie(res, tokens.refreshToken);
     res.json({ user: publicUser({ ...user, tenant: req.tenant! }), ...tokens });
   })
 );

@@ -13,9 +13,9 @@ export const tokenStore = {
   get refresh() {
     return localStorage.getItem(REFRESH_KEY);
   },
-  set(access: string, refresh: string) {
+  set(access: string, _refresh?: string) {
     localStorage.setItem(ACCESS_KEY, access);
-    localStorage.setItem(REFRESH_KEY, refresh);
+    localStorage.removeItem(REFRESH_KEY);
   },
   clear() {
     localStorage.removeItem(ACCESS_KEY);
@@ -23,21 +23,17 @@ export const tokenStore = {
   },
   beginSupport(accessToken: string, meta: { sessionId: string; tenantId: string; tenantSlug: string; tenantName: string }) {
     const curAccess = localStorage.getItem(ACCESS_KEY);
-    const curRefresh = localStorage.getItem(REFRESH_KEY);
     if (curAccess) localStorage.setItem(PLATFORM_ACCESS_KEY, curAccess);
-    if (curRefresh) localStorage.setItem(PLATFORM_REFRESH_KEY, curRefresh);
     localStorage.setItem(ACCESS_KEY, accessToken);
     localStorage.setItem(SUPPORT_META_KEY, JSON.stringify(meta));
   },
   endSupport() {
     const platformAccess = localStorage.getItem(PLATFORM_ACCESS_KEY);
-    const platformRefresh = localStorage.getItem(PLATFORM_REFRESH_KEY);
     localStorage.removeItem(PLATFORM_ACCESS_KEY);
     localStorage.removeItem(PLATFORM_REFRESH_KEY);
     localStorage.removeItem(SUPPORT_META_KEY);
-    if (platformAccess && platformRefresh) {
+    if (platformAccess) {
       localStorage.setItem(ACCESS_KEY, platformAccess);
-      localStorage.setItem(REFRESH_KEY, platformRefresh);
       return true;
     }
     return false;
@@ -54,6 +50,7 @@ export const tokenStore = {
 
 export const api = axios.create({
   baseURL: '/api',
+  withCredentials: true,
 });
 
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
@@ -68,9 +65,12 @@ let refreshing: Promise<string | null> | null = null;
 
 async function refreshAccessToken(): Promise<string | null> {
   const refreshToken = tokenStore.refresh;
-  if (!refreshToken) return null;
   try {
-    const { data } = await axios.post('/api/auth/refresh', { refreshToken });
+    const { data } = await axios.post(
+      '/api/auth/refresh',
+      refreshToken ? { refreshToken } : {},
+      { withCredentials: true }
+    );
     tokenStore.set(data.accessToken, data.refreshToken);
     return data.accessToken as string;
   } catch {
