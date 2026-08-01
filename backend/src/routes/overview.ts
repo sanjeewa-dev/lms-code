@@ -94,6 +94,7 @@ router.get(
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
+    const forMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
 
     const teacherClassFilter =
       user.role === 'teacher' ? { teacherId: user.sub } : {};
@@ -138,7 +139,10 @@ router.get(
         user.role === 'teacher' ? { where: { class: { teacherId: user.sub } } } : undefined
       ),
       prisma.payment.count({ where: { status: 'pending' } }),
-      prisma.payment.findMany({ where: { status: 'approved' }, select: { amount: true } }),
+      prisma.payment.findMany({
+        where: { status: 'approved', forMonth },
+        select: { amount: true },
+      }),
       prisma.intervention.count({
         where: {
           status: { in: ['open', 'in_progress', 'escalated'] },

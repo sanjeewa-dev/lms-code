@@ -9,6 +9,7 @@ import { SmartOpsPanel, WeakTopicsCard } from '../components/SmartOpsPanel';
 import { PerformanceChart, type PerformancePoint } from '../components/PerformanceChart';
 import { ClassCalendar } from '../components/ClassCalendar';
 import { LiveNowStrip } from '../components/LiveNowStrip';
+import { currentMonth } from '../lib/paymentUtils';
 import type { ClassSummary, AdminStats } from '../api/types';
 
 type Tone = 'blue' | 'green' | 'purple' | 'amber' | 'pink' | 'sky';
@@ -21,6 +22,54 @@ const toneChip: Record<Tone, string> = {
   pink: 'bg-pink-100 text-pink-600',
   sky: 'bg-sky-100 text-sky-600',
 };
+
+function WelcomeBanner({
+  eyebrow,
+  title,
+  description,
+  primary,
+  secondary,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  primary: { to: string; label: string };
+  secondary: { to: string; label: string };
+}) {
+  return (
+    <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-r from-rose-50 via-white to-sky-50 p-5 shadow-sm dark:border-white/5 dark:from-ink-850 dark:via-ink-850 dark:to-ink-850 sm:p-6">
+      <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-sky-200/45 blur-3xl dark:bg-sky-500/10" />
+      <div className="pointer-events-none absolute -bottom-24 left-[28%] h-48 w-48 rounded-full bg-rose-200/40 blur-3xl dark:bg-rose-500/10" />
+      <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand-600 dark:text-brand-400">
+            {eyebrow}
+          </p>
+          <h1 className="mt-1.5 text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
+            {title}
+          </h1>
+          <p className="mt-1.5 max-w-xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+            {description}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2.5">
+          <Link
+            to={primary.to}
+            className="inline-flex items-center justify-center rounded-full bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm shadow-brand-600/20 transition hover:bg-brand-700"
+          >
+            {primary.label}
+          </Link>
+          <Link
+            to={secondary.to}
+            className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:hover:bg-white/10"
+          >
+            {secondary.label}
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function StatCard({
   label,
@@ -198,38 +247,13 @@ export default function Dashboard() {
           <ErrorBanner message="Could not load dashboard stats. Try refreshing the page." />
         )}
 
-        <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-white/5 dark:bg-ink-850 sm:p-6">
-          <div className="pointer-events-none absolute -right-10 -top-16 h-72 w-72 rounded-full bg-brand-500/35 blur-3xl dark:bg-brand-400/25" />
-          <div className="pointer-events-none absolute -bottom-20 left-[20%] h-64 w-64 rounded-full bg-rose-500/30 blur-3xl dark:bg-rose-400/20" />
-          <div className="pointer-events-none absolute -left-12 top-0 h-48 w-48 rounded-full bg-violet-500/25 blur-3xl dark:bg-violet-400/15" />
-          <div className="relative flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-brand-600 dark:text-brand-400">
-                Institute overview
-              </p>
-              <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
-                Welcome back, {firstName}
-              </h1>
-              <p className="mt-1.5 max-w-xl text-sm text-slate-500 dark:text-slate-400">
-                Monitor students, fees, and live sessions — then jump into teaching tools.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Link
-                to={`${base}/classes`}
-                className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-brand-600/20 transition hover:bg-brand-700"
-              >
-                Manage classes
-              </Link>
-              <Link
-                to={`${base}/students`}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-200 dark:hover:bg-white/10"
-              >
-                View students
-              </Link>
-            </div>
-          </div>
-        </div>
+        <WelcomeBanner
+          eyebrow="Institute overview"
+          title={`Welcome back, ${firstName}`}
+          description="Monitor students, fees, and live sessions — then jump into teaching tools."
+          primary={{ to: `${base}/classes`, label: 'Manage classes' }}
+          secondary={{ to: `${base}/students`, label: 'View students' }}
+        />
 
         {statsQuery.isLoading ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
@@ -266,11 +290,11 @@ export default function Dashboard() {
               to={`${base}/live`}
             />
             <StatCard
-              label="Approved revenue"
+              label="This month's revenue"
               value={s ? `Rs. ${s.revenue.toLocaleString()}` : '—'}
               icon="revenue"
               highlight
-              to={`${base}/payments?status=approved&forMonth=`}
+              to={`${base}/payments?status=approved&forMonth=${currentMonth()}`}
             />
           </div>
         )}
@@ -388,27 +412,16 @@ export default function Dashboard() {
 
     return (
       <div className="space-y-6">
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/5 dark:bg-ink-850 sm:p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Teaching today</p>
-              <h2 className="mt-1 text-xl font-bold text-slate-900 dark:text-white">
-                {teachingList[0]?.title ?? 'Your classes'}
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                {dash(s?.students)} students · {dash(s?.classes)} classes · {dash(s?.draftQuizzes)} draft quizzes
-              </p>
-            </div>
-            {teachingList[0] && (
-              <Link
-                to={`${base}/classes/${teachingList[0].id}`}
-                className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
-              >
-                Open class hub
-              </Link>
-            )}
-          </div>
-        </div>
+        <WelcomeBanner
+          eyebrow="Teaching today"
+          title={teachingList[0]?.title ?? 'Your classes'}
+          description={`${dash(s?.students)} students · ${dash(s?.classes)} classes · ${dash(s?.draftQuizzes)} draft quizzes`}
+          primary={{
+            to: teachingList[0] ? `${base}/classes/${teachingList[0].id}` : `${base}/classes`,
+            label: teachingList[0] ? 'Open class hub' : 'Manage classes',
+          }}
+          secondary={{ to: teacherQuizHref, label: 'AI quiz builder' }}
+        />
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <StatCard label="My students" value={dash(s?.students)} icon="users" tone="blue" to={`${base}/students`} />
@@ -526,40 +539,20 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-white/5 dark:bg-ink-850 sm:p-6">
-        <div className="pointer-events-none absolute -right-10 -top-16 h-72 w-72 rounded-full bg-brand-500/35 blur-3xl dark:bg-brand-400/25" />
-        <div className="pointer-events-none absolute -bottom-20 left-[20%] h-64 w-64 rounded-full bg-rose-500/30 blur-3xl dark:bg-rose-400/20" />
-        <div className="pointer-events-none absolute -left-12 top-0 h-48 w-48 rounded-full bg-violet-500/25 blur-3xl dark:bg-violet-400/15" />
-        <div className="relative flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-brand-600 dark:text-brand-400">
-              Student dashboard
-            </p>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
-              {continueClass ? `Continue ${continueClass.title}` : `Welcome back, ${firstName}`}
-            </h1>
-            <p className="mt-1.5 max-w-xl text-sm text-slate-500 dark:text-slate-400">
-              {pendingCount
-                ? `${pendingCount} quiz${pendingCount === 1 ? '' : 'zes'} waiting for you.`
-                : `You're enrolled in ${classes.length} ${classes.length === 1 ? 'class' : 'classes'}.`}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Link
-              to={continueClass ? `${base}/classes/${continueClass.id}` : `${base}/classes`}
-              className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-brand-600/20 transition hover:bg-brand-700"
-            >
-              Continue learning
-            </Link>
-            <Link
-              to={`${base}/ai`}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-200 dark:hover:bg-white/10"
-            >
-              Open AI Area
-            </Link>
-          </div>
-        </div>
-      </div>
+      <WelcomeBanner
+        eyebrow="Student dashboard"
+        title={continueClass ? `Continue ${continueClass.title}` : `Welcome back, ${firstName}`}
+        description={
+          pendingCount
+            ? `${pendingCount} quiz${pendingCount === 1 ? '' : 'zes'} waiting for you.`
+            : `You're enrolled in ${classes.length} ${classes.length === 1 ? 'class' : 'classes'}.`
+        }
+        primary={{
+          to: continueClass ? `${base}/classes/${continueClass.id}` : `${base}/classes`,
+          label: 'Continue learning',
+        }}
+        secondary={{ to: `${base}/ai`, label: 'Open AI Area' }}
+      />
 
       <LiveNowStrip />
 
