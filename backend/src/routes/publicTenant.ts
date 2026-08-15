@@ -4,6 +4,10 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { resolveTenant, enterTenantContext } from '../middleware/tenant';
 import { resolveParentToken } from '../services/parentTrust';
 import { storage } from '../services/storage';
+import {
+  canAnonymousRegisterForClass,
+  loadSelfEnrollmentPolicy,
+} from '../services/selfEnrollmentPolicy';
 import { notFound } from '../utils/httpError';
 
 // Mounted at /api/t/:slug/public - no authentication required.
@@ -35,7 +39,12 @@ router.get(
     ]);
 
     res.json({
-      tenant: { name: tenant.name, slug: tenant.slug, logoUrl: tenant.logoUrl },
+      tenant: {
+        name: tenant.name,
+        slug: tenant.slug,
+        logoUrl: tenant.logoUrl,
+        selfEnrollmentEnabled: tenant.selfEnrollmentEnabled,
+      },
       notices,
       events,
       videos: videos.map(({ videoUrl: _videoUrl, ...video }) => video),
@@ -59,12 +68,59 @@ router.get(
   })
 );
 
-/** Published classes available for student self-registration / browse. */
+/**
+ * Public class lookup for registration.
+ * Without classId: returns classes open to anonymous registration when policy allows.
+ * With classId: returns that class only when anonymous registration is allowed.
+ */
 router.get(
   '/classes',
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
+    const classId = typeof req.query.classId === 'string' ? req.query.classId.trim() : '';
+    const policy = await loadSelfEnrollmentPolicy(req.tenant!.id);
+
+    if (classId) {
+      if (!policy || !canAnonymousRegisterForClass(policy, classId)) {
+        res.json({ classes: [] });
+        return;
+      }
+      const klass = await prisma.class.findFirst({
+        where: { id: classId, isPublished: true },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          price: true,
+          teacher: { select: { id: true, name: true } },
+          batch: { select: { id: true, name: true } },
+        },
+      });
+      res.json({ classes: klass ? [{ ...klass, price: Number(klass.price) }] : [] });
+      return;
+    }
+
+    if (!policy?.enabled) {
+      res.json({ classes: [] });
+      return;
+    }
+
+    let ids: string[] = [];
+    if (policy.scope === 'all_classes') {
+      const all = await prisma.class.findMany({
+        where: { isPublished: true },
+        select: { id: true },
+      });
+      ids = all.map((c) => c.id);
+    } else {
+      ids = policy.rules.filter((r) => r.audience === 'all_students').map((r) => r.targetClassId);
+    }
+    if (!ids.length) {
+      res.json({ classes: [] });
+      return;
+    }
+
     const classes = await prisma.class.findMany({
-      where: { isPublished: true },
+      where: { id: { in: ids }, isPublished: true },
       select: {
         id: true,
         title: true,
@@ -75,12 +131,7 @@ router.get(
       },
       orderBy: { title: 'asc' },
     });
-    res.json({
-      classes: classes.map((c) => ({
-        ...c,
-        price: Number(c.price),
-      })),
-    });
+    res.json({ classes: classes.map((c) => ({ ...c, price: Number(c.price) })) });
   })
 );
 

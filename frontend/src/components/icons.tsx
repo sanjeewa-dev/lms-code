@@ -218,5 +218,3 @@ export function Icon({ name, ...props }: { name: IconName } & SVGProps<SVGSVGEle
     </svg>
   );
 }
-
-export type { IconName };

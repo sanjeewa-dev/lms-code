@@ -20,6 +20,7 @@ const EMPTY_FORM = {
   classTime: '',
   platform: 'zoom' as MeetingPlatform,
   meetingText: '',
+  externalMeetingUrl: '',
   repeat: 'once' as 'once' | 'daily' | 'weekly' | 'weekdays' | 'weekends' | 'custom',
   repeatUntil: '',
   customDays: [] as number[],
@@ -63,11 +64,6 @@ function formatScheduleTime(classTime: string) {
   const date = new Date();
   date.setHours(hours, minutes, 0, 0);
   return date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-}
-
-function extractMeetingUrl(text: string) {
-  const match = text.match(/https?:\/\/[^\s]+/i);
-  return match?.[0] ?? null;
 }
 
 function PlatformIcon({ platform, size = 18 }: { platform: MeetingPlatform; size?: number }) {
@@ -251,13 +247,25 @@ function ScheduleForm({
         </span>
       </div>
       {form.platform !== 'jitsi' && (
-        <Textarea
-          label="Meeting link / invitation text"
-          value={form.meetingText}
-          onChange={(e) => setForm((f) => ({ ...f, meetingText: e.target.value }))}
-          rows={4}
-          placeholder="Paste the meeting link or full invitation message for students"
-        />
+        <>
+          <Input
+            label="Meeting link"
+            type="url"
+            value={form.externalMeetingUrl}
+            onChange={(e) => setForm((f) => ({ ...f, externalMeetingUrl: e.target.value }))}
+            placeholder="https://zoom.us/j/... or Teams meeting link"
+          />
+          <p className="text-xs text-slate-400">
+            This private link is displayed only after an authorized student selects Join meeting.
+          </p>
+          <Textarea
+            label="Meeting notes (optional)"
+            value={form.meetingText}
+            onChange={(e) => setForm((f) => ({ ...f, meetingText: e.target.value }))}
+            rows={3}
+            placeholder="e.g. Please join five minutes early."
+          />
+        </>
       )}
       <div className="flex flex-wrap gap-2">
         <Button
@@ -306,6 +314,7 @@ export function ScheduleTab({
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState('');
+  const [saveNotice, setSaveNotice] = useState('');
   const [activeRoom, setActiveRoom] = useState<LiveRoom | null>(null);
   const [listTab, setListTab] = useState<'upcoming' | 'completed'>('upcoming');
 
@@ -331,6 +340,7 @@ export function ScheduleTab({
         classTime: data.classTime,
         platform: data.platform,
         meetingText: data.meetingText,
+        externalMeetingUrl: data.externalMeetingUrl,
         repeat: data.repeat,
       };
       if (data.repeat !== 'once' && data.repeatUntil) {
@@ -346,8 +356,14 @@ export function ScheduleTab({
       setCreating(false);
       queryClient.invalidateQueries({ queryKey: ['schedules', t.slug, classId] });
       queryClient.invalidateQueries({ queryKey: ['live-upcoming', t.slug] });
-      if (res?.created && res.created > 1) {
-        // optional feedback via saveError slot reused as success would be odd — leave silent
+      const created = res?.created ?? 1;
+      if (created > 1) {
+        setSaveNotice(`Created ${created} recurring sessions.`);
+      } else {
+        setSaveNotice('Session scheduled.');
+      }
+      if (created >= 52) {
+        setSaveNotice((msg) => `${msg} Recurring schedules are capped at 52 sessions.`);
       }
     },
     onError: (err) => setSaveError(apiErrorMessage(err)),
@@ -361,6 +377,7 @@ export function ScheduleTab({
           classTime: data.classTime,
           platform: data.platform,
           meetingText: data.meetingText,
+          externalMeetingUrl: data.externalMeetingUrl,
         })
       ).data,
     onSuccess: () => {
@@ -502,6 +519,7 @@ export function ScheduleTab({
             classTime: editingSchedule.classTime,
             platform: editingSchedule.platform,
             meetingText: editingSchedule.meetingText,
+            externalMeetingUrl: editingSchedule.externalMeetingUrl ?? '',
             repeat: 'once',
             repeatUntil: '',
             customDays: [],
@@ -518,6 +536,11 @@ export function ScheduleTab({
       {saveError && (
         <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">{saveError}</p>
       )}
+      {saveNotice && (
+        <p className="rounded-lg bg-emerald-50 px-4 py-2 text-sm text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
+          {saveNotice}
+        </p>
+      )}
 
       <Card>
         {schedulesQuery.isLoading ? (
@@ -526,7 +549,6 @@ export function ScheduleTab({
           <ul className="divide-y divide-slate-100 dark:divide-white/5">
             {visibleSchedules.map((schedule) => {
               const meta = platformMeta(schedule.platform);
-              const meetingUrl = extractMeetingUrl(schedule.meetingText);
               const isLive = schedule.status === 'live';
               const isEnded = schedule.status === 'ended';
               const pastScheduled = listTab === 'completed' && !isEnded && !isLive;
@@ -576,17 +598,6 @@ export function ScheduleTab({
                       {schedule.meetingText && listTab === 'upcoming' && !isLive && !isEnded && (
                         <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:bg-white/5 dark:text-slate-300">
                           <p className="whitespace-pre-wrap break-words">{schedule.meetingText}</p>
-                          {meetingUrl && (
-                            <a
-                              href={meetingUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:underline"
-                            >
-                              <Icon name="live" width={14} height={14} />
-                              Join meeting
-                            </a>
-                          )}
                         </div>
                       )}
                     </div>
@@ -603,6 +614,29 @@ export function ScheduleTab({
                           Join live
                         </button>
                       )}
+                      {listTab === 'upcoming' &&
+                        !canManage &&
+                        schedule.platform !== 'jitsi' &&
+                        schedule.hasExternalMeetingLink &&
+                        !isEnded && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                const { data } = await t.get<{ meetingUrl: string }>(
+                                  `/classes/${classId}/schedules/${schedule.id}/external-join`
+                                );
+                                window.open(data.meetingUrl, '_blank', 'noopener,noreferrer');
+                              } catch (err) {
+                                setSaveError(apiErrorMessage(err));
+                              }
+                            }}
+                            className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700"
+                          >
+                            <Icon name="live" width={15} height={15} />
+                            Join meeting
+                          </button>
+                        )}
 
                       {listTab === 'upcoming' &&
                         canManage &&

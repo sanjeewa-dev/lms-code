@@ -29,12 +29,18 @@ interface RosterStudent {
 interface RosterEntry {
   id: string;
   status: EnrollmentStatus;
+  feeWaiverAmount?: number;
+  netFee?: number;
+  classPrice?: number;
   student: RosterStudent;
 }
 
 type RosterRow = StudentRow & {
   enrollmentId: string;
   enrollmentStatus: EnrollmentStatus;
+  feeWaiverAmount: number;
+  netFee?: number;
+  classPrice?: number;
   phone?: string | null;
   phones?: string[];
   guardianName?: string | null;
@@ -55,6 +61,7 @@ const EMPTY_FORM = {
   district: '',
   address: '',
   freeIdCard: false,
+  feeWaiverAmount: '',
 };
 
 export function RosterTab({ classId, classTitle }: { classId: string; classTitle: string }) {
@@ -75,6 +82,8 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selected, setSelected] = useState<StudentRow | null>(null);
   const [qr, setQr] = useState('');
+  const [inviteUrl, setInviteUrl] = useState('');
+  const [inviteBusy, setInviteBusy] = useState(false);
 
   const rosterQuery = useQuery({
     queryKey: ['roster', t.slug, classId],
@@ -117,6 +126,9 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
       grade: classTitle,
       enrollmentId: e.id,
       enrollmentStatus: e.status,
+      feeWaiverAmount: Number(e.feeWaiverAmount ?? 0),
+      netFee: e.netFee,
+      classPrice: e.classPrice,
     }));
   }, [rosterQuery.data, classTitle]);
 
@@ -160,6 +172,7 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
         email: form.email.trim(),
         freeIdCard: form.freeIdCard,
       };
+      if (form.freeIdCard) payload.feeWaiverAmount = Number(form.feeWaiverAmount) || 0;
       if (phones.length) {
         payload.phones = phones;
         payload.phone = phones[0];
@@ -195,7 +208,11 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
     try {
       const res = await t.post<{ pendingRegistration?: boolean }>(
         `/classes/${classId}/students/enroll-existing`,
-        { studentId: student.id, freeIdCard: form.freeIdCard }
+        {
+          studentId: student.id,
+          freeIdCard: form.freeIdCard,
+          ...(form.freeIdCard ? { feeWaiverAmount: Number(form.feeWaiverAmount) || 0 } : {}),
+        }
       );
       await refresh();
       setModalOpen(false);
@@ -275,6 +292,7 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
       district: row.district ?? '',
       address: row.address ?? '',
       freeIdCard: Boolean(row.freeIdCard),
+      feeWaiverAmount: String(row.feeWaiverAmount || ''),
     });
     setEditOpen(true);
   }
@@ -297,6 +315,10 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
         area: editForm.area.trim() || null,
         district: editForm.district.trim() || null,
         address: editForm.address.trim() || null,
+        freeIdCard: editForm.freeIdCard,
+      });
+      await t.patch(`/classes/${classId}/students/${editingId}`, {
+        feeWaiverAmount: editForm.freeIdCard ? Number(editForm.feeWaiverAmount) || 0 : 0,
         freeIdCard: editForm.freeIdCard,
       });
       setEditOpen(false);
@@ -328,13 +350,50 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
             {rows.length} student{rows.length === 1 ? '' : 's'} in this class
           </p>
         </div>
-        <button
-          onClick={() => openAddModal('new')}
-          className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700"
-        >
-          <span className="text-lg leading-none">+</span> Add Student
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={inviteBusy}
+            onClick={async () => {
+              setInviteBusy(true);
+              setActionError('');
+              try {
+                const { data } = await t.get<{ inviteUrl: string }>(`/classes/${classId}/invite-link`);
+                setInviteUrl(data.inviteUrl);
+                await navigator.clipboard.writeText(data.inviteUrl);
+                showToast('Class invite link copied');
+              } catch (err) {
+                setActionError(apiErrorMessage(err));
+              } finally {
+                setInviteBusy(false);
+              }
+            }}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/10 dark:bg-transparent dark:text-slate-200"
+          >
+            {inviteBusy ? 'Loading…' : 'Copy class invite link'}
+          </button>
+          <button onClick={() => openAddModal('new')} className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700">
+            <span className="text-lg leading-none">+</span> Add Student
+          </button>
+        </div>
       </div>
+
+      {inviteUrl && (
+        <div className="rounded-xl border border-brand-200 bg-brand-50/50 px-4 py-3 text-sm dark:border-brand-900/40 dark:bg-brand-950/20">
+          <p className="font-medium text-slate-800 dark:text-slate-100">Class invite link</p>
+          <p className="mt-1 break-all text-slate-600 dark:text-slate-300">{inviteUrl}</p>
+          <button type="button" className="mt-2 text-xs font-semibold text-brand-700 hover:underline" disabled={inviteBusy} onClick={async () => {
+            if (!window.confirm('Generate a new link? The old link will stop working.')) return;
+            setInviteBusy(true);
+            try {
+              const { data } = await t.post<{ inviteUrl: string }>(`/classes/${classId}/invite-link/rotate`);
+              setInviteUrl(data.inviteUrl);
+              await navigator.clipboard.writeText(data.inviteUrl);
+              showToast('New invite link generated and copied');
+            } catch (err) { setActionError(apiErrorMessage(err)); } finally { setInviteBusy(false); }
+          }}>Rotate link</button>
+        </div>
+      )}
 
       {actionError && (
         <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">{actionError}</p>
@@ -357,6 +416,7 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
                   <th className="px-5 py-3 font-semibold">Email</th>
                   <th className="px-5 py-3 font-semibold">Account</th>
                   <th className="px-5 py-3 font-semibold">Class access</th>
+                  <th className="px-5 py-3 font-semibold">Fee</th>
                   <th className="px-5 py-3 text-right font-semibold">Action</th>
                 </tr>
               </thead>
@@ -380,6 +440,9 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
                     </td>
                     <td className="px-5 py-3">
                       <EnrollmentBadge status={r.enrollmentStatus} />
+                    </td>
+                    <td className="px-5 py-3 text-xs text-slate-600 dark:text-slate-300">
+                      {typeof r.netFee === 'number' ? `Rs. ${r.netFee.toLocaleString()}` : '—'}
                     </td>
                     <td className="px-5 py-3">
                       <div className="flex justify-end gap-1.5">
@@ -613,13 +676,18 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
                     />
                     <span>
                       <span className="block text-sm font-semibold text-slate-800 dark:text-slate-200">
-                        Offer free student ID card
+                        Fee assistance (free card)
                       </span>
                       <span className="text-xs text-slate-500">
                         Mark this student as eligible for a free identity card.
                       </span>
                     </span>
                   </label>
+                  {form.freeIdCard && (
+                    <Field label="Amount waived (Rs.)">
+                      <input type="number" min={0} className={inputCls} value={form.feeWaiverAmount} onChange={(e) => setForm((f) => ({ ...f, feeWaiverAmount: e.target.value }))} />
+                    </Field>
+                  )}
                 </div>
 
                 {formError && <p className="mt-3 text-sm text-red-600">{formError}</p>}
@@ -852,6 +920,11 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
               <span className="mt-0.5 block text-xs text-slate-500">Mark this student as eligible for a free identity card.</span>
             </span>
           </label>
+          {editForm.freeIdCard && (
+            <Field label="Amount waived (Rs.)">
+              <input type="number" min={0} className={inputCls} value={editForm.feeWaiverAmount} onChange={(e) => setEditForm((f) => ({ ...f, feeWaiverAmount: e.target.value }))} />
+            </Field>
+          )}
 
           {editError && <p className="text-sm text-red-600">{editError}</p>}
 

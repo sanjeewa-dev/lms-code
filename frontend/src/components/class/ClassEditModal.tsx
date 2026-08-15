@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTenantApi } from '../../hooks/useTenantApi';
+import { useAuth } from '../../context/AuthContext';
 import { apiErrorMessage } from '../../api/client';
 import { Button, Input, Modal, Select, Textarea } from '../ui';
-import type { Batch, ClassSummary } from '../../api/types';
+import { isInstituteAdmin } from '../../lib/roles';
+import type { Batch, ClassSummary, Teacher } from '../../api/types';
 
 type ClassFormState = {
   title: string;
   description: string;
   price: string;
   batchId: string;
+  teacherId: string;
   isPublished: boolean;
 };
 
@@ -19,6 +22,7 @@ function formFromClass(klass: ClassSummary): ClassFormState {
     description: klass.description ?? '',
     price: String(klass.price ?? 0),
     batchId: klass.batch?.id ?? '',
+    teacherId: klass.teacher?.id ?? '',
     isPublished: klass.isPublished !== false,
   };
 }
@@ -35,12 +39,15 @@ export function ClassEditModal({
   onSaved?: (klass: ClassSummary) => void;
 }) {
   const t = useTenantApi();
+  const { user } = useAuth();
   const qc = useQueryClient();
+  const canAssignTeacher = isInstituteAdmin(user?.role);
   const [form, setForm] = useState<ClassFormState>({
     title: '',
     description: '',
     price: '0',
     batchId: '',
+    teacherId: '',
     isPublished: true,
   });
   const [error, setError] = useState('');
@@ -49,6 +56,12 @@ export function ClassEditModal({
     queryKey: ['batches', t.slug],
     enabled: open,
     queryFn: async () => (await t.get<{ batches: Batch[] }>('/batches')).data.batches,
+  });
+
+  const teachersQuery = useQuery({
+    queryKey: ['teachers', t.slug],
+    enabled: open && canAssignTeacher,
+    queryFn: async () => (await t.get<{ teachers: Teacher[] }>('/teachers')).data.teachers,
   });
 
   useEffect(() => {
@@ -61,15 +74,15 @@ export function ClassEditModal({
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!klass) throw new Error('No class selected');
-      return (
-        await t.patch<{ class: ClassSummary }>(`/classes/${klass.id}`, {
+      const payload: Record<string, unknown> = {
           title: form.title.trim(),
           description: form.description,
           price: Number(form.price) || 0,
           batchId: form.batchId || '',
           isPublished: form.isPublished,
-        })
-      ).data.class;
+      };
+      if (canAssignTeacher && form.teacherId) payload.teacherId = form.teacherId;
+      return (await t.patch<{ class: ClassSummary }>(`/classes/${klass.id}`, payload)).data.class;
     },
     onSuccess: (updated) => {
       qc.invalidateQueries({ queryKey: ['classes', t.slug] });
@@ -122,6 +135,25 @@ export function ClassEditModal({
             ))}
           </Select>
         </div>
+
+        {canAssignTeacher && (
+          <Select
+            label="Teacher"
+            value={form.teacherId}
+            onChange={(e) => setForm({ ...form, teacherId: e.target.value })}
+          >
+            <option value="">Select teacher</option>
+            {klass.teacher && !teachersQuery.data?.some((teacher) => teacher.id === klass.teacher?.id) && (
+              <option value={klass.teacher.id}>{klass.teacher.name} (current)</option>
+            )}
+            {teachersQuery.data?.map((teacher) => (
+              <option key={teacher.id} value={teacher.id}>
+                {teacher.name}
+              </option>
+            ))}
+            {user?.role === 'admin' && user.id && <option value={user.id}>Me (institute admin)</option>}
+          </Select>
+        )}
 
         <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm dark:border-white/10 dark:bg-white/5">
           <input

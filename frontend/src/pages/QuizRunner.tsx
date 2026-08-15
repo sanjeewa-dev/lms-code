@@ -132,15 +132,12 @@ export default function QuizRunner() {
         <div>
           <h1 className="text-lg font-bold text-slate-900 dark:text-white">{data.quiz.title}</h1>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-            The time limit for this quiz has already ended, so it was not finished. Submit now with
-            any answers you select, or go back without completing.
+            The time limit for this quiz has already ended, so this attempt cannot be submitted.
+            Ask your teacher if you need another attempt.
           </p>
         </div>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex flex-wrap gap-2">
-          <Button onClick={submit} disabled={submitting}>
-            {submitting ? 'Submitting...' : 'Submit as incomplete'}
-          </Button>
           <Button variant="secondary" onClick={safeGoBack}>
             Go back
           </Button>

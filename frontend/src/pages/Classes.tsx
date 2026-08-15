@@ -7,7 +7,8 @@ import { useAuth } from '../context/AuthContext';
 import { Badge, Button, Card, Input, Select, Spinner, Textarea } from '../components/ui';
 import { ClassEditModal } from '../components/class/ClassEditModal';
 import { showToast } from '../components/AppToast';
-import type { Batch, ClassSummary } from '../api/types';
+import type { Batch, ClassSummary, Teacher } from '../api/types';
+import { isInstituteAdmin, isTenantStaff } from '../lib/roles';
 
 export default function Classes() {
   const { user } = useAuth();
@@ -17,7 +18,7 @@ export default function Classes() {
   const base = `/${slug}`;
 
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ title: '', description: '', price: '0', batchId: '' });
+  const [form, setForm] = useState({ title: '', description: '', price: '0', batchId: '', teacherId: '' });
   const [error, setError] = useState('');
   const [showBatchForm, setShowBatchForm] = useState(false);
   const [newBatch, setNewBatch] = useState({ name: '', year: '' });
@@ -25,7 +26,8 @@ export default function Classes() {
   const [enrollMsg, setEnrollMsg] = useState('');
   const [editing, setEditing] = useState<ClassSummary | null>(null);
 
-  const canCreate = user?.role === 'teacher' || user?.role === 'admin';
+  const canCreate = isTenantStaff(user?.role);
+  const isAdmin = isInstituteAdmin(user?.role);
   const isStudent = user?.role === 'student';
 
   const classesQuery = useQuery({
@@ -46,6 +48,12 @@ export default function Classes() {
     queryFn: async () => (await t.get<{ batches: Batch[] }>('/batches')).data.batches,
   });
 
+  const teachersQuery = useQuery({
+    queryKey: ['teachers', slug],
+    enabled: canCreate && isAdmin,
+    queryFn: async () => (await t.get<{ teachers: Teacher[] }>('/teachers')).data.teachers,
+  });
+
   const createMutation = useMutation({
     mutationFn: async () => {
       const body = new FormData();
@@ -53,11 +61,12 @@ export default function Classes() {
       body.append('description', form.description);
       body.append('price', form.price);
       if (form.batchId) body.append('batchId', form.batchId);
+      if (isAdmin && form.teacherId) body.append('teacherId', form.teacherId);
       return (await t.post('/classes', body)).data;
     },
     onSuccess: () => {
       setShowForm(false);
-      setForm({ title: '', description: '', price: '0', batchId: '' });
+      setForm({ title: '', description: '', price: '0', batchId: '', teacherId: '' });
       setError('');
       queryClient.invalidateQueries({ queryKey: ['classes', slug] });
       showToast('Class created');
@@ -86,7 +95,7 @@ export default function Classes() {
     setEnrollBusy(classId);
     try {
       await t.post(`/classes/${classId}/enroll`);
-      setEnrollMsg('Enrollment requested. Open the class to complete payment if required.');
+      setEnrollMsg('Enrollment requested. Complete payment if required before class content is unlocked.');
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['classes', slug] }),
         queryClient.invalidateQueries({ queryKey: ['classes-catalog', slug] }),
@@ -158,6 +167,21 @@ export default function Classes() {
                 </button>
               </div>
             </div>
+
+            {isAdmin && (
+              <Select
+                label="Teacher"
+                value={form.teacherId}
+                onChange={(e) => setForm({ ...form, teacherId: e.target.value })}
+              >
+                <option value="">Assign to me</option>
+                {teachersQuery.data?.map((teacher) => (
+                  <option key={teacher.id} value={teacher.id}>
+                    {teacher.name}
+                  </option>
+                ))}
+              </Select>
+            )}
 
             {showBatchForm && (
               <div className="rounded-xl border border-dashed border-slate-200 p-3 dark:border-white/10">
@@ -263,7 +287,9 @@ export default function Classes() {
         <div className="space-y-3">
           <div>
             <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Browse published classes</h2>
-            <p className="text-sm text-slate-500">Request enrollment in open classes you are not in yet.</p>
+            <p className="text-sm text-slate-500">
+              Classes your institute opened for self-enrollment. Payment may be required before access.
+            </p>
           </div>
           {enrollMsg && (
             <p className="rounded-lg bg-slate-50 px-4 py-2 text-sm text-slate-600 dark:bg-white/5 dark:text-slate-300">
@@ -294,7 +320,7 @@ export default function Classes() {
                     disabled={enrollBusy === c.id}
                     onClick={() => requestEnroll(c.id)}
                   >
-                    {enrollBusy === c.id ? 'Requesting…' : 'Request enrollment'}
+                    {enrollBusy === c.id ? 'Requesting…' : 'Join class'}
                   </Button>
                 </Card>
               ))}

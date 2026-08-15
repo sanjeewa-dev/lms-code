@@ -601,6 +601,14 @@ function FileUploadButton({
   const [extracting, setExtracting] = useState(false);
 
   const handleFile = async (file: File) => {
+    const allowed =
+      /\.(txt|md|csv|pdf)$/i.test(file.name) ||
+      file.type === 'application/pdf' ||
+      file.type.startsWith('text/');
+    if (!allowed) {
+      alert('Only text, Markdown, CSV, and PDF files can be attached.');
+      return;
+    }
     setExtracting(true);
     try {
       const text = await readFileAsText(file);
@@ -623,7 +631,7 @@ function FileUploadButton({
         ref={ref}
         type="file"
         className="hidden"
-        accept=".txt,.md,.csv,.pdf,.doc,.docx,.xls,.xlsx"
+        accept=".txt,.md,.csv,.pdf"
         onChange={(e) => {
           const f = e.target.files?.[0];
           if (f) handleFile(f);

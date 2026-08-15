@@ -130,6 +130,54 @@ router.get(
   })
 );
 
+/** Staff completion tracker: every active student, whether they submitted, and their score. */
+router.get(
+  '/quizzes/:quizId/completion',
+  authenticate,
+  requireRole('teacher', 'admin'),
+  asyncHandler(async (req, res) => {
+    const quiz = await prisma.quiz.findFirst({
+      where: { id: req.params.quizId },
+      include: { class: { select: { id: true, title: true, teacherId: true } } },
+    });
+    if (!quiz) throw notFound('Quiz not found');
+    if (req.user!.role === 'teacher' && quiz.class.teacherId !== req.user!.sub) {
+      throw forbidden('You can only view completion for quizzes in your own classes');
+    }
+
+    const [enrollments, attempts] = await Promise.all([
+      prisma.enrollment.findMany({
+        where: { classId: quiz.classId, status: 'active' },
+        select: { student: { select: { id: true, name: true, email: true } } },
+        orderBy: { student: { name: 'asc' } },
+      }),
+      prisma.quizAttempt.findMany({
+        where: { quizId: quiz.id, submittedAt: { not: null } },
+        select: { id: true, studentId: true, submittedAt: true, score: true },
+      }),
+    ]);
+    const attemptByStudent = new Map(attempts.map((attempt) => [attempt.studentId, attempt]));
+    const students = enrollments.map(({ student }) => {
+      const attempt = attemptByStudent.get(student.id);
+      return {
+        ...student,
+        completed: Boolean(attempt),
+        attemptId: attempt?.id ?? null,
+        submittedAt: attempt?.submittedAt ?? null,
+        score: attempt?.score ?? null,
+      };
+    });
+
+    res.json({
+      quiz: { id: quiz.id, title: quiz.title, totalMarks: quiz.totalMarks },
+      total: students.length,
+      completed: students.filter((student) => student.completed).length,
+      notCompleted: students.filter((student) => !student.completed).length,
+      students,
+    });
+  })
+);
+
 router.patch(
   '/quizzes/:quizId/publish',
   authenticate,

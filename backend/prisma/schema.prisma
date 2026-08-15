@@ -111,6 +111,17 @@ enum TenantPlan {
   enterprise
 }
 
+enum SelfEnrollmentScope {
+  all_classes
+  selected_classes
+}
+
+enum SelfEnrollmentAudience {
+  all_students
+  batches
+  enrolled_in_classes
+}
+
 enum JobRunStatus {
   running
   success
@@ -143,6 +154,8 @@ model Tenant {
   payhereMerchantId       String?
   payhereMerchantSecret   String?
   payhereEnabled          Boolean @default(false)
+  selfEnrollmentEnabled   Boolean @default(false)
+  selfEnrollmentScope     SelfEnrollmentScope @default(selected_classes)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -164,6 +177,7 @@ model Tenant {
   events       Event[]
   studentInvites StudentInvite[]
   adminInvites   AdminInvite[]
+  classInviteLinks ClassInviteLink[]
   classSchedules ClassSchedule[]
   attendances    Attendance[]
   notifications  Notification[]
@@ -178,6 +192,7 @@ model Tenant {
   supportSessions SupportSession[]
   conversations  Conversation[]
   chatMessages   Message[]
+  selfEnrollmentRules SelfEnrollmentRule[]
 }
 
 model User {
@@ -214,6 +229,7 @@ model User {
   invitesReceived    StudentInvite[] @relation("InvitesReceived")
   adminInvitesSent   AdminInvite[]   @relation("AdminInvitesSent")
   adminInvitesReceived AdminInvite[] @relation("AdminInvitesReceived")
+  classInviteLinksCreated ClassInviteLink[] @relation("ClassInviteLinkCreator")
   noticeReads        NoticeRead[]
   attendancesMarked  Attendance[]    @relation("AttendanceMarker")
   attendances        Attendance[]    @relation("AttendanceStudent")
@@ -278,6 +294,7 @@ model Batch {
 
   classes      Class[]
   videoLessons VideoLesson[]
+  selfEnrollmentRuleBatches SelfEnrollmentRuleSourceBatch[]
 
   @@index([tenantId])
 }
@@ -306,15 +323,53 @@ model Class {
   videoLessons VideoLesson[]
   topics       ClassTopic[]
   studentInvites StudentInvite[]
+  classInviteLinks ClassInviteLink[]
   noticeClasses  NoticeClass[]
   eventClasses   EventClass[]
   schedules      ClassSchedule[]
   attendances    Attendance[]
   aiUsages       AiUsage[]
   aiToolHistories AiToolHistory[]
+  selfEnrollmentTargetRules SelfEnrollmentRule[] @relation("SelfEnrollmentTarget")
+  selfEnrollmentSourceRules SelfEnrollmentRuleSourceClass[] @relation("SelfEnrollmentSource")
 
   @@index([tenantId])
   @@index([teacherId])
+}
+
+model SelfEnrollmentRule {
+  id            String                   @id @default(cuid())
+  tenantId      String
+  tenant        Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  targetClassId String
+  targetClass   Class                    @relation("SelfEnrollmentTarget", fields: [targetClassId], references: [id], onDelete: Cascade)
+  audience      SelfEnrollmentAudience
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+
+  sourceClasses SelfEnrollmentRuleSourceClass[]
+  sourceBatches SelfEnrollmentRuleSourceBatch[]
+
+  @@unique([tenantId, targetClassId])
+  @@index([tenantId])
+}
+
+model SelfEnrollmentRuleSourceClass {
+  ruleId  String
+  classId String
+  rule    SelfEnrollmentRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  class   Class              @relation("SelfEnrollmentSource", fields: [classId], references: [id], onDelete: Cascade)
+
+  @@id([ruleId, classId])
+}
+
+model SelfEnrollmentRuleSourceBatch {
+  ruleId  String
+  batchId String
+  rule    SelfEnrollmentRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  batch   Batch              @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@id([ruleId, batchId])
 }
 
 model ClassSchedule {
@@ -327,6 +382,7 @@ model ClassSchedule {
   classTime   String
   platform    MeetingPlatform
   meetingText String          @default("")
+  externalMeetingUrl String?
   status      SessionStatus   @default(scheduled)
   roomName    String?
   startedAt   DateTime?
@@ -400,6 +456,8 @@ model StudentInvite {
   district      String?
   address       String?
   freeIdCard    Boolean   @default(false)
+  /// Amount waived from class fee for financially assisted students (Rs.).
+  feeWaiverAmount Decimal  @default(0) @db.Decimal(10, 2)
   invitedById   String
   invitedBy     User      @relation("InvitesSent", fields: [invitedById], references: [id])
   userId        String?
@@ -440,6 +498,8 @@ model Enrollment {
   studentId String
   student   User             @relation(fields: [studentId], references: [id], onDelete: Cascade)
   status    EnrollmentStatus @default(pending)
+  /// Amount waived from class.price for this enrollment (free-card / fee assistance).
+  feeWaiverAmount Decimal    @default(0) @db.Decimal(10, 2)
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
@@ -448,6 +508,24 @@ model Enrollment {
   @@unique([classId, studentId])
   @@index([tenantId])
   @@index([studentId])
+}
+
+/// Reusable shareable invite link for a specific class (open enrollment via link).
+model ClassInviteLink {
+  id          String    @id @default(cuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  classId     String
+  class       Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  token       String    @unique
+  createdById String
+  createdBy   User      @relation("ClassInviteLinkCreator", fields: [createdById], references: [id])
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  @@unique([classId])
+  @@index([tenantId])
+  @@index([token])
 }
 
 model Payment {

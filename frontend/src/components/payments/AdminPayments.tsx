@@ -8,6 +8,12 @@ import { Icon } from '../icons';
 import { currentMonth, formatMonthLabel, monthOptions } from '../../lib/paymentUtils';
 import type { ClassSummary, Payment, PaymentStatus } from '../../api/types';
 
+type RosterEntry = {
+  id: string;
+  status: 'pending' | 'active' | 'rejected';
+  student: { id: string; name: string; email: string };
+};
+
 function formatDateTime(iso: string) {
   return new Date(iso).toLocaleString(undefined, {
     dateStyle: 'medium',
@@ -39,6 +45,12 @@ export function AdminPayments() {
   const [reviewError, setReviewError] = useState('');
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const reviewingRef = useRef<string | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadClassId, setUploadClassId] = useState('');
+  const [uploadEnrollmentId, setUploadEnrollmentId] = useState('');
+  const [uploadMonth, setUploadMonth] = useState(() => currentMonth());
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadError, setUploadError] = useState('');
 
   const query = useQuery({
     queryKey: ['payments', t.slug, status, forMonth, classId],
@@ -77,6 +89,32 @@ export function AdminPayments() {
   const classesQuery = useQuery({
     queryKey: ['classes', t.slug],
     queryFn: async () => (await t.get<{ classes: ClassSummary[] }>('/classes')).data.classes,
+  });
+  const rosterQuery = useQuery({
+    queryKey: ['payment-slip-roster', t.slug, uploadClassId],
+    enabled: Boolean(uploadClassId && uploadOpen),
+    queryFn: async () => (await t.get<{ enrollments: RosterEntry[] }>(`/classes/${uploadClassId}/students`)).data.enrollments,
+  });
+  const staffSlipMutation = useMutation({
+    mutationFn: async () => {
+      if (!uploadFile || !uploadEnrollmentId) throw new Error('Select a student and payment slip');
+      const body = new FormData();
+      body.append('enrollmentId', uploadEnrollmentId);
+      body.append('forMonth', uploadMonth);
+      body.append('slip', uploadFile);
+      return (await t.post('/payments/staff-slip', body)).data;
+    },
+    onSuccess: () => {
+      setUploadOpen(false);
+      setUploadClassId('');
+      setUploadEnrollmentId('');
+      setUploadFile(null);
+      setUploadError('');
+      queryClient.invalidateQueries({ queryKey: ['payments', t.slug] });
+      queryClient.invalidateQueries({ queryKey: ['payments-pending-count', t.slug] });
+      queryClient.invalidateQueries({ queryKey: ['payments-summary', t.slug] });
+    },
+    onError: (err) => setUploadError(apiErrorMessage(err)),
   });
 
   const reviewMutation = useMutation({
@@ -128,16 +166,12 @@ export function AdminPayments() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <span className="grid h-11 w-11 place-items-center rounded-xl bg-blue-100 text-blue-600">
-          <Icon name="payments" />
-        </span>
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Payment verification</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Review and approve student payment slips by month
-          </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="grid h-11 w-11 place-items-center rounded-xl bg-blue-100 text-blue-600"><Icon name="payments" /></span>
+          <div><h1 className="text-xl font-bold text-slate-900 dark:text-white">Payment verification</h1><p className="text-sm text-slate-500 dark:text-slate-400">Review and approve student payment slips by month</p></div>
         </div>
+        <Button onClick={() => setUploadOpen(true)}>Upload slip for student</Button>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -325,6 +359,18 @@ export function AdminPayments() {
           <p className="text-sm text-slate-500">No payments match your filters.</p>
         </Card>
       )}
+
+      <Modal open={uploadOpen} onClose={() => { if (!staffSlipMutation.isPending) { setUploadOpen(false); setUploadError(''); } }} title="Upload payment slip for student" className="max-w-md">
+        <p className="mb-4 text-sm text-slate-500">Use this for a payment slip a student sent to a staff member. It remains pending for review.</p>
+        <div className="space-y-3">
+          <Select label="Class" value={uploadClassId} onChange={(e) => { setUploadClassId(e.target.value); setUploadEnrollmentId(''); }}><option value="">Select a class</option>{(classesQuery.data ?? []).map((klass) => <option key={klass.id} value={klass.id}>{klass.title}</option>)}</Select>
+          <Select label="Student" value={uploadEnrollmentId} disabled={!uploadClassId || rosterQuery.isLoading} onChange={(e) => setUploadEnrollmentId(e.target.value)}><option value="">{rosterQuery.isLoading ? 'Loading students...' : 'Select a student'}</option>{(rosterQuery.data ?? []).filter((entry) => entry.status !== 'rejected').map((entry) => <option key={entry.id} value={entry.id}>{entry.student.name} · {entry.student.email}</option>)}</Select>
+          <Select label="Billing month" value={uploadMonth} onChange={(e) => setUploadMonth(e.target.value)}>{monthOptions(18).map((month) => <option key={month.value} value={month.value}>{month.label}</option>)}</Select>
+          <label className="block"><span className="mb-1 block text-sm font-medium">Payment slip</span><input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)} className="block w-full text-sm" /></label>
+          {uploadError && <p className="text-sm text-red-600">{uploadError}</p>}
+          <div className="flex gap-2"><Button onClick={() => staffSlipMutation.mutate()} disabled={staffSlipMutation.isPending || !uploadEnrollmentId || !uploadFile}>{staffSlipMutation.isPending ? 'Uploading...' : 'Submit for review'}</Button><Button variant="secondary" onClick={() => setUploadOpen(false)}>Cancel</Button></div>
+        </div>
+      </Modal>
 
       <Modal
         open={Boolean(rejectId)}

@@ -7,7 +7,10 @@ import type { Role } from '../api/types';
 export function ProtectedAdmin({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) return <Spinner label="Loading..." />;
-  if (!user || user.role !== 'superadmin') return <Navigate to="/login" replace />;
+  if (!user || user.role !== 'superadmin') {
+    const next = typeof window !== 'undefined' ? window.location.pathname + window.location.search : '';
+    return <Navigate to={next.startsWith('/') ? `/login?next=${encodeURIComponent(next)}` : '/login'} replace />;
+  }
   return <>{children}</>;
 }
 
@@ -16,7 +19,10 @@ export function ProtectedTenant({ children, roles }: { children: ReactNode; role
   const { slug } = useParams<{ slug: string }>();
 
   if (loading) return <Spinner label="Loading..." />;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) {
+    const next = typeof window !== 'undefined' ? window.location.pathname + window.location.search : '';
+    return <Navigate to={next.startsWith('/') ? `/login?next=${encodeURIComponent(next)}` : '/login'} replace />;
+  }
 
   const inSupport =
     user.role === 'superadmin' &&

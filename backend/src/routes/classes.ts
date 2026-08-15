@@ -3,11 +3,25 @@ import { prisma, basePrisma } from '../lib/prisma';
 import { asyncHandler } from '../utils/asyncHandler';
 import { authenticate, requireRole } from '../middleware/auth';
 import { enterTenantContext } from '../middleware/tenant';
-import { classSchema, enrollExistingStudentSchema, studentInviteSchema } from '../validation/schemas';
+import {
+  classSchema,
+  enrollExistingStudentSchema,
+  enrollmentFeeWaiverSchema,
+  studentInviteSchema,
+} from '../validation/schemas';
 import { persistUploadedFile } from '../services/files';
 import { uploadCover } from '../middleware/upload';
 import { enrollExistingStudentInClass, inviteStudentToClass } from '../services/studentInvite';
+import {
+  getOrCreateClassInviteLink,
+  rotateClassInviteLink,
+  setClassInviteLinkActive,
+} from '../services/classInviteLink';
+import { clampFeeWaiver, enrollmentStatusForNetFee, netClassFee } from '../lib/fees';
+import { assertCanManageClass, isInstituteAdminRole } from '../services/classAccess';
+import { canStudentSelfEnroll, listCatalogClassIds } from '../services/selfEnrollmentPolicy';
 import { badRequest, forbidden, notFound } from '../utils/httpError';
+import { z } from 'zod';
 
 // Mounted under /api/t/:slug (tenant context already established).
 const router = Router({ mergeParams: true });
@@ -27,6 +41,27 @@ function serializeClass(klass: any) {
   };
 }
 
+async function resolveTeacherIdForAdmin(opts: {
+  role: string;
+  tenantId: string;
+  teacherId?: string | null;
+  fallbackTeacherId: string;
+}) {
+  if (!isInstituteAdminRole(opts.role) || !opts.teacherId) return opts.fallbackTeacherId;
+
+  const teacher = await basePrisma.user.findFirst({
+    where: {
+      id: opts.teacherId,
+      tenantId: opts.tenantId,
+      role: { in: ['teacher', 'admin'] },
+      status: 'approved',
+    },
+    select: { id: true },
+  });
+  if (!teacher) throw badRequest('Assigned teacher was not found in this institute');
+  return teacher.id;
+}
+
 router.get(
   '/classes',
   authenticate,
@@ -35,7 +70,7 @@ router.get(
     const where =
       user.role === 'teacher'
         ? { teacherId: user.sub }
-        : user.role === 'admin' || user.role === 'superadmin'
+        : isInstituteAdminRole(user.role)
         ? {}
         : // Students only see active (published) classes they are enrolled in.
           {
@@ -62,16 +97,16 @@ router.get(
   authenticate,
   requireRole('student'),
   asyncHandler(async (req, res) => {
-    const enrolled = await prisma.enrollment.findMany({
-      where: { studentId: req.user!.sub },
-      select: { classId: true },
+    const classIds = await listCatalogClassIds({
+      tenantId: req.tenant!.id,
+      studentId: req.user!.sub,
     });
-    const enrolledIds = enrolled.map((e) => e.classId);
+    if (!classIds.length) {
+      res.json({ classes: [] });
+      return;
+    }
     const classes = await prisma.class.findMany({
-      where: {
-        isPublished: true,
-        ...(enrolledIds.length ? { id: { notIn: enrolledIds } } : {}),
-      },
+      where: { id: { in: classIds }, isPublished: true },
       include: {
         teacher: { select: { id: true, name: true } },
         batch: { select: { id: true, name: true } },
@@ -96,6 +131,14 @@ router.get(
       },
     });
     if (!klass) throw notFound('Class not found');
+
+    if (req.user!.role === 'teacher') {
+      await assertCanManageClass(
+        { role: req.user!.role, userId: req.user!.sub },
+        klass.id,
+        'You can only view your own classes'
+      );
+    }
 
     let enrollment = null;
     if (req.user!.role === 'student') {
@@ -128,6 +171,13 @@ router.post(
       coverImageId = file.id;
     }
 
+    const teacherId = await resolveTeacherIdForAdmin({
+      role: req.user!.role,
+      tenantId: req.tenant!.id,
+      teacherId: data.teacherId,
+      fallbackTeacherId: req.user!.sub,
+    });
+
     const klass = await prisma.class.create({
       data: {
         tenantId: req.tenant!.id,
@@ -135,7 +185,7 @@ router.post(
         description: data.description ?? '',
         price: data.price,
         isPublished: data.isPublished ?? true,
-        teacherId: req.user!.sub,
+        teacherId,
         batchId: data.batchId || null,
         coverImageId,
       },
@@ -153,12 +203,24 @@ router.patch(
   authenticate,
   requireRole('teacher', 'admin'),
   asyncHandler(async (req, res) => {
-    const klass = await prisma.class.findFirst({ where: { id: req.params.classId } });
-    if (!klass) throw notFound('Class not found');
-    if (req.user!.role === 'teacher' && klass.teacherId !== req.user!.sub) {
-      throw forbidden('You can only edit your own classes');
-    }
+    const klass = await assertCanManageClass(
+      { role: req.user!.role, userId: req.user!.sub },
+      req.params.classId,
+      'You can only edit your own classes'
+    );
     const data = classSchema.partial().parse(req.body);
+    let teacherId: string | undefined;
+    if (data.teacherId !== undefined) {
+      if (!isInstituteAdminRole(req.user!.role)) {
+        throw forbidden('Only institute admins can reassign class teachers');
+      }
+      teacherId = await resolveTeacherIdForAdmin({
+        role: req.user!.role,
+        tenantId: req.tenant!.id,
+        teacherId: data.teacherId,
+        fallbackTeacherId: klass.teacherId,
+      });
+    }
     const updated = await prisma.class.update({
       where: { id: klass.id },
       data: {
@@ -167,6 +229,7 @@ router.patch(
         ...(data.price !== undefined ? { price: data.price } : {}),
         ...(data.isPublished !== undefined ? { isPublished: data.isPublished } : {}),
         ...(data.batchId !== undefined ? { batchId: data.batchId || null } : {}),
+        ...(teacherId !== undefined ? { teacherId } : {}),
       },
       include: {
         teacher: { select: { id: true, name: true } },
@@ -183,7 +246,19 @@ router.post(
   authenticate,
   requireRole('student'),
   asyncHandler(async (req, res) => {
-    const klass = await prisma.class.findFirst({ where: { id: req.params.classId } });
+    const allowed = await canStudentSelfEnroll({
+      tenantId: req.tenant!.id,
+      studentId: req.user!.sub,
+      classId: req.params.classId,
+    });
+    if (!allowed) {
+      throw forbidden(
+        'You cannot join this class yourself. Ask your teacher for an invite or class join link.'
+      );
+    }
+    const klass = await prisma.class.findFirst({
+      where: { id: req.params.classId, isPublished: true },
+    });
     if (!klass || !klass.isPublished) throw notFound('Class not found');
 
     const existing = await prisma.enrollment.findFirst({
@@ -196,7 +271,8 @@ router.post(
         tenantId: req.tenant!.id,
         classId: klass.id,
         studentId: req.user!.sub,
-        status: Number(klass.price) === 0 ? 'active' : 'pending',
+        status: enrollmentStatusForNetFee(klass.price, 0),
+        feeWaiverAmount: 0,
       },
     });
     res.status(201).json({ enrollment });
@@ -208,11 +284,11 @@ router.get(
   authenticate,
   requireRole('teacher', 'admin'),
   asyncHandler(async (req, res) => {
-    const klass = await prisma.class.findFirst({ where: { id: req.params.classId } });
-    if (!klass) throw notFound('Class not found');
-    if (req.user!.role === 'teacher' && klass.teacherId !== req.user!.sub) {
-      throw forbidden('You can only view your own class roster');
-    }
+    const klass = await assertCanManageClass(
+      { role: req.user!.role, userId: req.user!.sub },
+      req.params.classId,
+      'You can only view your own class roster'
+    );
     const enrollments = await prisma.enrollment.findMany({
       where: { classId: klass.id },
       include: {
@@ -239,7 +315,12 @@ router.get(
     });
     res.json({
       enrollments: enrollments.map((e) => ({
-        ...e,
+        id: e.id,
+        status: e.status,
+        feeWaiverAmount: Number(e.feeWaiverAmount),
+        netFee: netClassFee(klass.price, e.feeWaiverAmount),
+        classPrice: Number(klass.price),
+        createdAt: e.createdAt,
         student: {
           ...e.student,
           phone: e.student.phones[0] ?? e.student.phone,
@@ -262,11 +343,11 @@ router.post(
   authenticate,
   requireRole('teacher', 'admin'),
   asyncHandler(async (req, res) => {
-    const klass = await prisma.class.findFirst({ where: { id: req.params.classId } });
-    if (!klass) throw notFound('Class not found');
-    if (req.user!.role === 'teacher' && klass.teacherId !== req.user!.sub) {
-      throw forbidden('You can only manage your own class roster');
-    }
+    const klass = await assertCanManageClass(
+      { role: req.user!.role, userId: req.user!.sub },
+      req.params.classId,
+      'You can only manage your own class roster'
+    );
 
     const data = studentInviteSchema.parse(req.body);
     const tenant = req.tenant!;
@@ -303,13 +384,13 @@ router.post(
   authenticate,
   requireRole('teacher', 'admin'),
   asyncHandler(async (req, res) => {
-    const klass = await prisma.class.findFirst({ where: { id: req.params.classId } });
-    if (!klass) throw notFound('Class not found');
-    if (req.user!.role === 'teacher' && klass.teacherId !== req.user!.sub) {
-      throw forbidden('You can only manage your own class roster');
-    }
+    const klass = await assertCanManageClass(
+      { role: req.user!.role, userId: req.user!.sub },
+      req.params.classId,
+      'You can only manage your own class roster'
+    );
 
-    const { studentId, freeIdCard } = enrollExistingStudentSchema.parse(req.body);
+    const { studentId, freeIdCard, feeWaiverAmount } = enrollExistingStudentSchema.parse(req.body);
     const tenant = req.tenant!;
 
     const result = await enrollExistingStudentInClass({
@@ -319,6 +400,7 @@ router.post(
       classTitle: klass.title,
       studentId,
       freeIdCard,
+      feeWaiverAmount,
     });
 
     res.status(201).json({
@@ -339,20 +421,137 @@ router.post(
   })
 );
 
+/** Update fee assistance for a student enrolled in this class. */
+router.patch(
+  '/classes/:classId/students/:studentId',
+  authenticate,
+  requireRole('teacher', 'admin'),
+  asyncHandler(async (req, res) => {
+    const klass = await assertCanManageClass(
+      { role: req.user!.role, userId: req.user!.sub },
+      req.params.classId,
+      'You can only manage your own classes'
+    );
+    const data = enrollmentFeeWaiverSchema.parse(req.body);
+    const enrollment = await prisma.enrollment.findFirst({
+      where: { classId: klass.id, studentId: req.params.studentId, tenantId: req.tenant!.id },
+    });
+    if (!enrollment) throw notFound('Student is not enrolled in this class');
+
+    const feeWaiverAmount = clampFeeWaiver(klass.price, data.feeWaiverAmount);
+    const nextStatus = enrollmentStatusForNetFee(klass.price, feeWaiverAmount);
+    const updated = await prisma.enrollment.update({
+      where: { id: enrollment.id },
+      data: {
+        feeWaiverAmount,
+        ...(enrollment.status === 'pending' ? { status: nextStatus } : {}),
+      },
+    });
+
+    if (data.freeIdCard !== undefined) {
+      await basePrisma.user.update({
+        where: { id: req.params.studentId },
+        data: { freeIdCard: data.freeIdCard },
+      });
+    } else if (feeWaiverAmount > 0) {
+      await basePrisma.user.updateMany({
+        where: { id: req.params.studentId, freeIdCard: false },
+        data: { freeIdCard: true },
+      });
+    }
+
+    res.json({
+      enrollment: {
+        id: updated.id,
+        status: updated.status,
+        feeWaiverAmount: Number(updated.feeWaiverAmount),
+        netFee: netClassFee(klass.price, updated.feeWaiverAmount),
+      },
+    });
+  })
+);
+
+async function managedClass(req: any) {
+  return assertCanManageClass(
+    { role: req.user!.role, userId: req.user!.sub },
+    req.params.classId,
+    'You can only manage your own classes'
+  );
+}
+
+router.get(
+  '/classes/:classId/invite-link',
+  authenticate,
+  requireRole('teacher', 'admin'),
+  asyncHandler(async (req, res) => {
+    const klass = await managedClass(req);
+    res.json(
+      await getOrCreateClassInviteLink({
+        tenantId: req.tenant!.id,
+        tenantSlug: req.tenant!.slug,
+        classId: klass.id,
+        createdById: req.user!.sub,
+      })
+    );
+  })
+);
+
+router.post(
+  '/classes/:classId/invite-link',
+  authenticate,
+  requireRole('teacher', 'admin'),
+  asyncHandler(async (req, res) => {
+    const klass = await managedClass(req);
+    res.status(201).json(
+      await getOrCreateClassInviteLink({
+        tenantId: req.tenant!.id,
+        tenantSlug: req.tenant!.slug,
+        classId: klass.id,
+        createdById: req.user!.sub,
+      })
+    );
+  })
+);
+
+router.post(
+  '/classes/:classId/invite-link/rotate',
+  authenticate,
+  requireRole('teacher', 'admin'),
+  asyncHandler(async (req, res) => {
+    const klass = await managedClass(req);
+    res.json(
+      await rotateClassInviteLink({
+        tenantId: req.tenant!.id,
+        tenantSlug: req.tenant!.slug,
+        classId: klass.id,
+        createdById: req.user!.sub,
+      })
+    );
+  })
+);
+
+router.patch(
+  '/classes/:classId/invite-link',
+  authenticate,
+  requireRole('teacher', 'admin'),
+  asyncHandler(async (req, res) => {
+    const klass = await managedClass(req);
+    const { isActive } = z.object({ isActive: z.boolean() }).parse(req.body);
+    const link = await setClassInviteLinkActive({ classId: klass.id, isActive });
+    res.json({ isActive: link.isActive });
+  })
+);
+
 /**
  * Remove a student from this class only.
- * If it was their last enrollment, the student account is deleted (no orphan students).
+ * Accounts are retained so staff cannot accidentally erase a student's history.
  */
 router.delete(
   '/classes/:classId/students/:studentId',
   authenticate,
   requireRole('teacher', 'admin'),
   asyncHandler(async (req, res) => {
-    const klass = await prisma.class.findFirst({ where: { id: req.params.classId } });
-    if (!klass) throw notFound('Class not found');
-    if (req.user!.role === 'teacher' && klass.teacherId !== req.user!.sub) {
-      throw forbidden('You can only manage your own classes');
-    }
+    const klass = await managedClass(req);
 
     const student = await basePrisma.user.findFirst({
       where: {
@@ -368,17 +567,7 @@ router.delete(
     });
     if (!enrollment) throw notFound('Student is not enrolled in this class');
 
-    const otherCount = await prisma.enrollment.count({
-      where: { studentId: student.id, tenantId: req.tenant!.id, id: { not: enrollment.id } },
-    });
-
     await prisma.enrollment.delete({ where: { id: enrollment.id } });
-
-    if (otherCount === 0) {
-      await basePrisma.user.delete({ where: { id: student.id } });
-      return res.json({ removed: true, accountDeleted: true });
-    }
-
     res.json({ removed: true, accountDeleted: false });
   })
 );

@@ -18,6 +18,8 @@ export function VideoPlayerModal({
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   const playQuery = useQuery({
     queryKey: ['video-play', t.slug, video.id],
@@ -32,7 +34,7 @@ export function VideoPlayerModal({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        onClose();
+        onCloseRef.current();
       }
     };
     document.addEventListener('keydown', onKey);
@@ -43,7 +45,7 @@ export function VideoPlayerModal({
       document.body.style.overflow = prevOverflow;
       previousFocus.current?.focus?.();
     };
-  }, [onClose]);
+  }, []);
 
   return (
     <div

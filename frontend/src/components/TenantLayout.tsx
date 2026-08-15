@@ -63,7 +63,7 @@ export function TenantLayout() {
       id: 'teach',
       label: 'Teach',
       items: [
-        { to: `${base}/students`, label: 'Students', icon: 'users', roles: ['admin', 'teacher'] },
+        { to: `${base}/students`, label: 'Students', icon: 'users', roles: ['admin'] },
         { to: `${base}/teachers`, label: 'Teachers', icon: 'teacher', roles: ['admin'] },
         { to: `${base}/attendance`, label: 'Attendance', icon: 'note', roles: ['admin', 'teacher'] },
         { to: `${base}/ai-copilot`, label: 'AI Copilot', icon: 'spark', roles: ['admin', 'teacher'] },

@@ -107,9 +107,11 @@ export async function processPayHereNotify(tenantId: string, body: Record<string
     throw badRequest('Payment is not awaiting approval');
   }
 
-  const expectedAmount = Number(pending.enrollment.class.price).toFixed(2);
-  if (!amountsEqual(amount, expectedAmount) || !amountsEqual(Number(pending.amount), expectedAmount)) {
-    throw badRequest('Paid amount does not match class fee');
+  // The payment amount was calculated and bound during checkout; it already
+  // includes any approved fee waiver.
+  const expectedAmount = Number(pending.amount).toFixed(2);
+  if (!amountsEqual(amount, expectedAmount)) {
+    throw badRequest('Paid amount does not match the payment order');
   }
 
   const enrollment = pending.enrollment;

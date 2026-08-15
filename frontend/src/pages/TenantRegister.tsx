@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
@@ -19,39 +19,36 @@ type PublicClass = {
 export default function TenantRegister() {
   const { slug } = useParams<{ slug: string }>();
   const [params] = useSearchParams();
+  const classIdFromUrl = params.get('classId')?.trim() ?? '';
   const { registerTenant } = useAuth();
   const brandQuery = useInstituteBrand(slug);
   const instituteName = brandQuery.data?.tenant?.name ?? slug;
   const logoUrl = brandQuery.data?.tenant?.logoUrl;
+  const selfEnrollmentEnabled = Boolean(brandQuery.data?.tenant?.selfEnrollmentEnabled);
   const [form, setForm] = useState({
     name: '',
     email: '',
     password: '',
-    classId: params.get('classId') ?? '',
+    classId: classIdFromUrl,
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
 
   const classesQuery = useQuery({
-    queryKey: ['public-classes', slug],
-    enabled: Boolean(slug),
-    queryFn: async () =>
-      (await api.get<{ classes: PublicClass[] }>(`/t/${slug}/public/classes`)).data.classes,
+    queryKey: ['public-classes', slug, classIdFromUrl],
+    enabled: Boolean(slug) && (Boolean(classIdFromUrl) || selfEnrollmentEnabled),
+    queryFn: async () => (await api.get<{ classes: PublicClass[] }>(`/t/${slug}/public/classes${classIdFromUrl ? `?classId=${encodeURIComponent(classIdFromUrl)}` : ''}`)).data.classes,
   });
 
-  useEffect(() => {
-    const list = classesQuery.data;
-    if (!list?.length) return;
-    if (form.classId && list.some((c) => c.id === form.classId)) return;
-    setForm((f) => ({ ...f, classId: list[0].id }));
-  }, [classesQuery.data, form.classId]);
+  const targetClass = classesQuery.data?.find((klass) => klass.id === form.classId) ?? null;
+  const canRegister = Boolean(form.classId && targetClass);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
-    if (!form.classId) {
-      setError('Select a class to join. Students must enroll in a class.');
+    if (!canRegister || !targetClass) {
+      setError('Select a class to join or ask your teacher for an invite link.');
       return;
     }
     const pwdErr = validatePassword(form.password);
@@ -61,7 +58,7 @@ export default function TenantRegister() {
     }
     setLoading(true);
     try {
-      await registerTenant(slug!, form);
+      await registerTenant(slug!, { ...form, classId: targetClass.id });
       setDone(true);
     } catch (err) {
       setError(apiErrorMessage(err));
@@ -95,6 +92,19 @@ export default function TenantRegister() {
 
   const classes = classesQuery.data ?? [];
 
+  if (!selfEnrollmentEnabled && !classIdFromUrl) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-hero-gradient px-4">
+        <Card className="w-full max-w-md text-center">
+          <div className="mx-auto mb-3 flex justify-center"><BrandMark name={instituteName} logoUrl={logoUrl} size="lg" /></div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Invite required</h1>
+          <p className="mt-2 text-sm text-slate-500">Self-registration is not open. Ask your teacher for a personal invite or class join link.</p>
+          <div className="mt-5 flex flex-col gap-2"><Link to="/login" className="rounded-lg bg-brand-600 px-6 py-2.5 text-sm font-semibold text-white">Sign in</Link><Link to={`/${slug}`} className="text-sm font-medium text-brand-600">Back to {instituteName}</Link></div>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-hero-gradient px-4">
       <Card className="w-full max-w-md">
@@ -104,7 +114,6 @@ export default function TenantRegister() {
           </div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Register as a student</h1>
           <p className="text-sm text-slate-500">{instituteName}</p>
-          <p className="mt-1 text-xs text-slate-400">You must choose a class to join.</p>
         </div>
         <form onSubmit={onSubmit} className="space-y-4">
           <label className="block">
@@ -119,15 +128,18 @@ export default function TenantRegister() {
               disabled={classesQuery.isLoading || classes.length === 0}
             >
               {classes.length === 0 ? (
-                <option value="">No published classes available</option>
+                <option value="">No classes open for registration</option>
               ) : (
-                classes.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.title}
-                    {c.price > 0 ? ` (LKR ${c.price})` : ' (Free)'}
-                    {c.teacher?.name ? ` · ${c.teacher.name}` : ''}
-                  </option>
-                ))
+                <>
+                  {!classIdFromUrl && <option value="">Select a class to join</option>}
+                  {classes.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.title}
+                      {c.price > 0 ? ` (LKR ${c.price})` : ' (Free)'}
+                      {c.teacher?.name ? ` · ${c.teacher.name}` : ''}
+                    </option>
+                  ))}
+                </>
               )}
             </select>
           </label>
@@ -154,7 +166,7 @@ export default function TenantRegister() {
           />
           <PasswordRequirements password={form.password} />
           {error && <p className="text-sm text-red-600">{error}</p>}
-          <Button type="submit" disabled={loading || !form.classId || classes.length === 0 || Boolean(validatePassword(form.password))} className="w-full">
+          <Button type="submit" disabled={loading || !canRegister || classes.length === 0 || Boolean(validatePassword(form.password))} className="w-full">
             {loading ? 'Creating...' : 'Create account'}
           </Button>
         </form>

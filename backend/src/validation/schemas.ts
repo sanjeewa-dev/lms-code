@@ -49,6 +49,19 @@ export const updateTenantSchema = z.object({
     .optional(),
 });
 
+export const selfEnrollmentRuleSchema = z.object({
+  targetClassId: z.string().min(1),
+  audience: z.enum(['all_students', 'batches', 'enrolled_in_classes']),
+  sourceClassIds: z.array(z.string().min(1)).optional(),
+  sourceBatchIds: z.array(z.string().min(1)).optional(),
+});
+
+export const selfEnrollmentSettingsSchema = z.object({
+  enabled: z.boolean(),
+  scope: z.enum(['all_classes', 'selected_classes']),
+  rules: z.array(selfEnrollmentRuleSchema).optional(),
+});
+
 export const instituteSettingsSchema = z.object({
   name: z.string().min(2).max(150).optional(),
   logoUrl: z
@@ -66,6 +79,7 @@ export const instituteSettingsSchema = z.object({
   payhereMerchantId: z.string().max(120).nullable().optional(),
   payhereMerchantSecret: z.string().max(200).nullable().optional(),
   payhereEnabled: z.boolean().optional(),
+  selfEnrollment: selfEnrollmentSettingsSchema.optional(),
 });
 
 export const createTenantAdminSchema = z.object({
@@ -148,6 +162,8 @@ export const classSchema = z.object({
   price: z.coerce.number().min(0).default(0),
   batchId: z.string().optional(),
   isPublished: z.coerce.boolean().optional(),
+  /** Institute admins may assign or reassign the class teacher. */
+  teacherId: z.string().min(1).optional(),
 });
 
 // Admin/teacher adds a student directly to a class (creates the account if new).
@@ -169,11 +185,13 @@ export const studentInviteSchema = z.object({
   district: z.string().max(80).optional(),
   address: z.string().max(500).optional(),
   freeIdCard: z.coerce.boolean().optional(),
+  feeWaiverAmount: z.coerce.number().min(0).max(1_000_000).optional(),
 });
 
 export const enrollExistingStudentSchema = z.object({
   studentId: z.string().min(1),
   freeIdCard: z.coerce.boolean().optional(),
+  feeWaiverAmount: z.coerce.number().min(0).max(1_000_000).optional(),
 });
 
 export const studentOnboardingSchema = z
@@ -223,10 +241,38 @@ export const studentUpdateSchema = z.object({
   freeIdCard: z.coerce.boolean().optional(),
 });
 
+/** Per-enrollment fee assistance (free card) — amount waived from class.price. */
+export const enrollmentFeeWaiverSchema = z.object({
+  feeWaiverAmount: z.coerce.number().min(0).max(1_000_000),
+  freeIdCard: z.coerce.boolean().optional(),
+});
+
+/** Self-register via a reusable class invite link. */
+export const classJoinRegisterSchema = z.object({
+  name: z.string().min(2).max(100),
+  email: z.string().email(),
+  password: passwordSchema,
+});
+
 // --- Payments ---
 export const paymentSchema = z.object({
-  // Amount is ignored server-side; class.price is authoritative.
+  // Amount is ignored server-side; net class fee (price − waiver) is authoritative.
   amount: z.coerce.number().min(0).optional(),
+  forMonth: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Month must be YYYY-MM format'),
+});
+
+/** One bank slip covering one or more class enrollments for the same month. */
+export const multiPaymentSchema = z.object({
+  forMonth: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Month must be YYYY-MM format'),
+  enrollmentIds: z
+    .union([z.array(z.string().min(1)), z.string().min(1)])
+    .transform((v) => (Array.isArray(v) ? v : v.split(',').map((s) => s.trim()).filter(Boolean)))
+    .pipe(z.array(z.string().min(1)).min(1).max(50)),
+});
+
+/** Staff submission when a student sends a bank slip through another channel. */
+export const staffPaymentSlipSchema = z.object({
+  enrollmentId: z.string().min(1),
   forMonth: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Month must be YYYY-MM format'),
 });
 
@@ -395,6 +441,7 @@ export const classScheduleSchema = z.object({
     .pipe(z.string().regex(/^\d{2}:\d{2}$/, 'Time must be HH:MM (24-hour)')),
   platform: z.enum(['zoom', 'teams', 'google_meet', 'jitsi']),
   meetingText: z.string().max(2000).optional(),
+  externalMeetingUrl: z.string().url().max(2000).optional().or(z.literal('')),
   /** Create only: once (default) or recurring pattern */
   repeat: z
     .enum(['once', 'daily', 'weekly', 'weekdays', 'weekends', 'custom'])

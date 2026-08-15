@@ -10,6 +10,7 @@ import { EnrollPanel } from '../components/class/EnrollPanel';
 import { ClassEditModal } from '../components/class/ClassEditModal';
 import { showToast } from '../components/AppToast';
 import type { ClassSummary, Enrollment } from '../api/types';
+import { isInstituteAdmin } from '../lib/roles';
 import { LEGACY_TAB_TO_SECTION } from './class/classSections';
 
 export interface ClassOutletContext {
@@ -50,7 +51,7 @@ export default function ClassDetail() {
   const { class: klass, enrollment } = detailQuery.data;
   const isStudent = user?.role === 'student';
   const isOwner = user?.role === 'teacher' && klass.teacher?.id === user.id;
-  const canManage = isOwner || user?.role === 'admin';
+  const canManage = isOwner || isInstituteAdmin(user?.role);
   const hasAccess = canManage || enrollment?.status === 'active';
 
   const outletContext: ClassOutletContext = {

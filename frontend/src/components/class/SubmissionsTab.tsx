@@ -318,6 +318,14 @@ function StudentAssignmentCard({
               {assignment.maxMarks != null ? ` / ${assignment.maxMarks}` : ''}
             </p>
           )}
+          {assignment.fileId && (
+            <Link
+              to={`/${t.slug}/materials/${assignment.id}`}
+              className="mt-3 inline-flex text-sm font-semibold text-brand-600 hover:underline"
+            >
+              Open assignment brief
+            </Link>
+          )}
         </div>
       </div>
 

@@ -1,4 +1,5 @@
 import { prisma, basePrisma } from '../lib/prisma';
+import { enrollmentStatusForNetFee, netClassFee } from '../lib/fees';
 import { forbidden } from '../utils/httpError';
 import type { Role } from '@prisma/client';
 
@@ -27,7 +28,7 @@ export async function studentHasContentAccess(opts: {
     return { ok: false, reason: 'You must have an approved enrollment to access this class' };
   }
 
-  const price = Number(enrollment.class.price);
+  const price = netClassFee(enrollment.class.price, enrollment.feeWaiverAmount);
   if (price <= 0) return { ok: true };
 
   const tenant = await basePrisma.tenant.findFirst({
@@ -86,11 +87,14 @@ export async function assertStudentContentAccess(opts: {
   if (!access.ok) throw forbidden(access.reason ?? 'Access denied');
 }
 
-/** Initial enrollment status when staff adds a student: free → active, paid → pending. */
-export async function enrollmentStatusForClass(classId: string): Promise<'active' | 'pending'> {
+/** Initial enrollment status: free/fully waived → active, otherwise pending. */
+export async function enrollmentStatusForClass(
+  classId: string,
+  feeWaiverAmount: number | string = 0
+): Promise<'active' | 'pending'> {
   const klass = await prisma.class.findFirst({
     where: { id: classId },
     select: { price: true },
   });
-  return Number(klass?.price ?? 0) <= 0 ? 'active' : 'pending';
+  return enrollmentStatusForNetFee(klass?.price ?? 0, feeWaiverAmount);
 }

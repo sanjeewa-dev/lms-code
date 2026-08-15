@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTenantApi } from '../../hooks/useTenantApi';
 import { apiErrorMessage } from '../../api/client';
-import { Badge, Button, Card, Spinner } from '../ui';
+import { Badge, Button, Card, Modal, Spinner } from '../ui';
 import { Icon } from '../icons';
 import { QuizBuilder } from './QuizBuilder';
 import { QuizLeaderboardPanel } from './QuizLeaderboard';
@@ -12,6 +12,65 @@ import type { QuizSummary } from '../../api/types';
 
 function hasFinishedQuiz(q: QuizSummary) {
   return Boolean(q.myAttempt?.submittedAt);
+}
+
+type QuizCompletion = {
+  quiz: { id: string; title: string; totalMarks: number };
+  total: number;
+  completed: number;
+  notCompleted: number;
+  students: {
+    id: string;
+    name: string;
+    email: string;
+    completed: boolean;
+    attemptId: string | null;
+    submittedAt: string | null;
+    score: number | null;
+  }[];
+};
+
+function QuizCompletionModal({ quiz, onClose }: { quiz: QuizSummary; onClose: () => void }) {
+  const t = useTenantApi();
+  const [filter, setFilter] = useState<'all' | 'completed' | 'missing'>('all');
+  const query = useQuery({
+    queryKey: ['quiz-completion', t.slug, quiz.id],
+    queryFn: async () => (await t.get<QuizCompletion>(`/quizzes/${quiz.id}/completion`)).data,
+  });
+  const data = query.data;
+  const students = data?.students.filter((student) =>
+    filter === 'all' ? true : filter === 'completed' ? student.completed : !student.completed
+  ) ?? [];
+
+  return (
+    <Modal open onClose={onClose} title={`Quiz completion · ${quiz.title}`} className="max-w-3xl">
+      {query.isLoading ? <Spinner label="Loading quiz progress..." /> : query.isError || !data ? (
+        <p className="text-sm text-red-600">{apiErrorMessage(query.error) || 'Unable to load quiz progress.'}</p>
+      ) : (
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-xl bg-slate-50 p-3 text-center dark:bg-white/5"><p className="text-xs text-slate-500">Students</p><p className="text-xl font-bold">{data.total}</p></div>
+            <div className="rounded-xl bg-emerald-50 p-3 text-center text-emerald-700 dark:bg-emerald-950/30"><p className="text-xs">Completed</p><p className="text-xl font-bold">{data.completed}</p></div>
+            <div className="rounded-xl bg-amber-50 p-3 text-center text-amber-700 dark:bg-amber-950/30"><p className="text-xs">Not completed</p><p className="text-xl font-bold">{data.notCompleted}</p></div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {([['all', `All (${data.total})`], ['completed', `Completed (${data.completed})`], ['missing', `Not completed (${data.notCompleted})`]] as const).map(([value, label]) => (
+              <button key={value} type="button" onClick={() => setFilter(value)} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${filter === value ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'}`}>{label}</button>
+            ))}
+          </div>
+          <div className="max-h-[50vh] overflow-y-auto rounded-xl border border-slate-200 dark:border-white/10">
+            {students.map((student, index) => (
+              <div key={student.id} className={`flex flex-wrap items-center justify-between gap-2 px-4 py-3 ${index ? 'border-t border-slate-100 dark:border-white/5' : ''}`}>
+                <div><p className="font-medium text-slate-800 dark:text-slate-200">{student.name}</p><p className="text-xs text-slate-400">{student.email}</p></div>
+                {student.completed ? <div className="text-right"><Badge tone="green">Completed</Badge><p className="mt-1 text-xs text-slate-500">{student.score ?? 0} / {data.quiz.totalMarks} · {student.submittedAt ? new Date(student.submittedAt).toLocaleString() : ''}</p></div> : <Badge tone="amber">Not completed</Badge>}
+              </div>
+            ))}
+            {students.length === 0 && <p className="p-5 text-sm text-slate-500">No students match this filter.</p>}
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
 }
 
 export function QuizzesTab({
@@ -33,6 +92,7 @@ export function QuizzesTab({
   const [aiOpen, setAiOpen] = useState(() => searchParams.get('ai') === '1');
   const [editingQuizId, setEditingQuizId] = useState<string | null>(null);
   const [resultsQuiz, setResultsQuiz] = useState<QuizSummary | null>(null);
+  const [completionQuiz, setCompletionQuiz] = useState<QuizSummary | null>(null);
   const [actionError, setActionError] = useState('');
   const appBase = `/${t.slug}`;
 
@@ -151,6 +211,7 @@ export function QuizzesTab({
       )}
 
       {actionError && <p className="text-sm text-red-600">{actionError}</p>}
+      {completionQuiz && <QuizCompletionModal quiz={completionQuiz} onClose={() => setCompletionQuiz(null)} />}
 
       <Card className="overflow-hidden rounded-2xl p-0">
         {quizzesQuery.isLoading ? (
@@ -216,15 +277,17 @@ export function QuizzesTab({
                           Edit
                         </Button>
                         <Button onClick={() => setResultsQuiz(q)}>Results</Button>
+                        <Button variant="secondary" onClick={() => setCompletionQuiz(q)}>
+                          Completion
+                        </Button>
                         <Button
                           variant="danger"
                           disabled={deleteMutation.isPending}
                           onClick={() => {
-                            if (
-                              window.confirm(
-                                `Delete “${q.title}”? This removes the quiz and all student attempts.`
-                              )
-                            ) {
+                            const typed = window.prompt(
+                              `Type DELETE to permanently remove “${q.title}” and all student attempts.`
+                            );
+                            if (typed?.trim().toUpperCase() === 'DELETE') {
                               deleteMutation.mutate(q.id);
                             }
                           }}

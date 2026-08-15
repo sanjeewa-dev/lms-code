@@ -15,11 +15,18 @@ import publicTenantRoutes from './routes/publicTenant';
 import payherePublicRoutes from './routes/payherePublic';
 import inviteRoutes from './routes/invites';
 import adminInviteRoutes from './routes/adminInvites';
+import classJoinRoutes from './routes/classJoin';
 import tenantRoutes from './routes/tenant';
 import cronRoutes from './routes/cron';
 
 export function createApp() {
   const app = express();
+
+  // When behind Caddy/nginx, trust the first proxy hop so rate limiting and
+  // secure cookies see the real client IP from X-Forwarded-For.
+  if (env.nodeEnv === 'production' || process.env.TRUST_PROXY === 'true') {
+    app.set('trust proxy', 1);
+  }
 
   app.use(helmet());
   app.use(cors({ origin: env.clientUrl, credentials: true }));
@@ -51,6 +58,7 @@ export function createApp() {
   app.use('/api/t/:slug/public', payherePublicRoutes);
   app.use('/api/t/:slug/invites', inviteRoutes);
   app.use('/api/t/:slug/admin-invites', adminInviteRoutes);
+  app.use('/api/t/:slug/join', classJoinRoutes);
   app.use('/api/t/:slug', tenantRoutes);
 
   app.use(notFoundHandler);

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiErrorMessage } from '../../api/client';
 import { useTenantApi } from '../../hooks/useTenantApi';
@@ -10,9 +10,10 @@ export function StudentPayments() {
   const t = useTenantApi();
   const queryClient = useQueryClient();
   const [forMonth, setForMonth] = useState(currentMonth());
-  const [uploadingId, setUploadingId] = useState<string | null>(null);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [error, setError] = useState('');
+  const [batchOpen, setBatchOpen] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const paymentInfoQuery = useQuery({
     queryKey: ['payment-info', t.slug],
@@ -51,21 +52,22 @@ export function StudentPayments() {
   });
 
   const uploadMutation = useMutation({
-    mutationFn: async ({ enrollmentId, file }: { enrollmentId: string; file: File }) => {
+    mutationFn: async ({ enrollmentIds, file }: { enrollmentIds: string[]; file: File }) => {
       const body = new FormData();
       body.append('slip', file);
       body.append('forMonth', forMonth);
-      return (await t.post(`/enrollments/${enrollmentId}/payment`, body)).data;
+      enrollmentIds.forEach((id) => body.append('enrollmentIds', id));
+      return (await t.post('/payments/slip', body)).data;
     },
     onSuccess: () => {
-      setUploadingId(null);
-      setErrors({});
+      setSelected(new Set());
+      setBatchOpen(false);
+      setError('');
+      if (fileRef.current) fileRef.current.value = '';
       queryClient.invalidateQueries({ queryKey: ['payments-status', t.slug] });
       queryClient.invalidateQueries({ queryKey: ['payments-mine', t.slug] });
     },
-    onError: (err, vars) => {
-      setErrors((e) => ({ ...e, [vars.enrollmentId]: apiErrorMessage(err) }));
-    },
+    onError: (err) => setError(apiErrorMessage(err)),
   });
 
   async function payWithPayHere(enrollmentId: string) {
@@ -88,7 +90,7 @@ export function StudentPayments() {
       document.body.appendChild(form);
       form.submit();
     } catch (err) {
-      setErrors((e) => ({ ...e, [enrollmentId]: apiErrorMessage(err) }));
+      setError(apiErrorMessage(err));
     }
   }
 
@@ -102,8 +104,20 @@ export function StudentPayments() {
   }
 
   const enrollments = statusQuery.data?.enrollments ?? [];
+  const unpaid = useMemo(
+    () => enrollments.filter((item) => item.enrollmentStatus === 'active' && (!item.payment || item.payment.status === 'rejected')),
+    [enrollments]
+  );
   const paidClasses = enrollments.filter((e) => e.payment?.status === 'approved').length;
   const info = paymentInfoQuery.data;
+  const selectedTotal = unpaid.filter((item) => selected.has(item.enrollmentId)).reduce((total, item) => total + item.class.price, 0);
+  function toggle(id: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
 
   return (
     <div className="space-y-6">
@@ -178,15 +192,25 @@ export function StudentPayments() {
         </Card>
       ) : (
         <div className="space-y-3">
+          {unpaid.length > 0 && (
+            <Card>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div><h2 className="text-lg font-semibold text-slate-900 dark:text-white">Pay for multiple classes</h2><p className="text-sm text-slate-500">Select classes and upload one bank slip for {formatMonthLabel(forMonth)}.</p></div>
+                <div className="flex gap-2"><Button variant="secondary" onClick={() => setSelected(new Set(unpaid.map((item) => item.enrollmentId)))}>Select all unpaid</Button><Button disabled={!selected.size} onClick={() => setBatchOpen((open) => !open)}>{batchOpen ? 'Hide upload' : `Upload slip (${selected.size})`}</Button></div>
+              </div>
+              {batchOpen && <div className="mt-4 rounded-lg border border-slate-100 bg-slate-50 p-4 dark:border-white/5 dark:bg-white/5"><p className="mb-3 text-sm">Total for selected classes: <strong>Rs. {selectedTotal.toLocaleString()}</strong></p><input ref={fileRef} type="file" accept="image/*,application/pdf" className="text-sm" />{error && <p className="mt-2 text-sm text-red-600">{error}</p>}<div className="mt-3 flex gap-2"><Button disabled={uploadMutation.isPending} onClick={() => { const file = fileRef.current?.files?.[0]; if (!file) return setError('Please choose a payment slip file'); uploadMutation.mutate({ enrollmentIds: [...selected], file }); }}>{uploadMutation.isPending ? 'Uploading…' : 'Submit payment'}</Button><Button variant="secondary" onClick={() => setBatchOpen(false)}>Cancel</Button></div></div>}
+            </Card>
+          )}
           {enrollments.map((item) => {
             const payment = item.payment;
             const canUpload = !payment || payment.status === 'rejected';
-            const isExpanded = uploadingId === item.enrollmentId;
 
             return (
               <Card key={item.enrollmentId}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
+                  <div className="flex items-start gap-3">
+                    {canUpload && <input type="checkbox" className="mt-1" checked={selected.has(item.enrollmentId)} onChange={() => toggle(item.enrollmentId)} />}
+                    <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-slate-800 dark:text-slate-200">{item.class.title}</span>
                       <Badge tone={statusTone(item.enrollmentStatus)}>{item.enrollmentStatus}</Badge>
@@ -204,6 +228,7 @@ export function StudentPayments() {
                         {payment.note && ` · Note: ${payment.note}`}
                       </p>
                     )}
+                    </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {payment && (
@@ -216,51 +241,8 @@ export function StudentPayments() {
                         Pay online
                       </Button>
                     )}
-                    {canUpload && (
-                      <Button onClick={() => setUploadingId(isExpanded ? null : item.enrollmentId)}>
-                        {payment?.status === 'rejected' ? 'Re-upload' : 'Upload slip'}
-                      </Button>
-                    )}
                   </div>
                 </div>
-
-                {isExpanded && canUpload && (
-                  <div className="mt-4 rounded-lg border border-slate-100 bg-slate-50 p-4 dark:border-white/5 dark:bg-white/5">
-                    <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
-                      Upload proof for <strong>{formatMonthLabel(forMonth)}</strong> — amount:{' '}
-                      <strong>Rs. {item.class.price.toLocaleString()}</strong>
-                    </p>
-                    <input
-                      ref={(el) => {
-                        fileRefs.current[item.enrollmentId] = el;
-                      }}
-                      type="file"
-                      accept="image/*,application/pdf"
-                      className="text-sm"
-                    />
-                    {errors[item.enrollmentId] && (
-                      <p className="mt-2 text-sm text-red-600">{errors[item.enrollmentId]}</p>
-                    )}
-                    <div className="mt-3 flex gap-2">
-                      <Button
-                        onClick={() => {
-                          const file = fileRefs.current[item.enrollmentId]?.files?.[0];
-                          if (!file) {
-                            setErrors((e) => ({ ...e, [item.enrollmentId]: 'Please choose a file' }));
-                            return;
-                          }
-                          uploadMutation.mutate({ enrollmentId: item.enrollmentId, file });
-                        }}
-                        disabled={uploadMutation.isPending}
-                      >
-                        {uploadMutation.isPending ? 'Uploading...' : 'Submit payment'}
-                      </Button>
-                      <Button variant="secondary" onClick={() => setUploadingId(null)}>
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                )}
               </Card>
             );
           })}

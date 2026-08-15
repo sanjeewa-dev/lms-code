@@ -58,13 +58,17 @@ router.get(
       take: 40,
     });
 
+    const isStudent = user.role === 'student';
     res.json({
       sessions: schedules.map((s) => ({
         id: s.id,
         classDate: s.classDate,
         classTime: s.classTime,
         platform: s.platform,
-        meetingText: s.meetingText,
+        meetingText: isStudent
+          ? s.meetingText.replace(/https?:\/\/[^\s]+/gi, '').trim()
+          : s.meetingText,
+        hasExternalMeetingLink: Boolean(s.externalMeetingUrl),
         status: s.status,
         roomName: s.roomName,
         class: s.class,

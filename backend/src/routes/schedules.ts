@@ -60,14 +60,19 @@ function expandRepeatDates(
   return dates;
 }
 
-function serializeSchedule(schedule: ClassSchedule) {
+function serializeSchedule(schedule: ClassSchedule, includePrivate = false) {
   const iso = schedule.classDate.toISOString().slice(0, 10);
   return {
     id: schedule.id,
     classDate: iso,
     classTime: schedule.classTime,
     platform: schedule.platform,
-    meetingText: schedule.meetingText,
+    // Legacy meetingText may contain a URL. Do not expose it to students.
+    meetingText: includePrivate
+      ? schedule.meetingText
+      : schedule.meetingText.replace(/https?:\/\/[^\s]+/gi, '').trim(),
+    hasExternalMeetingLink: Boolean(schedule.externalMeetingUrl),
+    ...(includePrivate ? { externalMeetingUrl: schedule.externalMeetingUrl } : {}),
     status: schedule.status,
     roomName: schedule.roomName,
     startedAt: schedule.startedAt?.toISOString() ?? null,
@@ -99,7 +104,8 @@ router.get(
       where: { classId: req.params.classId },
       orderBy: [{ classDate: 'asc' }, { classTime: 'asc' }],
     });
-    res.json({ schedules: schedules.map(serializeSchedule) });
+    const includePrivate = req.user!.role !== 'student';
+    res.json({ schedules: schedules.map((schedule) => serializeSchedule(schedule, includePrivate)) });
   })
 );
 
@@ -137,6 +143,10 @@ router.post(
           classTime: data.classTime,
           platform: data.platform,
           meetingText: data.meetingText ?? '',
+          externalMeetingUrl:
+            data.platform === 'jitsi' || !data.externalMeetingUrl
+              ? null
+              : assertHttpsPublicUrl(data.externalMeetingUrl),
         },
       });
       return res.status(201).json({ schedule: serializeSchedule(schedule), created: 1 });
@@ -150,6 +160,10 @@ router.post(
         classTime: data.classTime,
         platform: data.platform,
         meetingText: data.meetingText ?? '',
+        externalMeetingUrl:
+          data.platform === 'jitsi' || !data.externalMeetingUrl
+            ? null
+            : assertHttpsPublicUrl(data.externalMeetingUrl),
       })),
     });
 
@@ -164,7 +178,7 @@ router.post(
     });
 
     res.status(201).json({
-      schedules: schedules.map(serializeSchedule),
+      schedules: schedules.map((schedule) => serializeSchedule(schedule, true)),
       created: schedules.length,
       schedule: serializeSchedule(schedules[0]),
     });
@@ -192,6 +206,14 @@ router.patch(
         classTime: data.classTime,
         platform: data.platform,
         meetingText: data.meetingText,
+        externalMeetingUrl:
+          data.platform === 'jitsi'
+            ? null
+            : data.externalMeetingUrl === undefined
+              ? undefined
+              : data.externalMeetingUrl
+                ? assertHttpsPublicUrl(data.externalMeetingUrl)
+                : null,
       },
     });
 
@@ -214,6 +236,25 @@ router.delete(
 
     await prisma.classSchedule.delete({ where: { id: existing.id } });
     res.status(204).send();
+  })
+);
+
+/** Return an external meeting URL only to an authorized member of the class. */
+router.get(
+  '/classes/:classId/schedules/:scheduleId/external-join',
+  authenticate,
+  requireActiveEnrollment('classId'),
+  asyncHandler(async (req, res) => {
+    const schedule = await prisma.classSchedule.findFirst({
+      where: { id: req.params.scheduleId, classId: req.params.classId },
+      select: { platform: true, externalMeetingUrl: true, status: true },
+    });
+    if (!schedule) throw notFound('Schedule not found');
+    if (schedule.platform === 'jitsi' || !schedule.externalMeetingUrl) {
+      throw badRequest('This schedule does not have an external meeting link');
+    }
+    if (schedule.status === 'ended') throw badRequest('This session has already ended');
+    res.json({ meetingUrl: schedule.externalMeetingUrl });
   })
 );
 

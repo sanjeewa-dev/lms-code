@@ -6,8 +6,13 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { loginSchema, registerSchema } from '../validation/schemas';
 import { issueTokens, publicUser } from '../services/auth';
 import { resolveTenant, enterTenantContext } from '../middleware/tenant';
-import { unauthorized, notFound, badRequest } from '../utils/httpError';
+import { unauthorized, notFound, badRequest, forbidden } from '../utils/httpError';
 import { setRefreshCookie } from '../utils/authCookies';
+import {
+  canAnonymousRegisterForClass,
+  loadSelfEnrollmentPolicy,
+} from '../services/selfEnrollmentPolicy';
+import { enrollmentStatusForNetFee } from '../lib/fees';
 
 // Mounted at /api/t/:slug/auth
 const router = Router({ mergeParams: true });
@@ -19,7 +24,7 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Student self-registration into a specific tenant (must pick a published class).
+// Student self-registration requires an anonymous-access self-enrollment policy.
 router.post(
   '/register',
   authLimiter,
@@ -28,6 +33,13 @@ router.post(
   asyncHandler(async (req, res) => {
     const data = registerSchema.parse(req.body);
     const tenantId = req.tenant!.id;
+
+    const policy = await loadSelfEnrollmentPolicy(tenantId);
+    if (!policy || !canAnonymousRegisterForClass(policy, data.classId)) {
+      throw forbidden(
+        'Self-registration is not available for this class. Ask your teacher for an invite or class join link.'
+      );
+    }
 
     const klass = await basePrisma.class.findFirst({
       where: { id: data.classId, tenantId, isPublished: true },
@@ -41,7 +53,7 @@ router.post(
     if (existing) throw badRequest('Email is already registered at this institute');
 
     const passwordHash = await bcrypt.hash(data.password, 10);
-    const enrollmentStatus = Number(klass.price) === 0 ? 'active' : 'pending';
+    const enrollmentStatus = enrollmentStatusForNetFee(klass.price, 0);
 
     await basePrisma.user.create({
       data: {
@@ -56,6 +68,7 @@ router.post(
             tenantId,
             classId: klass.id,
             status: enrollmentStatus,
+            feeWaiverAmount: 0,
           },
         },
       },

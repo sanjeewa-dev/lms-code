@@ -5,6 +5,11 @@ import { authenticate, requireRole } from '../middleware/auth';
 import { instituteSettingsSchema } from '../validation/schemas';
 import { uploadLogo } from '../middleware/upload';
 import { persistUploadedFile } from '../services/files';
+import {
+  replaceSelfEnrollmentPolicy,
+  serializeSelfEnrollmentPolicy,
+  validateSelfEnrollmentConfig,
+} from '../services/selfEnrollmentPolicy';
 import { badRequest } from '../utils/httpError';
 
 const router = Router({ mergeParams: true });
@@ -26,6 +31,14 @@ function serializeSettings(t: {
   payhereMerchantId: string | null;
   payhereMerchantSecret: string | null;
   payhereEnabled: boolean;
+  selfEnrollmentEnabled: boolean;
+  selfEnrollmentScope: 'all_classes' | 'selected_classes';
+  selfEnrollmentRules: {
+    targetClassId: string;
+    audience: 'all_students' | 'batches' | 'enrolled_in_classes';
+    sourceClasses: { classId: string }[];
+    sourceBatches: { batchId: string }[];
+  }[];
 }) {
   return {
     id: t.id,
@@ -45,15 +58,28 @@ function serializeSettings(t: {
     payhereMerchantSecret: t.payhereMerchantSecret ? '••••••••' : null,
     hasPayhereSecret: Boolean(t.payhereMerchantSecret),
     payhereEnabled: t.payhereEnabled,
+    selfEnrollment: serializeSelfEnrollmentPolicy(t),
   };
 }
+
+const tenantSettingsInclude = {
+  selfEnrollmentRules: {
+    include: {
+      sourceClasses: { select: { classId: true } },
+      sourceBatches: { select: { batchId: true } },
+    },
+  },
+} as const;
 
 /** Public payment instructions for students (no merchant secrets beyond enabled flag). */
 router.get(
   '/settings/payment-info',
   authenticate,
   asyncHandler(async (req, res) => {
-    const t = await basePrisma.tenant.findFirst({ where: { id: req.tenant!.id } });
+    const t = await basePrisma.tenant.findFirst({
+      where: { id: req.tenant!.id },
+      include: tenantSettingsInclude,
+    });
     if (!t) return res.json({ paymentInfo: null });
     res.json({
       paymentInfo: {
@@ -75,7 +101,10 @@ router.get(
   authenticate,
   requireRole('admin'),
   asyncHandler(async (req, res) => {
-    const t = await basePrisma.tenant.findFirst({ where: { id: req.tenant!.id } });
+    const t = await basePrisma.tenant.findFirst({
+      where: { id: req.tenant!.id },
+      include: tenantSettingsInclude,
+    });
     res.json({ settings: t ? serializeSettings(t) : null });
   })
 );
@@ -88,6 +117,24 @@ router.patch(
     const data = instituteSettingsSchema.parse(req.body);
     const emptyToNull = (v: string | null | undefined) =>
       v === undefined ? undefined : v === '' || v === null ? null : v;
+
+    if (data.selfEnrollment) {
+      try {
+        const validated = await validateSelfEnrollmentConfig(req.tenant!.id, {
+          enabled: data.selfEnrollment.enabled,
+          scope: data.selfEnrollment.scope,
+          rules: (data.selfEnrollment.rules ?? []).map((rule) => ({
+            targetClassId: rule.targetClassId,
+            audience: rule.audience,
+            sourceClassIds: rule.sourceClassIds ?? [],
+            sourceBatchIds: rule.sourceBatchIds ?? [],
+          })),
+        });
+        await replaceSelfEnrollmentPolicy(req.tenant!.id, validated);
+      } catch (err) {
+        throw badRequest(err instanceof Error ? err.message : 'Invalid self-enrollment settings');
+      }
+    }
 
     const updated = await basePrisma.tenant.update({
       where: { id: req.tenant!.id },
@@ -111,6 +158,7 @@ router.patch(
             : emptyToNull(data.payhereMerchantSecret as string | null | undefined),
         payhereEnabled: data.payhereEnabled,
       },
+      include: tenantSettingsInclude,
     });
 
     res.json({ settings: serializeSettings(updated) });
@@ -131,6 +179,7 @@ router.post(
     const updated = await basePrisma.tenant.update({
       where: { id: req.tenant!.id },
       data: { logoUrl },
+      include: tenantSettingsInclude,
     });
 
     res.json({ settings: serializeSettings(updated) });

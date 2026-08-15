@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button, Input, Select } from '../components/ui';
 import { Icon, type IconName } from '../components/icons';
@@ -8,6 +8,12 @@ import { useDocumentMeta } from '../hooks/useDocumentMeta';
 
 const LOGO_SRC = '/mindspark-logo.png?v=4';
 const VIDEO_SRC = '/mindspark-intro.mp4?v=4';
+
+function safeNextPath(raw: string | null): string | null {
+  if (!raw) return null;
+  if (!raw.startsWith('/') || raw.startsWith('//') || raw.includes('://')) return null;
+  return raw;
+}
 
 const FEATURES: { icon: IconName; title: string; blurb: string }[] = [
   {
@@ -35,6 +41,8 @@ const FEATURES: { icon: IconName; title: string; blurb: string }[] = [
 export default function PlatformHome() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const nextPath = safeNextPath(searchParams.get('next'));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -60,6 +68,8 @@ export default function PlatformHome() {
       }
       if (result.user.role === 'superadmin') {
         navigate('/admin');
+      } else if (nextPath) {
+        navigate(nextPath);
       } else if (result.tenant) {
         navigate(`/${result.tenant.slug}/dashboard`);
       } else {

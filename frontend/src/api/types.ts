@@ -129,6 +129,7 @@ export interface Enrollment {
   classId: string;
   studentId: string;
   status: EnrollmentStatus;
+  feeWaiverAmount?: number;
   payments?: Payment[];
 }
 
@@ -198,6 +199,8 @@ export interface ClassSchedule {
   classTime: string;
   platform: MeetingPlatform;
   meetingText: string;
+  hasExternalMeetingLink: boolean;
+  externalMeetingUrl?: string | null;
   status: SessionStatus;
   roomName: string | null;
   startedAt: string | null;
@@ -343,10 +346,31 @@ export interface EventItem {
 }
 
 export interface PublicTenant {
-  tenant: { name: string; slug: string; logoUrl?: string | null };
+  tenant: {
+    name: string;
+    slug: string;
+    logoUrl?: string | null;
+    selfEnrollmentEnabled?: boolean;
+  };
   notices: Notice[];
   events: EventItem[];
   videos: VideoLesson[];
+}
+
+export type SelfEnrollmentAudience = 'all_students' | 'batches' | 'enrolled_in_classes';
+export type SelfEnrollmentScope = 'all_classes' | 'selected_classes';
+
+export interface SelfEnrollmentRule {
+  targetClassId: string;
+  audience: SelfEnrollmentAudience;
+  sourceClassIds: string[];
+  sourceBatchIds: string[];
+}
+
+export interface SelfEnrollmentSettings {
+  enabled: boolean;
+  scope: SelfEnrollmentScope;
+  rules: SelfEnrollmentRule[];
 }
 
 export interface ChatPeerClass {

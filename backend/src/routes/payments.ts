@@ -6,10 +6,17 @@ import { enterTenantContext } from '../middleware/tenant';
 import { uploadSlip } from '../middleware/upload';
 import { persistUploadedFile } from '../services/files';
 import { env } from '../config/env';
-import { paymentSchema, reviewPaymentSchema, payhereInitSchema } from '../validation/schemas';
-import { badRequest, forbidden, notFound } from '../utils/httpError';
+import {
+  paymentSchema,
+  multiPaymentSchema,
+  reviewPaymentSchema,
+  payhereInitSchema,
+  staffPaymentSlipSchema,
+} from '../validation/schemas';
+import { badRequest, conflict, forbidden, notFound } from '../utils/httpError';
 import { storage } from '../services/storage';
 import { createNotification } from '../services/notifications';
+import { netClassFee } from '../lib/fees';
 
 const router = Router({ mergeParams: true });
 
@@ -73,21 +80,39 @@ async function buildStudentRegIdMap(tenantId: string) {
   return new Map(students.map((s, i) => [s.id, `#${students.length - i}`]));
 }
 
-async function assertNoDuplicatePayment(enrollmentId: string, forMonth: string) {
+async function assertNoDuplicatePayment(
+  enrollmentId: string,
+  forMonth: string,
+  paymentType: 'enrollment' | 'monthly'
+) {
   const existing = await prisma.payment.findFirst({
     where: {
       enrollmentId,
       forMonth,
+      paymentType,
       status: { in: ['pending', 'approved'] },
     },
   });
   if (existing) {
-    throw badRequest(
+    throw conflict(
       existing.status === 'pending'
-        ? `You already have a pending payment for ${formatMonthLabel(forMonth)}`
-        : `Payment for ${formatMonthLabel(forMonth)} is already approved`
+        ? `You already have a pending ${paymentType} payment for ${formatMonthLabel(forMonth)}`
+        : `A ${paymentType} payment for ${formatMonthLabel(forMonth)} is already approved`
     );
   }
+}
+
+function paymentTypeForEnrollment(status: string): 'enrollment' | 'monthly' {
+  return status === 'active' ? 'monthly' : 'enrollment';
+}
+
+function mapPaymentCreateConflict(err: unknown, forMonth: string, paymentType: 'enrollment' | 'monthly'): never {
+  if (err && typeof err === 'object' && 'code' in err && (err as { code?: string }).code === 'P2002') {
+    throw conflict(
+      `A pending or approved ${paymentType} payment already exists for ${formatMonthLabel(forMonth)}`
+    );
+  }
+  throw err;
 }
 
 router.post(
@@ -109,34 +134,158 @@ router.post(
     }
 
     const data = paymentSchema.parse(req.body);
-    await assertNoDuplicatePayment(enrollment.id, data.forMonth);
+    const paymentType = paymentTypeForEnrollment(enrollment.status);
+    await assertNoDuplicatePayment(enrollment.id, data.forMonth, paymentType);
 
-    const paymentType = enrollment.status === 'active' ? 'monthly' : 'enrollment';
-    const amount = Number(enrollment.class.price);
-
-    if (paymentType === 'enrollment' && enrollment.status === 'rejected') {
-      throw badRequest('Your enrollment was rejected. Please contact your institute.');
-    }
+    const amount = netClassFee(enrollment.class.price, enrollment.feeWaiverAmount);
 
     const slip = await persistUploadedFile(req.file, req.user!.sub, 'slip');
 
-    const payment = await prisma.payment.create({
-      data: {
-        tenantId: req.tenant!.id,
-        enrollmentId: enrollment.id,
-        amount,
-        slipFileId: slip.id,
-        paymentType,
-        forMonth: data.forMonth,
-        status: 'pending',
-      },
-      include: PAYMENT_INCLUDE,
-    });
+    let payment;
+    try {
+      payment = await prisma.payment.create({
+        data: {
+          tenantId: req.tenant!.id,
+          enrollmentId: enrollment.id,
+          amount,
+          slipFileId: slip.id,
+          paymentType,
+          forMonth: data.forMonth,
+          status: 'pending',
+        },
+        include: PAYMENT_INCLUDE,
+      });
+    } catch (err) {
+      mapPaymentCreateConflict(err, data.forMonth, paymentType);
+    }
 
     if (paymentType === 'enrollment' && enrollment.status !== 'active') {
       await prisma.enrollment.update({ where: { id: enrollment.id }, data: { status: 'pending' } });
     }
 
+    res.status(201).json({ payment: serializePayment(payment) });
+  })
+);
+
+/** Upload one slip that covers multiple class enrollments for the same billing month. */
+router.post(
+  '/payments/slip',
+  authenticate,
+  requireRole('student'),
+  uploadSlip,
+  enterTenantContext,
+  asyncHandler(async (req, res) => {
+    if (!req.file) throw badRequest('A payment slip file is required');
+
+    const data = multiPaymentSchema.parse({
+      forMonth: req.body?.forMonth,
+      enrollmentIds: req.body?.enrollmentIds,
+    });
+    const enrollmentIds = [...new Set(data.enrollmentIds)];
+    const enrollments = await prisma.enrollment.findMany({
+      where: {
+        id: { in: enrollmentIds },
+        studentId: req.user!.sub,
+        status: { in: ['active', 'pending'] },
+      },
+      include: { class: { select: { id: true, title: true, price: true } } },
+    });
+    if (enrollments.length !== enrollmentIds.length) {
+      throw badRequest('One or more selected classes were not found in your enrollments');
+    }
+    for (const enrollment of enrollments) {
+      await assertNoDuplicatePayment(
+        enrollment.id,
+        data.forMonth,
+        paymentTypeForEnrollment(enrollment.status)
+      );
+    }
+
+    const slip = await persistUploadedFile(req.file, req.user!.sub, 'slip');
+    let payments;
+    try {
+      payments = await prisma.$transaction(
+        enrollments.map((enrollment) =>
+          prisma.payment.create({
+            data: {
+              tenantId: req.tenant!.id,
+              enrollmentId: enrollment.id,
+              amount: netClassFee(enrollment.class.price, enrollment.feeWaiverAmount),
+              slipFileId: slip.id,
+              paymentType: paymentTypeForEnrollment(enrollment.status),
+              forMonth: data.forMonth,
+              status: 'pending',
+            },
+            include: PAYMENT_INCLUDE,
+          })
+        )
+      );
+    } catch (err) {
+      mapPaymentCreateConflict(err, data.forMonth, 'monthly');
+    }
+
+    const serializedPayments = payments.map((payment) => serializePayment(payment));
+    res.status(201).json({
+      payments: serializedPayments,
+      total: serializedPayments.reduce((sum, payment) => sum + payment.amount, 0),
+      forMonth: data.forMonth,
+      forMonthLabel: formatMonthLabel(data.forMonth),
+      classCount: serializedPayments.length,
+    });
+  })
+);
+
+/** Staff may record an externally received slip for an eligible student. */
+router.post(
+  '/payments/staff-slip',
+  authenticate,
+  requireRole('teacher', 'admin', 'superadmin'),
+  uploadSlip,
+  enterTenantContext,
+  asyncHandler(async (req, res) => {
+    if (!req.file) throw badRequest('A payment slip file is required');
+    const data = staffPaymentSlipSchema.parse(req.body);
+    const enrollment = await prisma.enrollment.findFirst({
+      where: { id: data.enrollmentId, status: { in: ['active', 'pending'] } },
+      include: {
+        class: { select: { id: true, title: true, price: true, teacherId: true } },
+        student: { select: { id: true } },
+      },
+    });
+    if (!enrollment) throw notFound('Enrollment not found');
+    if (req.user!.role === 'teacher' && enrollment.class.teacherId !== req.user!.sub) {
+      throw forbidden('You can only upload slips for students in your own classes');
+    }
+    const paymentType = paymentTypeForEnrollment(enrollment.status);
+    await assertNoDuplicatePayment(enrollment.id, data.forMonth, paymentType);
+
+    const slip = await persistUploadedFile(req.file, req.user!.sub, 'slip');
+    let payment;
+    try {
+      payment = await prisma.payment.create({
+        data: {
+          tenantId: req.tenant!.id,
+          enrollmentId: enrollment.id,
+          amount: netClassFee(enrollment.class.price, enrollment.feeWaiverAmount),
+          slipFileId: slip.id,
+          paymentType,
+          forMonth: data.forMonth,
+          status: 'pending',
+          note: 'Slip uploaded by staff on behalf of the student.',
+        },
+        include: PAYMENT_INCLUDE,
+      });
+    } catch (err) {
+      mapPaymentCreateConflict(err, data.forMonth, paymentType);
+    }
+    await createNotification({
+      tenantId: req.tenant!.id,
+      userId: enrollment.student.id,
+      type: 'general',
+      title: 'Payment slip submitted',
+      body: `A payment slip for ${enrollment.class.title} (${formatMonthLabel(data.forMonth)}) was submitted on your behalf.`,
+      link: '/payments',
+    });
     res.status(201).json({ payment: serializePayment(payment) });
   })
 );
@@ -314,6 +463,18 @@ async function reviewPayment(paymentId: string, reviewerId: string, approve: boo
     throw badRequest('This payment has already been reviewed');
   }
 
+  // Apply the review to payments created from the same multi-class slip.
+  const siblings = await prisma.payment.findMany({
+    where: {
+      id: { not: paymentId },
+      slipFileId: payment.slipFileId,
+      forMonth: payment.forMonth,
+      status: 'pending',
+      enrollment: { studentId: payment.enrollment.studentId },
+    },
+    select: { id: true },
+  });
+
   const updatedPayment = await prisma.$transaction(async (tx) => {
     const updated = await tx.payment.update({
       where: { id: paymentId },
@@ -325,6 +486,19 @@ async function reviewPayment(paymentId: string, reviewerId: string, approve: boo
       },
     });
 
+    if (siblings.length) {
+      await tx.payment.updateMany({
+        where: { id: { in: siblings.map((sibling) => sibling.id) } },
+        data: {
+          status: targetStatus,
+          reviewedById: reviewerId,
+          reviewedAt: new Date(),
+          note,
+        },
+      });
+    }
+
+    // Only explicit enrollment payments control enrollment activation.
     if (payment.paymentType === 'enrollment') {
       await tx.enrollment.update({
         where: { id: payment.enrollmentId },
@@ -409,10 +583,10 @@ router.post(
     });
     if (!enrollment) throw notFound('Enrollment not found');
 
-    await assertNoDuplicatePayment(enrollment.id, data.forMonth);
-    const amount = Number(enrollment.class.price).toFixed(2);
+    const paymentType = paymentTypeForEnrollment(enrollment.status);
+    await assertNoDuplicatePayment(enrollment.id, data.forMonth, paymentType);
+    const amount = netClassFee(enrollment.class.price, enrollment.feeWaiverAmount).toFixed(2);
     const orderId = `ph_${enrollment.id}_${data.forMonth}_${Date.now()}`;
-    const paymentType = enrollment.status === 'active' ? 'monthly' : 'enrollment';
 
     // Create a server-side pending payment bound to order_id + expected amount.
     const slip = await basePrisma.file.create({
@@ -426,19 +600,23 @@ router.post(
         kind: 'slip',
       },
     });
-    await prisma.payment.create({
-      data: {
-        tenantId: req.tenant!.id,
-        enrollmentId: enrollment.id,
-        amount,
-        slipFileId: slip.id,
-        paymentType,
-        forMonth: data.forMonth,
-        status: 'pending',
-        orderId,
-        note: 'PayHere checkout initiated',
-      },
-    });
+    try {
+      await prisma.payment.create({
+        data: {
+          tenantId: req.tenant!.id,
+          enrollmentId: enrollment.id,
+          amount,
+          slipFileId: slip.id,
+          paymentType,
+          forMonth: data.forMonth,
+          status: 'pending',
+          orderId,
+          note: 'PayHere checkout initiated',
+        },
+      });
+    } catch (err) {
+      mapPaymentCreateConflict(err, data.forMonth, paymentType);
+    }
 
     const sandbox = env.payhereSandbox;
     res.json({

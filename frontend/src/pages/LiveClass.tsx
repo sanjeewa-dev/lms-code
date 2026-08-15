@@ -10,6 +10,7 @@ import { LiveClassRoom } from '../components/LiveClassRoom';
 import { apiErrorMessage } from '../api/client';
 import type { SessionStatus } from '../api/types';
 import { showToast } from '../components/AppToast';
+import { isTenantStaff } from '../lib/roles';
 
 const platformLabel: Record<string, string> = {
   zoom: 'Zoom',
@@ -24,6 +25,7 @@ interface Session {
   classTime: string;
   platform: string;
   meetingText: string;
+  hasExternalMeetingLink?: boolean;
   status: SessionStatus;
   roomName: string | null;
   class: { id: string; title: string; teacher: { name: string } };
@@ -50,10 +52,10 @@ interface ClassItem {
   title: string;
 }
 
-function joinHref(text: string) {
-  const url = text.trim();
-  if (/^https?:\/\//i.test(url)) return url;
-  return null;
+function joinExternalMeeting(t: ReturnType<typeof useTenantApi>, session: Session, setError: (msg: string) => void) {
+  t.get<{ meetingUrl: string }>(`/classes/${session.class.id}/schedules/${session.id}/external-join`)
+    .then(({ data }) => window.open(data.meetingUrl, '_blank', 'noopener,noreferrer'))
+    .catch((err) => setError(apiErrorMessage(err)));
 }
 
 // ─── Invite Modal ─────────────────────────────────────────────────────────────
@@ -396,7 +398,7 @@ export default function LiveClass() {
   });
 
   const today = new Date().toISOString().slice(0, 10);
-  const isStaff = user?.role === 'teacher' || user?.role === 'admin';
+  const isStaff = isTenantStaff(user?.role);
 
   const startMutation = useMutation({
     mutationFn: async (s: Session) =>
@@ -540,7 +542,8 @@ export default function LiveClass() {
             const isToday = dateStr === today;
             const isLive = s.status === 'live';
             const isEnded = s.status === 'ended';
-            const href = joinHref(s.meetingText);
+            const canJoinExternal =
+              !isStaff && s.platform !== 'jitsi' && Boolean(s.hasExternalMeetingLink) && !isEnded;
 
             return (
               <Card
@@ -580,7 +583,7 @@ export default function LiveClass() {
                           })}{' '}
                           · {s.classTime} · {s.class.teacher.name}
                         </p>
-                        {s.meetingText && !href && !isLive && (
+                        {s.meetingText && !isLive && (
                           <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:bg-white/5 dark:text-slate-300">
                             {s.meetingText}
                           </p>
@@ -590,13 +593,15 @@ export default function LiveClass() {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
-                    {/* External platform link */}
-                    {href && !isLive && !isEnded && (
-                      <a href={href} target="_blank" rel="noreferrer"
-                        className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700">
+                    {canJoinExternal && (
+                      <button
+                        type="button"
+                        onClick={() => joinExternalMeeting(t, s, setActionError)}
+                        className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+                      >
                         <Icon name="live" />
-                        Join now
-                      </a>
+                        Join meeting
+                      </button>
                     )}
 
                     {/* Teacher: Start — Live Class (Jitsi) only */}

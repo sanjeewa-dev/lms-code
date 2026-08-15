@@ -227,7 +227,11 @@ export function Modal({
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
+  // Only run when `open` flips — not on every parent re-render / keystroke.
+  // Inline `onClose={() => ...}` would otherwise re-trigger first?.focus() and steal focus.
   useEffect(() => {
     if (!open) return;
     previousFocus.current = document.activeElement as HTMLElement | null;
@@ -238,20 +242,27 @@ export function Modal({
             panel.querySelectorAll<HTMLElement>(
               'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
             )
-          ).filter((el) => !el.hasAttribute('disabled'))
+          ).filter((el) => !el.hasAttribute('disabled') && el.getAttribute('aria-label') !== 'Close dialog')
         : [];
 
-    const first = focusables()[0];
-    first?.focus();
+    // Prefer the first field inside the body, not the header Close button
+    const bodyFirst = panel?.querySelector<HTMLElement>(
+      '[data-modal-body] button, [data-modal-body] [href], [data-modal-body] input, [data-modal-body] select, [data-modal-body] textarea, [data-modal-body] [tabindex]:not([tabindex="-1"])'
+    );
+    (bodyFirst ?? focusables()[0])?.focus();
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== 'Tab' || !panel) return;
-      const list = focusables();
+      const list = Array.from(
+        panel.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((el) => !el.hasAttribute('disabled'));
       if (!list.length) return;
       const firstEl = list[0];
       const lastEl = list[list.length - 1];
@@ -272,7 +283,7 @@ export function Modal({
       document.body.style.overflow = prevOverflow;
       previousFocus.current?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -303,7 +314,7 @@ export function Modal({
             Close
           </button>
         </div>
-        <div className="px-5 py-4">{children}</div>
+        <div data-modal-body className="px-5 py-4">{children}</div>
       </div>
     </div>
   );

@@ -5,6 +5,7 @@ import { env } from '../config/env';
 import { sendStudentClassInvite, sendStudentEnrolledNotice } from './email';
 import { badRequest, conflict, notFound } from '../utils/httpError';
 import { hashToken } from '../utils/cryptoTokens';
+import { clampFeeWaiver, enrollmentStatusForNetFee } from '../lib/fees';
 import type { studentInviteSchema, studentOnboardingSchema } from '../validation/schemas';
 import type { z } from 'zod';
 
@@ -38,31 +39,37 @@ export async function inviteStudentToClass(opts: {
   const phones = normalizePhones(data.phones, data.phone);
   const primaryPhone = phones[0] ?? null;
   const freeIdCard = Boolean(data.freeIdCard);
+  const klass = await basePrisma.class.findFirst({
+    where: { id: classId, tenantId },
+    select: { price: true },
+  });
+  if (!klass) throw notFound('Class not found');
+  const feeWaiverAmount = clampFeeWaiver(klass.price, data.feeWaiverAmount ?? 0);
+  const status = enrollmentStatusForNetFee(klass.price, feeWaiverAmount);
 
   let student = await basePrisma.user.findFirst({ where: { tenantId, email } });
   if (student && student.role !== 'student') {
     throw conflict('A non-student account already uses that email');
   }
 
-  // Fully registered student — enroll (pending if paid class) and notify.
+  // Fully registered student — enroll using the fee-gated enrollment status and notify.
   if (student?.passwordHash) {
-    const klass = await basePrisma.class.findFirst({
-      where: { id: classId, tenantId },
-      select: { price: true },
-    });
-    const status = Number(klass?.price ?? 0) <= 0 ? 'active' : 'pending';
-
     let enrollment = await basePrisma.enrollment.findFirst({
       where: { classId, studentId: student.id },
     });
     if (!enrollment) {
       enrollment = await basePrisma.enrollment.create({
-        data: { tenantId, classId, studentId: student.id, status },
+        data: { tenantId, classId, studentId: student.id, status, feeWaiverAmount },
       });
     } else if (enrollment.status !== 'active') {
       enrollment = await basePrisma.enrollment.update({
         where: { id: enrollment.id },
-        data: { status },
+        data: { status, feeWaiverAmount },
+      });
+    } else if (feeWaiverAmount > 0) {
+      enrollment = await basePrisma.enrollment.update({
+        where: { id: enrollment.id },
+        data: { feeWaiverAmount },
       });
     }
 
@@ -96,7 +103,7 @@ export async function inviteStudentToClass(opts: {
     freeIdCard,
   };
 
-  // New or incomplete student — create/update profile, pending enrollment, send invite.
+  // New or incomplete student — create/update profile, then send invite.
   if (!student) {
     student = await basePrisma.user.create({
       data: {
@@ -129,7 +136,12 @@ export async function inviteStudentToClass(opts: {
   });
   if (!enrollment) {
     enrollment = await basePrisma.enrollment.create({
-      data: { tenantId, classId, studentId: student.id, status: 'pending' },
+      data: { tenantId, classId, studentId: student.id, status, feeWaiverAmount },
+    });
+  } else {
+    enrollment = await basePrisma.enrollment.update({
+      where: { id: enrollment.id },
+      data: { feeWaiverAmount },
     });
   }
 
@@ -151,6 +163,7 @@ export async function inviteStudentToClass(opts: {
       district: data.district || null,
       address: data.address?.trim() || null,
       freeIdCard,
+      feeWaiverAmount,
       invitedById,
       userId: student.id,
       expiresAt,
@@ -176,6 +189,7 @@ export async function enrollExistingStudentInClass(opts: {
   classTitle: string;
   studentId: string;
   freeIdCard?: boolean;
+  feeWaiverAmount?: number;
 }) {
   const { tenantId, tenantName, classId, classTitle, studentId, freeIdCard } = opts;
 
@@ -202,8 +216,8 @@ export async function enrollExistingStudentInClass(opts: {
     where: { id: classId, tenantId },
     select: { price: true },
   });
-  const status =
-    student.passwordHash && Number(klass?.price ?? 0) <= 0 ? 'active' : 'pending';
+  const feeWaiverAmount = clampFeeWaiver(klass?.price ?? 0, opts.feeWaiverAmount ?? 0);
+  const status = enrollmentStatusForNetFee(klass?.price ?? 0, feeWaiverAmount);
 
   let enrollment = existing;
   if (!enrollment) {
@@ -213,12 +227,13 @@ export async function enrollExistingStudentInClass(opts: {
         classId,
         studentId: student.id,
         status,
+        feeWaiverAmount,
       },
     });
   } else {
     enrollment = await basePrisma.enrollment.update({
       where: { id: enrollment.id },
-      data: { status },
+      data: { status, feeWaiverAmount },
     });
   }
 
@@ -242,7 +257,7 @@ export async function enrollExistingStudentInClass(opts: {
 
 export async function getInviteForToken(tenantId: string, token: string) {
   const include = {
-    class: { select: { title: true } },
+    class: { select: { title: true, price: true } },
     tenant: { select: { name: true, slug: true } },
   } as const;
   const invite =
@@ -253,6 +268,8 @@ export async function getInviteForToken(tenantId: string, token: string) {
   if (invite.expiresAt < new Date()) throw badRequest('This invitation has expired');
 
   const phones = normalizePhones(invite.phones, invite.phone);
+  const classPrice = Number(invite.class?.price ?? 0);
+  const feeWaiverAmount = Number(invite.feeWaiverAmount ?? 0);
 
   return {
     invite: {
@@ -266,6 +283,9 @@ export async function getInviteForToken(tenantId: string, token: string) {
       district: invite.district ?? '',
       address: invite.address ?? '',
       freeIdCard: invite.freeIdCard,
+      feeWaiverAmount,
+      classPrice,
+      netFee: Math.max(0, classPrice - feeWaiverAmount),
       classTitle: invite.class?.title ?? null,
       instituteName: invite.tenant.name,
     },
@@ -307,10 +327,11 @@ export async function acceptInvite(tenantId: string, token: string, data: Onboar
       where: { id: invite.classId, tenantId },
       select: { price: true },
     });
-    const status = Number(klass?.price ?? 0) <= 0 ? 'active' : 'pending';
+    const feeWaiverAmount = clampFeeWaiver(klass?.price ?? 0, invite.feeWaiverAmount ?? 0);
+    const status = enrollmentStatusForNetFee(klass?.price ?? 0, feeWaiverAmount);
     await basePrisma.enrollment.updateMany({
       where: { classId: invite.classId, studentId: student.id },
-      data: { status },
+      data: { status, feeWaiverAmount },
     });
   }
 

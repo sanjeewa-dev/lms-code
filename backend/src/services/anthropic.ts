@@ -9,7 +9,10 @@ export async function callAnthropic(opts: {
   maxTokens?: number;
   model?: string;
 }): Promise<string | null> {
-  if (!env.anthropicApiKey) return null;
+  if (!env.anthropicApiKey) {
+    console.warn('[ai] ANTHROPIC_API_KEY is not set — AI features are disabled');
+    return null;
+  }
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -25,13 +28,18 @@ export async function callAnthropic(opts: {
         messages: [{ role: 'user', content: opts.user }],
       }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      // Do not log the response body: providers may include request content in errors.
+      console.warn(`[ai] Anthropic HTTP ${res.status}: ${res.statusText}`);
+      return null;
+    }
     const data = (await res.json()) as {
       content?: { type: string; text?: string }[];
     };
     const text = data.content?.find((c) => c.type === 'text')?.text;
     return text?.trim() || null;
-  } catch {
+  } catch (err) {
+    console.warn('[ai] Anthropic request failed:', err instanceof Error ? err.message : err);
     return null;
   }
 }

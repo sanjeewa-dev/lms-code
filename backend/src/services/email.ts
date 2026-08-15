@@ -36,11 +36,9 @@ export async function sendMail(opts: {
   relatedId?: string;
 }) {
   if (!transporter) {
-    console.log('\n--- EMAIL (SMTP not configured — logged to console) ---');
-    console.log(`To: ${opts.to}`);
-    console.log(`Subject: ${opts.subject}`);
-    console.log(opts.text);
-    console.log('---\n');
+    // Email bodies can contain password-reset, invitation, and magic-link
+    // tokens. Never write them to logs when delivery is unavailable.
+    console.warn('[email] SMTP is not configured; message was not sent');
     try {
       await basePrisma.emailLog.create({
         data: {

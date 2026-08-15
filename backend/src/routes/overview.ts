@@ -276,10 +276,10 @@ router.get(
   })
 );
 
-// Tenant-wide student directory.
+// Tenant-wide student directory is an institute-admin operation.
 router.get(
   '/students',
-  ...staff,
+  ...adminOnly,
   asyncHandler(async (req, res) => {
     const students = await basePrisma.user.findMany({
       where: { tenantId: req.tenant!.id, role: 'student' },
@@ -327,7 +327,7 @@ router.get(
 // Approve / reject a student.
 router.patch(
   '/students/:id/status',
-  ...staff,
+  ...adminOnly,
   asyncHandler(async (req, res) => {
     const next = req.body?.status;
     if (next !== 'approved' && next !== 'rejected') {
@@ -348,6 +348,9 @@ router.patch(
       data: { status: next },
       select: { id: true, name: true, email: true, status: true, createdAt: true },
     });
+    if (next === 'rejected') {
+      await basePrisma.refreshToken.deleteMany({ where: { userId: student.id } });
+    }
     res.json({ student: updated });
   })
 );
@@ -355,7 +358,7 @@ router.patch(
 // Update student details (from class roster / directory).
 router.patch(
   '/students/:id',
-  ...staff,
+  ...adminOnly,
   asyncHandler(async (req, res) => {
     const tenantId = req.tenant!.id;
     const student = await basePrisma.user.findFirst({
@@ -436,7 +439,7 @@ router.patch(
 // Offer / revoke free student ID card.
 router.patch(
   '/students/:id/free-card',
-  ...staff,
+  ...adminOnly,
   asyncHandler(async (req, res) => {
     const { freeIdCard } = studentFreeCardSchema.parse(req.body);
     const student = await basePrisma.user.findFirst({
@@ -462,7 +465,7 @@ router.patch(
 // Delete a student (and their tenant-scoped data via cascades).
 router.delete(
   '/students/:id',
-  ...staff,
+  ...adminOnly,
   asyncHandler(async (req, res) => {
     const student = await basePrisma.user.findFirst({
       where: { id: req.params.id, tenantId: req.tenant!.id, role: 'student' },
