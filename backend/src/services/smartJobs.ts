@@ -2,6 +2,7 @@ import { basePrisma } from '../lib/prisma';
 import { env } from '../config/env';
 import {
   sendMail,
+  sendFeeReminderEmail,
   renderEmailLayout,
   emailParagraph,
   emailDetailCard,
@@ -12,6 +13,8 @@ import {
 import { createNotification } from './notifications';
 import { currentBillingMonth } from './access';
 import { runWithContext } from '../lib/tenantContext';
+import { netClassFee } from '../lib/fees';
+import { badRequest, forbidden, notFound } from '../utils/httpError';
 
 function paymentUrl(slug: string) {
   return `${env.clientUrl}/${slug}/payments`;
@@ -155,6 +158,123 @@ export async function sendFeeRemindersForTenant(
   });
 
   return { sent, forMonth, unpaid: unpaid.length };
+}
+
+function formatMonthLabelLong(forMonth: string) {
+  const [year, month] = forMonth.split('-').map(Number);
+  return new Date(year, month - 1, 1).toLocaleDateString(undefined, {
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+async function monthNeedsFeeReminder(enrollmentId: string, forMonth: string, netFee: number) {
+  if (netFee <= 0) return false;
+  const payment = await basePrisma.payment.findFirst({
+    where: {
+      enrollmentId,
+      forMonth,
+      paymentType: { in: ['enrollment', 'monthly'] },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { status: true },
+  });
+  if (!payment) return true;
+  if (payment.status === 'approved' || payment.status === 'pending') return false;
+  return true;
+}
+
+/**
+ * Teacher/admin manual fee reminder for one enrollment.
+ * Uses LMS Code's currentBillingMonth (not Smart's previous-month gate).
+ * Sends via NMS template payment.fee_reminder.
+ */
+export async function sendEnrollmentFeeReminder(opts: {
+  tenantId: string;
+  classId: string;
+  studentId: string;
+  teacherId?: string | null;
+  actorRole: string;
+}) {
+  const tenant = await basePrisma.tenant.findFirst({ where: { id: opts.tenantId } });
+  if (!tenant) throw notFound('Institute not found');
+
+  const enrollment = await basePrisma.enrollment.findFirst({
+    where: {
+      tenantId: opts.tenantId,
+      classId: opts.classId,
+      studentId: opts.studentId,
+    },
+    include: {
+      student: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          guardianName: true,
+          guardianEmail: true,
+        },
+      },
+      class: { select: { id: true, title: true, price: true, teacherId: true } },
+    },
+  });
+  if (!enrollment) throw notFound('Student is not enrolled in this class');
+  if (opts.actorRole === 'teacher' && enrollment.class.teacherId !== opts.teacherId) {
+    throw forbidden('You can only remind students in your own classes');
+  }
+  if (enrollment.status !== 'active') {
+    throw badRequest('Fee reminders can only be sent for active enrollments');
+  }
+
+  const netFee = netClassFee(enrollment.class.price, enrollment.feeWaiverAmount);
+  if (netFee <= 0) {
+    throw badRequest('This student has no fee due (waived or free class)');
+  }
+
+  const forMonth = currentBillingMonth();
+  if (!(await monthNeedsFeeReminder(enrollment.id, forMonth, netFee))) {
+    throw badRequest('No unpaid fee for this month (already paid or pending review)');
+  }
+
+  const forMonthLabel = formatMonthLabelLong(forMonth);
+  const amountDue = `Rs. ${netFee.toLocaleString()}`;
+  const paymentsUrl = paymentUrl(tenant.slug);
+  const relatedId = `${enrollment.id}:manual:${forMonth}:${Date.now()}`;
+
+  await sendFeeReminderEmail({
+    to: enrollment.student.email,
+    studentName: enrollment.student.name,
+    classTitle: enrollment.class.title,
+    instituteName: tenant.name,
+    forMonthLabel,
+    amountDue,
+    paymentsUrl,
+    tenantId: opts.tenantId,
+    relatedId,
+    guardian: enrollment.student.guardianEmail?.trim()
+      ? {
+          name: enrollment.student.guardianName || 'Guardian',
+          email: enrollment.student.guardianEmail.trim(),
+        }
+      : null,
+  });
+
+  await createNotification({
+    tenantId: opts.tenantId,
+    userId: enrollment.student.id,
+    type: 'general',
+    title: 'Fee reminder',
+    body: `${enrollment.class.title} fee for ${forMonthLabel} is due (${amountDue}).`,
+    link: '/payments',
+  });
+
+  return {
+    sent: true,
+    months: [forMonth],
+    monthLabels: [forMonthLabel],
+    amount: netFee,
+    emailed: enrollment.student.email,
+  };
 }
 
 export async function sendParentDigestsForTenant(tenantId: string) {

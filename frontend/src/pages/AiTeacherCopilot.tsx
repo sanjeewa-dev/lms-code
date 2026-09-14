@@ -70,7 +70,7 @@ function FileUploadButton({
         type="button"
         disabled={loading || extracting}
         onClick={() => ref.current?.click()}
-        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700 disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
+        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
       >
         {extracting ? (
           <Spinner className="h-3 w-3" />
@@ -136,8 +136,8 @@ function ClassSelector({
           onClick={() => onChange(c.id)}
           className={`rounded-full border px-3 py-1 text-sm font-medium transition ${
             selected === c.id
-              ? 'border-violet-600 bg-violet-600 text-white'
-              : 'border-slate-200 text-slate-600 hover:border-violet-300 dark:border-white/10 dark:text-slate-300'
+              ? 'border-brand-600 bg-brand-600 text-white'
+              : 'border-slate-200 text-slate-600 hover:border-brand-300 dark:border-white/10 dark:text-slate-300'
           }`}
         >
           {c.title}
@@ -210,7 +210,7 @@ function HistorySection({
                     </p>
                     <p className="mt-0.5 text-xs text-slate-400">{formatWhen(item.createdAt)}</p>
                   </div>
-                  <span className="shrink-0 text-xs font-semibold text-violet-600">
+                  <span className="shrink-0 text-xs font-semibold text-brand-600">
                     {open ? 'Hide' : 'View'}
                   </span>
                 </button>
@@ -300,13 +300,13 @@ function FeedbackPanel({ classes }: { classes: ClassItem[] }) {
       <div className="space-y-4">
         {data.suggestedGrade != null && (
           <div className="flex items-center gap-3">
-            <span className="text-3xl font-black text-violet-700 dark:text-violet-400">
+            <span className="text-3xl font-black text-brand-700 dark:text-brand-400">
               {data.suggestedGrade}
             </span>
             {(maxMarks || data.maxMarks) && (
               <span className="text-slate-500">/ {maxMarks || data.maxMarks}</span>
             )}
-            <span className="ml-2 rounded-full bg-violet-100 px-3 py-0.5 text-xs font-semibold text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
+            <span className="ml-2 rounded-full bg-brand-100 px-3 py-0.5 text-xs font-semibold text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
               AI Suggested Grade
             </span>
           </div>
@@ -409,7 +409,7 @@ function FeedbackPanel({ classes }: { classes: ClassItem[] }) {
           !classId ||
           mut.isPending
         }
-        className="bg-violet-600 text-white hover:bg-violet-700"
+        className="bg-brand-600 text-white hover:bg-brand-700"
       >
         {mut.isPending ? (
           <>
@@ -422,7 +422,7 @@ function FeedbackPanel({ classes }: { classes: ClassItem[] }) {
       </Button>
 
       {result && (
-        <div className="rounded-2xl border border-violet-100 bg-violet-50 p-5 dark:border-violet-900/30 dark:bg-violet-950/20">
+        <div className="rounded-2xl border border-brand-100 bg-brand-50 p-5 dark:border-brand-900/30 dark:bg-brand-950/20">
           {renderFeedback(result)}
         </div>
       )}
@@ -478,7 +478,7 @@ function WeakTopicsPanel({ classes }: { classes: ClassItem[] }) {
             </div>
           </div>
         )}
-        <div className="rounded-2xl border border-violet-100 bg-violet-50 p-4 dark:border-violet-900/30 dark:bg-violet-950/20">
+        <div className="rounded-2xl border border-brand-100 bg-brand-50 p-4 dark:border-brand-900/30 dark:bg-brand-950/20">
           <p className="text-slate-700 dark:text-slate-300">{d.summary}</p>
         </div>
         {d.weakTopics.length > 0 && (
@@ -511,7 +511,7 @@ function WeakTopicsPanel({ classes }: { classes: ClassItem[] }) {
       <Button
         onClick={() => mut.mutate()}
         disabled={!classId || mut.isPending}
-        className="bg-violet-600 text-white hover:bg-violet-700"
+        className="bg-brand-600 text-white hover:bg-brand-700"
       >
         {mut.isPending ? (
           <>
@@ -599,21 +599,21 @@ function InterventionSuggestionsPanel({ classes }: { classes: ClassItem[] }) {
             <div className="mb-2 flex flex-wrap gap-3 text-xs">
               {s.attendanceRate != null && (
                 <span
-                  className={`rounded-full px-2 py-0.5 font-medium ${s.attendanceRate < 70 ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}`}
+                  className={`rounded-full px-2 py-0.5 font-medium ${s.attendanceRate < 70 ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'}`}
                 >
                   Attendance: {s.attendanceRate}%
                 </span>
               )}
               {s.quizAverage != null && (
                 <span
-                  className={`rounded-full px-2 py-0.5 font-medium ${s.quizAverage < 50 ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}`}
+                  className={`rounded-full px-2 py-0.5 font-medium ${s.quizAverage < 50 ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'}`}
                 >
                   Quiz Avg: {s.quizAverage}%
                 </span>
               )}
             </div>
             {s.aiSuggestion && (
-              <p className="rounded-lg bg-violet-50 px-3 py-2 text-sm text-violet-700 dark:bg-violet-950/20 dark:text-violet-300">
+              <p className="rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-700 dark:bg-brand-950/20 dark:text-brand-300">
                 <strong>Suggestion:</strong> {s.aiSuggestion}
               </p>
             )}
@@ -632,7 +632,7 @@ function InterventionSuggestionsPanel({ classes }: { classes: ClassItem[] }) {
       <Button
         onClick={() => mut.mutate()}
         disabled={!classId || mut.isPending}
-        className="bg-violet-600 text-white hover:bg-violet-700"
+        className="bg-brand-600 text-white hover:bg-brand-700"
       >
         {mut.isPending ? (
           <>
@@ -723,20 +723,33 @@ export default function AiTeacherCopilot() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div className="relative overflow-hidden rounded-3xl bg-brand-600 p-7 text-white shadow-lg">
-        <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-white/10" />
-        <div className="absolute -bottom-10 -left-10 h-40 w-40 rounded-full bg-white/5" />
-        <div className="relative">
-          <div className="mb-1 inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold backdrop-blur">
+    <div className="mx-auto max-w-5xl space-y-6">
+      <div className="relative overflow-hidden rounded-3xl bg-ink-900 p-7 text-white shadow-lg sm:p-8">
+        <div className="pointer-events-none absolute -right-10 -top-10 h-48 w-48 rounded-full border border-brand-400/30" />
+        <div className="pointer-events-none absolute bottom-6 right-16 h-24 w-24 rounded-full border border-dashed border-brand-400/40" />
+        <div className="pointer-events-none absolute right-28 top-10 opacity-30 text-brand-300">
+          <Icon name="spark" width={72} height={72} />
+        </div>
+        <div className="relative max-w-xl">
+          <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-brand-200 backdrop-blur">
             <Icon name="spark" width={14} height={14} />
             AI Teacher Copilot
           </div>
-          <h1 className="mt-2 text-2xl font-black tracking-tight">Your AI Teaching Assistant</h1>
-          <p className="mt-1 max-w-lg text-sm text-white/80">
+          <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Your AI Teaching Assistant</h1>
+          <p className="mt-2 text-sm leading-relaxed text-slate-300">
             Generate quizzes, draft feedback, spot weak topics, and identify students who need support —
             with saved history per tool.
           </p>
+          {!activeTool && classes.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setActiveTool('quiz-gen')}
+              className="mt-5 inline-flex items-center gap-2 rounded-full bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-600"
+            >
+              <Icon name="spark" width={16} height={16} />
+              Explore Copilot Tools
+            </button>
+          )}
         </div>
       </div>
 
@@ -747,31 +760,70 @@ export default function AiTeacherCopilot() {
       )}
 
       {!activeTool && (
-        <div className="grid gap-4 sm:grid-cols-2">
-          {TOOLS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setActiveTool(t.id)}
-              className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-brand-300 hover:shadow-md dark:border-white/10 dark:bg-ink-850 dark:hover:border-brand-700"
-            >
-              <div className="flex items-start gap-4">
-                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-900/40 dark:text-brand-300">
-                  <Icon name={t.icon} width={22} height={22} />
-                </span>
-                <div>
-                  <p className="font-bold text-slate-900 transition group-hover:text-brand-700 dark:text-white dark:group-hover:text-brand-300">
-                    {t.title}
-                  </p>
-                  <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{t.description}</p>
-                </div>
+        <>
+          <div>
+            <h2 className="mb-3 text-lg font-bold text-slate-900 dark:text-white">
+              How can Copilot help you today?
+            </h2>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {TOOLS.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setActiveTool(t.id)}
+                  className="group flex flex-col rounded-2xl border border-slate-200/80 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-md dark:border-white/10 dark:bg-ink-850"
+                >
+                  <span className="mb-3 grid h-12 w-12 place-items-center rounded-full bg-brand-50 text-brand-600 dark:bg-brand-900/40 dark:text-brand-300">
+                    <Icon name={t.icon} width={22} height={22} />
+                  </span>
+                  <p className="font-bold text-slate-900 dark:text-white">{t.title}</p>
+                  <p className="mt-1.5 flex-1 text-sm text-slate-500 dark:text-slate-400">{t.description}</p>
+                  <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-brand-600 dark:text-brand-400">
+                    Get started <Icon name="chevron" width={14} height={14} />
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-5">
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm lg:col-span-3 dark:border-white/10 dark:bg-ink-850">
+              <h3 className="font-bold text-slate-900 dark:text-white">Recent activity</h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Tool runs are saved per class when you generate quizzes, feedback, or insights.
+              </p>
+              <ul className="mt-4 space-y-3 text-sm text-slate-600 dark:text-slate-300">
+                {TOOLS.map((t) => (
+                  <li key={t.id} className="flex items-center gap-3">
+                    <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-50 text-brand-600 dark:bg-brand-900/30">
+                      <Icon name={t.icon} width={16} height={16} />
+                    </span>
+                    <span>
+                      Open <strong>{t.title}</strong> to start — history appears after your first run.
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="rounded-2xl border border-brand-100 bg-brand-50/80 p-5 shadow-sm lg:col-span-2 dark:border-brand-900/40 dark:bg-brand-950/25">
+              <div className="mb-2 grid h-10 w-10 place-items-center rounded-full bg-brand-600 text-white">
+                <Icon name="spark" width={18} height={18} />
               </div>
-              <div className="mt-3 flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400">
-                Open tool <Icon name="chevron" width={14} height={14} />
-              </div>
-            </button>
-          ))}
-        </div>
+              <h3 className="font-bold text-slate-900 dark:text-white">Tip of the day</h3>
+              <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                Run Weak Topic Analysis after a quiz, then open Intervention Radar for students who need
+                follow-up.
+              </p>
+              <button
+                type="button"
+                onClick={() => setActiveTool('weak-topics')}
+                className="mt-4 inline-flex rounded-full border border-brand-400 bg-white px-4 py-2 text-sm font-semibold text-brand-700 transition hover:bg-brand-50 dark:bg-transparent dark:text-brand-300 dark:hover:bg-brand-900/30"
+              >
+                Learn more
+              </button>
+            </div>
+          </div>
+        </>
       )}
 
       {activeTool && classes.length > 0 && (
@@ -780,7 +832,7 @@ export default function AiTeacherCopilot() {
             <button
               type="button"
               onClick={() => setActiveTool(null)}
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
+              className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
             >
               <Icon name="chevron" width={14} height={14} className="rotate-180" />
               Back to AI Hub

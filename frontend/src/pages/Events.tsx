@@ -302,7 +302,7 @@ export default function Events() {
               }`}
             >
               <div className="flex items-start justify-between gap-2">
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-sky-100 text-sky-600">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-sky-100 text-sky-600 dark:bg-sky-950/40 dark:text-sky-300">
                   <Icon name="events" width={18} height={18} />
                 </span>
                 {canManage && (

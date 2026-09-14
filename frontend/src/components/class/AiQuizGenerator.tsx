@@ -84,7 +84,7 @@ function FileUploadButton({
         type="button"
         disabled={loading || extracting}
         onClick={() => ref.current?.click()}
-        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700 disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
+        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
       >
         {extracting ? 'Reading…' : 'Attach file'}
       </button>
@@ -154,7 +154,7 @@ function HistorySection({
                     </p>
                     <p className="mt-0.5 text-xs text-slate-400">{formatWhen(item.createdAt)}</p>
                   </div>
-                  <span className="shrink-0 text-xs font-semibold text-violet-600">
+                  <span className="shrink-0 text-xs font-semibold text-brand-600">
                     {open ? 'Hide' : 'View'}
                   </span>
                 </button>
@@ -233,7 +233,7 @@ function QuizResultView({
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="font-bold text-slate-900 dark:text-white">{title}</h3>
         {classTitle && !embedded && (
-          <p className="text-xs font-medium text-violet-700 dark:text-violet-300">
+          <p className="text-xs font-medium text-brand-700 dark:text-brand-300">
             Target class: {classTitle}
           </p>
         )}
@@ -259,7 +259,7 @@ function QuizResultView({
             className="rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-ink-800"
           >
             <p className="mb-2 font-medium text-slate-800 dark:text-white">
-              <span className="mr-1 text-violet-600">Q{i + 1}.</span>
+              <span className="mr-1 text-brand-600">Q{i + 1}.</span>
               {q.text}
             </p>
             <ul className="mb-2 space-y-1">
@@ -306,7 +306,7 @@ function QuizResultView({
         {!embedded && slug && classId && (
           <Link
             to={`/${slug}/classes/${classId}/quizzes`}
-            className="inline-flex items-center rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300"
+            className="inline-flex items-center rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
           >
             Open {classTitle ? `“${classTitle}”` : 'class'} quizzes
           </Link>
@@ -384,7 +384,7 @@ export function AiQuizGenerator({
       {(embedded || onClose) && (
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-start gap-3">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-100 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-100 text-brand-600 dark:bg-brand-950/40 dark:text-brand-300">
               <Icon name="spark" width={18} height={18} />
             </span>
             <div>
@@ -398,7 +398,7 @@ export function AiQuizGenerator({
             {slug && (
               <Link
                 to={`/${slug}/ai-copilot`}
-                className="text-xs font-semibold text-violet-600 hover:underline dark:text-violet-300"
+                className="text-xs font-semibold text-brand-600 hover:underline dark:text-brand-300"
               >
                 Open full AI Copilot
               </Link>
@@ -486,13 +486,13 @@ export function AiQuizGenerator({
       <Button
         onClick={() => mut.mutate()}
         disabled={!topic.trim() || !classId || mut.isPending}
-        className="bg-violet-600 text-white hover:bg-violet-700"
+        className="bg-brand-600 text-white hover:bg-brand-700"
       >
         {mut.isPending ? 'Generating…' : 'Generate Quiz Questions'}
       </Button>
 
       {result && (
-        <div className="space-y-4 rounded-2xl border border-violet-100 bg-violet-50 p-5 dark:border-violet-900/30 dark:bg-violet-950/20">
+        <div className="space-y-4 rounded-2xl border border-brand-100 bg-brand-50 p-5 dark:border-brand-900/30 dark:bg-brand-950/20">
           <QuizResultView
             title={result.title}
             questions={result.questions}

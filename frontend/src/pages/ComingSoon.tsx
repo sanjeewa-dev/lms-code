@@ -14,7 +14,7 @@ export default function ComingSoon({
   const { slug } = useParams<{ slug: string }>();
   return (
     <Card className="mx-auto max-w-xl text-center">
-      <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-brand-50 text-brand-600">
+      <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-brand-50 text-brand-600 dark:bg-brand-900/40 dark:text-brand-300">
         <Icon name={icon} width={26} height={26} />
       </div>
       <h1 className="text-xl font-bold text-slate-900 dark:text-white">{title}</h1>

@@ -5,7 +5,7 @@ import { useTenantApi } from '../hooks/useTenantApi';
 import { useAuth } from '../context/AuthContext';
 import { apiErrorMessage } from '../api/client';
 import { Button, Spinner, Textarea } from '../components/ui';
-import { Icon } from '../components/icons';
+import { Icon, type IconName } from '../components/icons';
 
 type ToolId = 'tutor' | 'summarizer' | 'mcq' | 'flashcards' | 'study-plan';
 
@@ -34,36 +34,48 @@ const TOOLS: {
   title: string;
   description: string;
   cta: string;
+  icon: IconName;
+  accent: 'teal' | 'blue';
 }[] = [
   {
     id: 'tutor',
     title: 'AI Tutor Chat',
     description: 'Ask real-time questions about concepts from your selected class.',
-    cta: 'Open Tutor',
+    cta: 'Start Chat',
+    icon: 'chat',
+    accent: 'teal',
   },
   {
     id: 'summarizer',
     title: 'Smart Summarizer',
     description: 'Paste lesson notes and get a clear key-point summary.',
-    cta: 'Open Summarizer',
+    cta: 'Summarize Now',
+    icon: 'note',
+    accent: 'teal',
   },
   {
     id: 'mcq',
     title: 'MCQ Generator',
     description: 'Generate practice questions to test what you know.',
-    cta: 'Open Generator',
+    cta: 'Generate MCQs',
+    icon: 'quiz',
+    accent: 'teal',
   },
   {
     id: 'flashcards',
     title: 'Flashcards',
     description: 'Turn a topic or notes into quick revision cards.',
-    cta: 'Open Flashcards',
+    cta: 'Create Flashcards',
+    icon: 'classes',
+    accent: 'blue',
   },
   {
     id: 'study-plan',
     title: 'Study Plan',
     description: 'Enter subject, unit, and topic to build a focused 7-day plan.',
-    cta: 'Open Study Plan',
+    cta: 'Create Plan',
+    icon: 'dashboard',
+    accent: 'blue',
   },
 ];
 
@@ -317,15 +329,15 @@ export default function AiStudentArea() {
   const activeTool = TOOLS.find((x) => x.id === tool);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5">
+    <div className="mx-auto max-w-6xl space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
             Smart Learning Workspace
-          </p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
-            AI Dashboard
           </h1>
+          <p className="mt-1.5 max-w-xl text-sm text-slate-500 dark:text-slate-400">
+            Your AI-powered study companion. Learn smarter, not harder.
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <label className="sr-only" htmlFor="ai-class">
@@ -365,51 +377,92 @@ export default function AiStudentArea() {
 
       {!tool ? (
         <>
-          <div className="relative overflow-hidden rounded-3xl bg-brand-600 p-7 text-white shadow-lg sm:p-9">
-            <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
-            <div className="pointer-events-none absolute bottom-0 right-10 opacity-15">
-              <Icon name="spark" width={120} height={120} />
+          <div>
+            <h2 className="mb-3 text-sm font-bold uppercase tracking-[0.12em] text-slate-400">AI Study Tools</h2>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+              {TOOLS.map((item, idx) => {
+                const isBlue = item.accent === 'blue';
+                const solidPrimary = idx === 0;
+                return (
+                  <article
+                    key={item.id}
+                    className="group flex flex-col rounded-2xl border border-slate-200/80 bg-white p-5 text-center shadow-sm transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-md dark:border-white/10 dark:bg-ink-850"
+                  >
+                    <div
+                      className={`mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full ${
+                        isBlue
+                          ? 'bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-300'
+                          : 'bg-brand-50 text-brand-600 dark:bg-brand-900/30 dark:text-brand-300'
+                      }`}
+                    >
+                      <Icon name={item.icon} width={24} height={24} />
+                    </div>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">{item.title}</h3>
+                    <p className="mt-1.5 flex-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                      {item.description}
+                    </p>
+                    <button
+                      type="button"
+                      disabled={!classId || depleted}
+                      onClick={() => setTool(item.id)}
+                      className={`mt-5 inline-flex items-center justify-center gap-1.5 rounded-full px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-45 ${
+                        solidPrimary
+                          ? 'bg-brand-600 text-white hover:bg-brand-700'
+                            : isBlue
+                              ? 'border border-sky-300 bg-white text-sky-700 hover:bg-sky-50 dark:border-sky-700 dark:bg-transparent dark:text-sky-300 dark:hover:bg-sky-950/30'
+                              : 'border border-brand-300 bg-white text-brand-700 hover:bg-brand-50 dark:border-brand-700 dark:bg-transparent dark:text-brand-300 dark:hover:bg-brand-900/30'
+                      }`}
+                    >
+                      {item.cta}
+                      <Icon name="chevron" width={14} height={14} />
+                    </button>
+                  </article>
+                );
+              })}
             </div>
-            <p className="text-sm font-medium text-white/80">Welcome back</p>
-            <h2 className="mt-1 text-3xl font-extrabold tracking-tight">Hello, {firstName}</h2>
-            <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/90 sm:text-base">
-              Your real-time Smart AI learning modules are active. Choose a tool to start studying — each
-              action uses 1 token for this class.
-            </p>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {TOOLS.map((item) => (
-              <article
-                key={item.id}
-                className="group flex flex-col rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-white/10 dark:bg-ink-850"
-              >
-                <div className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-brand-50 text-brand-600 dark:bg-brand-900/30 dark:text-brand-300">
-                  <Icon name="spark" width={22} height={22} />
-                </div>
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">{item.title}</h3>
-                <p className="mt-1.5 flex-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                  {item.description}
-                </p>
-                <button
-                  type="button"
-                  disabled={!classId || depleted}
-                  onClick={() => setTool(item.id)}
-                  className="mt-5 inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-45"
-                >
-                  {item.cta}
-                </button>
-              </article>
-            ))}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-ink-850">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h3 className="font-bold text-slate-900 dark:text-white">Continue learning</h3>
+                <span className="text-xs font-semibold text-brand-600">Hello, {firstName}</span>
+              </div>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Pick a class above, then open a tool. Each request uses 1 AI token for this class.
+              </p>
+              <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10">
+                <div
+                  className="h-full rounded-full bg-brand-600 transition-all"
+                  style={{
+                    width: `${quota && quota.limit > 0 ? Math.min(100, Math.round((quota.used / quota.limit) * 100)) : 0}%`,
+                  }}
+                />
+              </div>
+              <p className="mt-2 text-xs text-slate-400">
+                {quota ? `${quota.used} / ${quota.limit} tokens used this month` : 'Loading quota…'}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-brand-100 bg-brand-50/70 p-5 shadow-sm dark:border-brand-900/40 dark:bg-brand-950/20">
+              <p className="text-xs font-bold uppercase tracking-wider text-brand-700 dark:text-brand-300">
+                Learning insights
+              </p>
+              <p className="mt-2 text-lg font-bold text-slate-900 dark:text-white">
+                Keep a steady study streak with AI tutor + practice.
+              </p>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+                Summaries, MCQs, flashcards, and a 7-day plan — all in one workspace.
+              </p>
+            </div>
           </div>
         </>
       ) : (
-        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-ink-850">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-ink-850">
           <div className="h-1.5 bg-brand-600" />
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-white/5">
             <div className="flex items-center gap-3">
-              <div className="grid h-10 w-10 place-items-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-900/30 dark:text-brand-300">
-                <Icon name="spark" width={18} height={18} />
+              <div className="grid h-10 w-10 place-items-center rounded-full bg-brand-50 text-brand-600 dark:bg-brand-900/30 dark:text-brand-300">
+                <Icon name={activeTool?.icon ?? 'spark'} width={18} height={18} />
               </div>
               <div>
                 <h2 className="text-lg font-bold text-slate-900 dark:text-white">{activeTool?.title}</h2>
@@ -512,7 +565,7 @@ function TutorPanel({ classId, depleted, onError, onQuotaUpdate, onSaved }: Pane
             className={`max-w-[92%] rounded-2xl px-4 py-3 text-sm ${
               m.role === 'assistant'
                 ? 'bg-white text-slate-800 shadow-sm dark:bg-ink-800 dark:text-slate-100'
-                : 'ml-auto bg-sky-600 text-white shadow-sm shadow-sky-600/20'
+                : 'ml-auto bg-brand-600 text-white shadow-sm shadow-brand-600/20'
             }`}
           >
             {m.role === 'assistant' ? (
@@ -525,7 +578,7 @@ function TutorPanel({ classId, depleted, onError, onQuotaUpdate, onSaved }: Pane
       </div>
       <div className="flex flex-col gap-2 sm:flex-row">
         <input
-          className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
+          className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
           placeholder="Ask anything about computer networking, databases…"
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -1089,7 +1142,7 @@ function StudyPlanPanel({ classId, depleted, onError, onQuotaUpdate, onSaved }: 
             </span>
           )}
           {data.topic && (
-            <span className="rounded-full bg-violet-50 px-2.5 py-1 font-medium text-violet-800 dark:bg-violet-900/30 dark:text-violet-200">
+            <span className="rounded-full bg-brand-50 px-2.5 py-1 font-medium text-brand-800 dark:bg-brand-900/30 dark:text-brand-200">
               Topic: {data.topic}
             </span>
           )}
@@ -1102,7 +1155,7 @@ function StudyPlanPanel({ classId, depleted, onError, onQuotaUpdate, onSaved }: 
             key={i}
             className="flex gap-3 rounded-2xl border border-slate-200 p-3 dark:border-white/10"
           >
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-600 text-xs font-bold text-white">
               {i + 1}
             </span>
             <div>
@@ -1118,7 +1171,7 @@ function StudyPlanPanel({ classId, depleted, onError, onQuotaUpdate, onSaved }: 
   );
 
   const fieldCls =
-    'w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-100';
+    'w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-100';
 
   return (
     <div>

@@ -4,6 +4,8 @@ import { TenantLayout } from './components/TenantLayout';
 import { ProtectedAdmin, ProtectedTenant } from './components/guards';
 
 import PlatformHome from './pages/PlatformHome';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import AdminOverview from './pages/admin/AdminOverview';
 import AdminTenantsPage from './pages/admin/AdminTenantsPage';
 import AdminTenantDetail from './pages/admin/AdminTenantDetail';
@@ -48,6 +50,8 @@ export default function App() {
     <Routes>
       {/* Single, unified server login. */}
       <Route path="/login" element={<PlatformHome />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/" element={<Navigate to="/login" replace />} />
 
       {/* Platform super-admin */}

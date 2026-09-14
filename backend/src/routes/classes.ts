@@ -20,6 +20,7 @@ import {
 import { clampFeeWaiver, enrollmentStatusForNetFee, netClassFee } from '../lib/fees';
 import { assertCanManageClass, isInstituteAdminRole } from '../services/classAccess';
 import { canStudentSelfEnroll, listCatalogClassIds } from '../services/selfEnrollmentPolicy';
+import { sendEnrollmentFeeReminder } from '../services/smartJobs';
 import { badRequest, forbidden, notFound } from '../utils/httpError';
 import { z } from 'zod';
 
@@ -307,6 +308,7 @@ router.get(
             guardianEmail: true,
             area: true,
             district: true,
+            school: true,
             address: true,
           },
         },
@@ -418,6 +420,28 @@ router.post(
         },
       },
     });
+  })
+);
+
+router.post(
+  '/classes/:classId/students/:studentId/fee-reminder',
+  authenticate,
+  requireRole('teacher', 'admin'),
+  asyncHandler(async (req, res) => {
+    const klass = await assertCanManageClass(
+      { role: req.user!.role, userId: req.user!.sub },
+      req.params.classId,
+      'You can only remind students in your own classes'
+    );
+
+    const result = await sendEnrollmentFeeReminder({
+      tenantId: req.tenant!.id,
+      classId: klass.id,
+      studentId: req.params.studentId,
+      teacherId: req.user!.sub,
+      actorRole: req.user!.role,
+    });
+    res.json(result);
   })
 );
 

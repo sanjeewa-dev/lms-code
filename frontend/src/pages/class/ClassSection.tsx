@@ -1,5 +1,4 @@
 import { Navigate, useOutletContext, useParams } from 'react-router-dom';
-import { Badge } from '../../components/ui';
 import { MaterialsTab } from '../../components/class/MaterialsTab';
 import { QuizzesTab } from '../../components/class/QuizzesTab';
 import { ScheduleTab } from '../../components/class/ScheduleTab';
@@ -26,14 +25,8 @@ export default function ClassSection() {
     return <Navigate to={classBase} replace />;
   }
 
-  const meta = sectionMeta[section];
-
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge tone="blue">{meta.label}</Badge>
-      </div>
-
+    <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5 dark:border-white/10 dark:bg-ink-850">
       {section === 'materials' && <MaterialsTab classId={klass.id} canManage={canManage} />}
       {section === 'schedule' && <ScheduleTab classId={klass.id} classTitle={klass.title} canManage={canManage} />}
       {section === 'quizzes' && (

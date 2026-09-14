@@ -312,19 +312,16 @@ router.post(
           include: { student: true },
         });
         const joinUrl = `${env.clientUrl}/${req.tenant!.slug}/live`;
-        await Promise.allSettled(
-          enrollments.map((e) =>
-            sendLiveClassStarted({
-              to: e.student.email,
-              studentName: e.student.name,
-              teacherName: teacher?.name ?? 'Your teacher',
-              className: klass.title,
-              instituteName: req.tenant!.name,
-              joinUrl,
-              tenantId: req.tenant!.id,
-            })
-          )
-        );
+        await sendLiveClassStarted({
+          students: enrollments.map((e) => ({ name: e.student.name, email: e.student.email })),
+          teacherName: teacher?.name ?? 'Your teacher',
+          className: klass.title,
+          instituteName: req.tenant!.name,
+          joinUrl,
+          tenantId: req.tenant!.id,
+          relatedId: schedule.id,
+          idempotencyKind: 'live-start',
+        });
       } catch {
         /* swallow notification errors */
       }

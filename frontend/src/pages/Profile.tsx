@@ -30,6 +30,7 @@ export default function Profile() {
     guardianEmail: '',
     area: '',
     district: '',
+    school: '',
   });
   const [profileError, setProfileError] = useState('');
   const [profileSuccess, setProfileSuccess] = useState('');
@@ -62,6 +63,7 @@ export default function Profile() {
       guardianEmail: (p as { guardianEmail?: string | null }).guardianEmail ?? '',
       area: p.area ?? '',
       district: p.district ?? '',
+      school: p.school ?? '',
     });
   }, [profileQuery.data]);
 
@@ -89,6 +91,7 @@ export default function Profile() {
         payload.guardianEmail = form.guardianEmail.trim();
         payload.area = form.area.trim();
         if (form.district) payload.district = form.district;
+        payload.school = form.school.trim();
       }
 
       return (await t.patch<{ profile: UserProfile; user: typeof user }>('/profile', payload)).data;
@@ -244,6 +247,10 @@ export default function Profile() {
                       ))}
                     </Select>
                   </div>
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-medium text-slate-700">School</span>
+                    <input className={inputCls} value={form.school} onChange={(e) => setForm({ ...form, school: e.target.value })} />
+                  </label>
                 </div>
               )}
 

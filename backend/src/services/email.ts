@@ -7,6 +7,7 @@ import {
   escapeHtml,
   renderEmailLayout,
 } from './emailLayout';
+import { dispatchCommunication } from './nmsClient';
 
 function mailFrom() {
   // Gmail requires the From address to match the authenticated account.
@@ -108,44 +109,25 @@ export async function sendStudentClassInvite(opts: {
   instituteName: string;
   classTitle: string;
   inviteUrl: string;
+  tenantId: string;
+  relatedId: string;
 }) {
-  const { to, studentName, instituteName, classTitle, inviteUrl } = opts;
-  const subject = `You're invited to join ${classTitle} at ${instituteName}`;
-  const text = [
-    `Hello ${studentName},`,
-    '',
-    `You have been invited to register for "${classTitle}" at ${instituteName}.`,
-    '',
-    `Complete your registration here:`,
-    inviteUrl,
-    '',
-    `This link expires in 7 days.`,
-    '',
-    `If you did not expect this email, you can ignore it.`,
-  ].join('\n');
-
-  const html = renderEmailLayout({
-    instituteName,
-    preheader: `Register for ${classTitle} — invitation from ${instituteName}`,
-    eyebrow: 'Class invitation',
-    title: `You're invited to ${classTitle}`,
-    bodyHtml: [
-      emailParagraph(`Hello <strong>${escapeHtml(studentName)}</strong>,`),
-      emailParagraph(
-        `Complete your registration to join <strong>${escapeHtml(classTitle)}</strong> at <strong>${escapeHtml(instituteName)}</strong>.`
-      ),
-      emailDetailCard([
-        { label: 'Institute', value: instituteName },
-        { label: 'Class', value: classTitle },
-        { label: 'Expires', value: 'In 7 days' },
-      ]),
-      emailParagraph('If you did not expect this email, you can safely ignore it.', { muted: true }),
-    ].join(''),
-    cta: { label: 'Complete registration', url: inviteUrl },
-    footerNote: `This invitation was sent by ${instituteName}.`,
+  const { to, studentName, instituteName, classTitle, inviteUrl, tenantId, relatedId } = opts;
+  await dispatchCommunication({
+    tenantId,
+    templateId: 'class.invite',
+    idempotencyKey: `${tenantId}:invite:${relatedId}:v1`,
+    header: { subjectLine: `You're invited to join ${classTitle} at ${instituteName}` },
+    content: {
+      containerTitle: classTitle,
+      instituteName,
+      inviteUrl,
+      expiresInDays: '7',
+    },
+    receivers: [{ name: studentName, email: to }],
+    relatedType: 'student_invite',
+    relatedId,
   });
-
-  await sendMail({ to, subject, text, html });
 }
 
 export async function sendAdminInvite(opts: {
@@ -203,44 +185,41 @@ export async function sendAdminInvite(opts: {
 }
 
 export async function sendLiveClassStarted(opts: {
-  to: string;
-  studentName: string;
+  students: { name: string; email: string }[];
   teacherName: string;
   className: string;
   instituteName: string;
   joinUrl: string;
-  tenantId?: string;
+  tenantId: string;
+  relatedId: string;
+  /** Distinguishes start-session fan-out vs explicit live invite. */
+  idempotencyKind: 'live-start' | 'live-invite';
 }) {
-  const { to, studentName, teacherName, className, instituteName, joinUrl, tenantId } = opts;
-  const subject = `🔴 Live class started: ${className}`;
-  const text = [
-    `Hello ${studentName},`,
-    '',
-    `${teacherName} has just started a live class for "${className}" at ${instituteName}.`,
-    '',
-    `Join now: ${joinUrl}`,
-  ].join('\n');
-
-  const html = renderEmailLayout({
+  const {
+    students,
+    teacherName,
+    className,
     instituteName,
-    preheader: `${teacherName} started a live class — join now`,
-    eyebrow: 'Live class started',
-    title: `Join live: ${className}`,
-    bodyHtml: [
-      emailParagraph(`Hello <strong>${escapeHtml(studentName)}</strong>,`),
-      emailParagraph(
-        `<strong>${escapeHtml(teacherName)}</strong> has just started a live class for <strong>${escapeHtml(className)}</strong> at <strong>${escapeHtml(instituteName)}</strong>. Join now to attend.`
-      ),
-      emailDetailCard([
-        { label: 'Teacher', value: teacherName },
-        { label: 'Class', value: className },
-      ]),
-    ].join(''),
-    cta: { label: 'Join live class now', url: joinUrl },
-    footerNote: `You received this because you are enrolled in ${className}.`,
+    joinUrl,
+    tenantId,
+    relatedId,
+    idempotencyKind,
+  } = opts;
+  await dispatchCommunication({
+    tenantId,
+    templateId: 'session.live_started',
+    idempotencyKey: `${tenantId}:${idempotencyKind}:${relatedId}:v1`,
+    header: { subjectLine: `Live class started: ${className}` },
+    content: {
+      containerTitle: className,
+      teacherName,
+      instituteName,
+      joinUrl,
+    },
+    receivers: students.map((s) => ({ name: s.name, email: s.email })),
+    relatedType: 'live_class',
+    relatedId,
   });
-
-  await sendMail({ to, subject, text, html, tenantId, relatedType: 'live_class' });
 }
 
 export async function sendStudentEnrolledNotice(opts: {
@@ -249,36 +228,169 @@ export async function sendStudentEnrolledNotice(opts: {
   instituteName: string;
   classTitle: string;
   loginUrl: string;
+  tenantId: string;
+  relatedId: string;
 }) {
-  const { to, studentName, instituteName, classTitle, loginUrl } = opts;
-  const subject = `You've been enrolled in ${classTitle}`;
+  const { to, studentName, instituteName, classTitle, loginUrl, tenantId, relatedId } = opts;
+  await dispatchCommunication({
+    tenantId,
+    templateId: 'class.enrolled',
+    idempotencyKey: `${tenantId}:enroll:${relatedId}:v1`,
+    header: { subjectLine: `You've been enrolled in ${classTitle}` },
+    content: {
+      containerTitle: classTitle,
+      instituteName,
+      loginUrl,
+    },
+    receivers: [{ name: studentName, email: to }],
+    relatedType: 'enrollment',
+    relatedId,
+  });
+}
+
+/**
+ * Password reset via NMS when the user has a tenant.
+ * Superadmin (null tenantId): NMS JWT requires a tenantId, so fall back to SMTP
+ * sendMail for that edge case only.
+ */
+export async function sendPasswordResetEmail(opts: {
+  to: string;
+  name: string;
+  instituteName: string;
+  resetUrl: string;
+  tenantId?: string | null;
+  relatedId?: string;
+}) {
+  const { to, name, instituteName, resetUrl, tenantId, relatedId } = opts;
+
+  if (tenantId) {
+    await dispatchCommunication({
+      tenantId,
+      templateId: 'auth.password_reset',
+      idempotencyKey: `${tenantId}:password-reset:${relatedId ?? to}:${Date.now()}`,
+      header: { subjectLine: `Reset your ${instituteName} password` },
+      content: {
+        instituteName,
+        resetUrl,
+        expiresInHours: '1',
+      },
+      receivers: [{ name, email: to }],
+      relatedType: 'password_reset',
+      relatedId,
+    });
+    return;
+  }
+
+  console.warn(
+    '[password-reset] No tenantId for NMS; falling back to SMTP for superadmin password reset'
+  );
+
+  const subject = `Reset your ${instituteName} password`;
   const text = [
-    `Hello ${studentName},`,
+    `Hello ${name},`,
     '',
-    `You have been added to "${classTitle}" at ${instituteName}.`,
+    `We received a request to reset your Mindspark LMS password for ${instituteName}.`,
     '',
-    `Sign in to access your class: ${loginUrl}`,
+    `Reset your password here (link expires in 1 hour):`,
+    resetUrl,
+    '',
+    `If you did not request this, you can ignore this email.`,
   ].join('\n');
 
   const html = renderEmailLayout({
     instituteName,
-    preheader: `You're enrolled in ${classTitle}`,
-    eyebrow: 'Enrollment confirmed',
-    title: `Welcome to ${classTitle}`,
+    preheader: `Password reset for ${instituteName}`,
+    eyebrow: 'Password reset',
+    title: 'Reset your password',
     bodyHtml: [
-      emailParagraph(`Hello <strong>${escapeHtml(studentName)}</strong>,`),
+      emailParagraph(`Hello <strong>${escapeHtml(name)}</strong>,`),
       emailParagraph(
-        `You have been added to <strong>${escapeHtml(classTitle)}</strong> at <strong>${escapeHtml(instituteName)}</strong>. Sign in to access materials, live classes, and payments.`
+        `Use the button below to choose a new password for your <strong>${escapeHtml(instituteName)}</strong> account. This link expires in <strong>1 hour</strong>.`
       ),
-      emailDetailCard([
-        { label: 'Institute', value: instituteName },
-        { label: 'Class', value: classTitle },
-      ]),
+      emailParagraph('If you did not request a password reset, you can safely ignore this email.', {
+        muted: true,
+      }),
     ].join(''),
-    cta: { label: 'Sign in to your class', url: loginUrl },
+    cta: { label: 'Reset password', url: resetUrl },
+    footerNote: `This message was sent by ${instituteName} via Mindspark LMS.`,
   });
 
-  await sendMail({ to, subject, text, html });
+  await sendMail({
+    to,
+    subject,
+    text,
+    html,
+    tenantId: undefined,
+    relatedType: 'password_reset',
+    relatedId,
+  });
+}
+
+/** Per-student / bulk fee reminder via NMS. */
+export async function sendFeeReminderEmail(opts: {
+  to: string;
+  studentName: string;
+  classTitle: string;
+  instituteName: string;
+  forMonthLabel: string;
+  amountDue: string;
+  paymentsUrl: string;
+  tenantId: string;
+  relatedId: string;
+  guardian?: { name: string; email: string } | null;
+}) {
+  const {
+    to,
+    studentName,
+    classTitle,
+    instituteName,
+    forMonthLabel,
+    amountDue,
+    paymentsUrl,
+    tenantId,
+    relatedId,
+    guardian,
+  } = opts;
+
+  await dispatchCommunication({
+    tenantId,
+    templateId: 'payment.fee_reminder',
+    idempotencyKey: `${tenantId}:fee-reminder:${relatedId}:v1`,
+    header: { subjectLine: `Fee reminder: ${classTitle} (${forMonthLabel})` },
+    content: {
+      studentName,
+      classTitle,
+      instituteName,
+      forMonthLabel,
+      amountDue,
+      paymentsUrl,
+    },
+    receivers: [{ name: studentName, email: to }],
+    relatedType: 'fee_reminder',
+    relatedId,
+  });
+
+  if (guardian?.email) {
+    await dispatchCommunication({
+      tenantId,
+      templateId: 'payment.fee_reminder',
+      idempotencyKey: `${tenantId}:fee-reminder:${relatedId}:guardian:v1`,
+      header: {
+        subjectLine: `Parent notice: fee due for ${studentName}`,
+      },
+      content: {
+        studentName,
+        classTitle,
+        instituteName,
+        forMonthLabel,
+        amountDue,
+        paymentsUrl,
+      },
+      receivers: [{ name: guardian.name || 'Guardian', email: guardian.email }],
+      relatedType: 'fee_reminder',
+      relatedId: `${relatedId}:guardian`,
+    });
+  }
 }
 
 export {

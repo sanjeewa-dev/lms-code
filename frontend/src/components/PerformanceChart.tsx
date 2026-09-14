@@ -35,7 +35,7 @@ function smoothLinePath(pts: { x: number; y: number }[]) {
 export function PerformanceChart({
   points,
   height = 260,
-  color = '#3b82f6',
+  color = '#14b8a6',
   emptyMessage = 'No graded quizzes or assignments yet. Complete work in your classes to see performance here.',
 }: {
   points: PerformancePoint[];
@@ -46,7 +46,7 @@ export function PerformanceChart({
 }) {
   if (!points.length) {
     return (
-      <div className="flex h-56 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-400 dark:border-white/10 dark:bg-white/5">
+      <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-400 dark:border-white/10 dark:bg-white/5 dark:text-slate-500">
         {emptyMessage}
       </div>
     );

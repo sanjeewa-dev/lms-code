@@ -31,6 +31,7 @@ export interface UserProfile {
   guardianEmail?: string | null;
   area?: string | null;
   district?: string | null;
+  school?: string | null;
   status?: string;
   createdAt: string;
 }
@@ -93,6 +94,7 @@ export interface TenantUser {
   guardianEmail?: string | null;
   area?: string | null;
   district?: string | null;
+  school?: string | null;
   address?: string | null;
   freeIdCard?: boolean;
   status?: StudentStatus;
@@ -136,8 +138,9 @@ export interface Enrollment {
 export interface Payment {
   id: string;
   enrollmentId: string;
+  materialId?: string | null;
   amount: number;
-  paymentType: 'enrollment' | 'monthly';
+  paymentType: 'enrollment' | 'monthly' | 'material';
   forMonth: string;
   forMonthLabel?: string;
   status: PaymentStatus;
@@ -145,6 +148,12 @@ export interface Payment {
   createdAt: string;
   reviewedAt?: string | null;
   reviewedBy?: { id: string; name: string } | null;
+  material?: {
+    id: string;
+    title: string;
+    price: number;
+    classId: string;
+  } | null;
   enrollment?: {
     id: string;
     status: EnrollmentStatus;
@@ -160,6 +169,8 @@ export interface PaymentEnrollmentStatus {
   payment: Payment | null;
 }
 
+export type MaterialPurchaseStatus = 'none' | 'pending' | 'approved' | 'rejected';
+
 export interface Material {
   id: string;
   title: string;
@@ -168,9 +179,30 @@ export interface Material {
   pageCount: number;
   viewOnly: boolean;
   fileId?: string | null;
+  classId?: string;
+  price?: number;
+  published?: boolean;
+  purchaseStatus?: MaterialPurchaseStatus;
+  canPreview?: boolean;
+  hasFile?: boolean;
   dueDate?: string | null;
   maxMarks?: number | null;
   createdAt?: string;
+}
+
+export interface MaterialPaymentItem {
+  materialId: string;
+  title: string;
+  description: string;
+  price: number;
+  pageCount: number;
+  hasFile: boolean;
+  classId: string;
+  classTitle: string;
+  enrollmentId: string;
+  purchaseStatus: MaterialPurchaseStatus;
+  canPreview: boolean;
+  payment: Payment | null;
 }
 
 export interface SubmissionItem {

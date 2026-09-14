@@ -292,10 +292,10 @@ function StudentAssignmentCard({
             <span
               className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${
                 status === 'graded' || status === 'submitted'
-                  ? 'bg-emerald-100 text-emerald-700'
+                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
                   : status === 'overdue'
-                    ? 'bg-red-100 text-red-700'
-                    : 'bg-amber-100 text-amber-700'
+                    ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+                    : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
               }`}
             >
               <Icon name={meta.icon} width={16} height={16} />
@@ -1139,9 +1139,9 @@ function SummaryTile({
 
 function SummaryPill({ label, value, tone }: { label: string; value: number; tone: 'emerald' | 'amber' | 'brand' }) {
   const styles = {
-    emerald: 'bg-emerald-100 text-emerald-700',
-    amber: 'bg-amber-100 text-amber-700',
-    brand: 'bg-brand-100 text-brand-700',
+    emerald: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+    amber: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+    brand: 'bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300',
   };
   return (
     <span className={`rounded-full px-3 py-1 text-xs font-semibold ${styles[tone]}`}>

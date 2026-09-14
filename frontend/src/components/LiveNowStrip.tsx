@@ -42,9 +42,9 @@ export function LiveNowStrip() {
     .filter((s) => s.status !== 'live')
     .slice()
     .sort((a, b) => sessionSortKey(a).localeCompare(sessionSortKey(b)));
-  const next = live[0] ?? upcoming[0];
+  const show = [...live, ...upcoming].slice(0, 4);
 
-  if (query.isLoading || !next) {
+  if (query.isLoading || show.length === 0) {
     return (
       <Card className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -52,7 +52,7 @@ export function LiveNowStrip() {
             <Icon name="live" width={18} height={18} />
           </span>
           <div>
-            <p className="text-sm font-semibold text-slate-900 dark:text-white">Live class</p>
+            <p className="text-sm font-semibold text-slate-900 dark:text-white">Live classes</p>
             <p className="text-xs text-slate-400">
               {query.isLoading ? 'Checking schedule…' : 'No upcoming live sessions'}
             </p>
@@ -60,7 +60,7 @@ export function LiveNowStrip() {
         </div>
         <Link
           to={`${base}/live`}
-          className="text-sm font-semibold text-brand-600 hover:underline dark:text-brand-300"
+          className="rounded-full border border-brand-300 px-4 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50 dark:border-brand-700 dark:text-brand-300 dark:hover:bg-brand-900/30"
         >
           Open Live Class
         </Link>
@@ -68,44 +68,52 @@ export function LiveNowStrip() {
     );
   }
 
-  const isLive = next.status === 'live';
-
   return (
-    <Card
-      className={`flex flex-wrap items-center justify-between gap-3 ${
-        isLive ? 'border-red-200 bg-red-50/60 dark:border-red-900/40 dark:bg-red-950/20' : ''
-      }`}
-    >
-      <div className="flex min-w-0 items-center gap-3">
-        <span
-          className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${
-            isLive ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300' : 'bg-emerald-100 text-emerald-600'
-          }`}
-        >
-          <Icon name="live" width={18} height={18} />
-        </span>
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{next.class.title}</p>
-            {isLive ? <Badge tone="red">Live now</Badge> : <Badge tone="green">Up next</Badge>}
-          </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            {isLive
-              ? `with ${next.class.teacher.name}`
-              : `${String(next.classDate).slice(0, 10)} · ${formatTime(next.classTime)} · ${next.class.teacher.name}`}
-            {live.length + upcoming.length > 1 ? ` · +${live.length + upcoming.length - 1} more` : ''}
-          </p>
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Link
-          to={`${base}/live`}
-          className={`inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold text-white ${
-            isLive ? 'bg-red-600 hover:bg-red-700' : 'bg-brand-600 hover:bg-brand-700'
-          }`}
-        >
-          {isLive ? 'Join now' : 'View schedule'}
+    <Card>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="text-lg font-bold text-slate-900 dark:text-white">Live classes</h2>
+        <Link to={`${base}/live`} className="text-xs font-semibold text-brand-600 hover:underline">
+          View all
         </Link>
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-1">
+        {show.map((s) => {
+          const isLive = s.status === 'live';
+          const teacherInitials = s.class.teacher.name
+            .split(/\s+/)
+            .filter(Boolean)
+            .slice(0, 2)
+            .map((p) => p[0]?.toUpperCase() ?? '')
+            .join('');
+          return (
+            <div
+              key={s.id}
+              className="min-w-[220px] flex-1 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-white/5"
+            >
+              <div className="mb-3 flex items-start justify-between gap-2">
+                {isLive ? <Badge tone="red">LIVE</Badge> : <Badge tone="green">Up next</Badge>}
+                <span className="grid h-8 w-8 place-items-center rounded-full bg-brand-100 text-[10px] font-bold text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
+                  {teacherInitials || 'T'}
+                </span>
+              </div>
+              <p className="line-clamp-2 text-sm font-bold text-slate-900 dark:text-white">{s.class.title}</p>
+              <p className="mt-1 text-xs text-slate-500">
+                {isLive
+                  ? `with ${s.class.teacher.name}`
+                  : `${String(s.classDate).slice(0, 10)} · ${formatTime(s.classTime)}`}
+              </p>
+              <div className="mt-4 flex items-center justify-between gap-2">
+                <span className="truncate text-xs text-slate-400">{s.class.teacher.name}</span>
+                <Link
+                  to={`${base}/live`}
+                  className="inline-flex rounded-full bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700"
+                >
+                  Join
+                </Link>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </Card>
   );

@@ -158,7 +158,7 @@ export function QuizzesTab({
             }}
             title="Generate quiz with AI"
             aria-label="Generate quiz with AI"
-            className="inline-flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2.5 text-sm font-semibold text-violet-700 transition hover:border-violet-300 hover:bg-violet-100 dark:border-violet-900/50 dark:bg-violet-950/40 dark:text-violet-200 dark:hover:bg-violet-950/60"
+            className="inline-flex items-center gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2.5 text-sm font-semibold text-brand-700 transition hover:border-brand-300 hover:bg-brand-100 dark:border-brand-900/50 dark:bg-brand-950/40 dark:text-brand-200 dark:hover:bg-brand-950/60"
           >
             <Icon name="spark" width={16} height={16} />
             AI generate
@@ -177,7 +177,7 @@ export function QuizzesTab({
       )}
 
       {aiOpen && (
-        <Card className="border-violet-100 bg-gradient-to-b from-violet-50/80 to-white dark:border-violet-900/30 dark:from-violet-950/20 dark:to-ink-850">
+        <Card className="border-brand-100 bg-gradient-to-b from-brand-50/80 to-white dark:border-brand-900/30 dark:from-brand-950/20 dark:to-ink-850">
           <AiQuizGenerator
             classId={classId}
             classTitle={classTitle}
@@ -229,7 +229,7 @@ export function QuizzesTab({
                 >
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-100 text-violet-600">
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-100 text-brand-600 dark:bg-brand-900/40 dark:text-brand-300">
                         <Icon name="quiz" width={18} height={18} />
                       </span>
                       <span className="font-medium text-slate-800 dark:text-slate-200">{q.title}</span>

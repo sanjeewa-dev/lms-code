@@ -8,38 +8,39 @@ export default {
         sans: ['Outfit', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
       colors: {
-        // Primary blue accent (matches demo #2563eb / #3b82f6)
+        // Primary teal accent (navy + teal mockups)
         brand: {
-          50: '#eff6ff',
-          100: '#dbeafe',
-          200: '#bfdbfe',
-          300: '#93c5fd',
+          50: '#f0fdfa',
+          100: '#ccfbf1',
+          200: '#99f6e4',
+          300: '#5eead4',
+          400: '#2dd4bf',
+          500: '#14b8a6',
+          600: '#0d9488',
+          700: '#0f766e',
+          800: '#115e59',
+          900: '#134e4a',
+          950: '#042f2e',
+        },
+        // Secondary blue accent (mockup secondary icons/CTAs)
+        accent: {
           400: '#60a5fa',
           500: '#3b82f6',
           600: '#2563eb',
           700: '#1d4ed8',
-          800: '#1e40af',
-          900: '#1e3a8a',
         },
-        // Secondary purple accent (matches demo #7c3aed / #8b5cf6)
-        accent: {
-          400: '#a78bfa',
-          500: '#8b5cf6',
-          600: '#7c3aed',
-          700: '#6d28d9',
-        },
-        // Dark navy surfaces (matches demo #0f172a / #1e293b / #283548)
+        // Dark navy surfaces (sidebar ~#0B213F)
         ink: {
           700: '#334155',
           800: '#1e293b',
-          850: '#172033',
-          900: '#0f172a',
-          950: '#0b1120',
+          850: '#12253f',
+          900: '#0b213f',
+          950: '#08182e',
         },
       },
       backgroundImage: {
-        'brand-gradient': 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)',
-        'hero-gradient': 'linear-gradient(135deg, #0f172a 0%, #1e293b 55%, #312e81 100%)',
+        'brand-gradient': 'linear-gradient(135deg, #0d9488 0%, #06b6d4 100%)',
+        'hero-gradient': 'linear-gradient(135deg, #0b213f 0%, #12253f 55%, #1e293b 100%)',
       },
     },
   },

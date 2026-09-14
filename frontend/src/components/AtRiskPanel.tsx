@@ -113,24 +113,23 @@ export function AtRiskPanel({ compact = false }: { compact?: boolean }) {
 
   const students = query.data ?? [];
 
+  function riskLevel(s: AtRiskStudent): { label: string; tone: 'red' | 'amber' | 'green'; score: number } {
+    const score = s.reasons.length * 28 + (s.quizAveragePct != null && s.quizAveragePct < 40 ? 15 : 0);
+    if (score >= 70 || s.reasons.length >= 3) return { label: 'High', tone: 'red', score: Math.min(99, score) };
+    if (score >= 40 || s.reasons.length === 2) return { label: 'Medium', tone: 'amber', score: Math.min(85, Math.max(40, score)) };
+    return { label: 'Low', tone: 'green', score: Math.max(25, score) };
+  }
+
   return (
     <Card>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">At-risk students</h2>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white">At-risk students</h2>
           <p className="text-sm text-slate-400">Low attendance, missing work, or weak quiz scores (30 days)</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge tone={students.length ? 'amber' : 'green'}>
-            {query.isLoading ? '…' : `${students.length} flagged`}
-          </Badge>
-          <Link
-            to={`/${slug}/interventions`}
-            className="text-xs font-semibold text-violet-600 hover:underline dark:text-violet-300"
-          >
-            Open interventions
-          </Link>
-        </div>
+        <Badge tone={students.length ? 'amber' : 'green'}>
+          {query.isLoading ? '…' : `${students.length} flagged`}
+        </Badge>
       </div>
 
       {query.isLoading ? (
@@ -143,70 +142,106 @@ export function AtRiskPanel({ compact = false }: { compact?: boolean }) {
             compact ? 'max-h-[30rem] pr-1' : 'max-h-[36rem] pr-1'
           }`}
         >
-          {students.map((s) => (
-            <li key={s.studentId} className="flex flex-wrap items-start justify-between gap-3 py-3">
-              <div className="min-w-0">
-                <p className="font-medium text-slate-800 dark:text-slate-100">{s.name}</p>
-                <p className="text-xs text-slate-400">{s.classTitles.join(' · ')}</p>
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {s.reasons.map((r) => (
-                    <Badge key={r} tone="amber">
-                      {reasonLabel[r]}
-                      {r === 'low_attendance' && s.attendanceRate != null ? ` ${s.attendanceRate}%` : ''}
-                      {r === 'missing_assignments' ? ` (${s.missingAssignments})` : ''}
-                      {r === 'low_quiz_scores' && s.quizAveragePct != null ? ` ${s.quizAveragePct}%` : ''}
-                    </Badge>
-                  ))}
+          {students.map((s) => {
+            const risk = riskLevel(s);
+            const initials = s.name
+              .split(/\s+/)
+              .filter(Boolean)
+              .slice(0, 2)
+              .map((p) => p[0]?.toUpperCase() ?? '')
+              .join('');
+            return (
+              <li key={s.studentId} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-50 text-xs font-bold text-brand-700 dark:bg-brand-900/40 dark:text-brand-200">
+                    {initials || '?'}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-slate-800 dark:text-slate-100">{s.name}</p>
+                    <p className="truncate text-xs text-slate-400">{s.classTitles.join(' · ')}</p>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {s.reasons.map((r) => (
+                        <Badge key={r} tone="amber">
+                          {reasonLabel[r]}
+                          {r === 'low_attendance' && s.attendanceRate != null ? ` ${s.attendanceRate}%` : ''}
+                          {r === 'missing_assignments' ? ` (${s.missingAssignments})` : ''}
+                          {r === 'low_quiz_scores' && s.quizAveragePct != null ? ` ${s.quizAveragePct}%` : ''}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Link
-                  to={`/${slug}/interventions?${new URLSearchParams({
-                    open: '1',
-                    studentId: s.studentId,
-                    studentName: s.name,
-                    reason: buildInterventionReason(s),
-                  }).toString()}`}
-                  className="rounded-lg border border-violet-200 px-3 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-50 dark:border-violet-900/40 dark:text-violet-300"
-                >
-                  Intervene
-                </Link>
-                {s.whatsappUrl && (
-                  <a
-                    href={s.whatsappUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:text-slate-200"
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="text-right">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Risk</p>
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`h-2 w-2 rounded-full ${
+                          risk.tone === 'red' ? 'bg-red-500' : risk.tone === 'amber' ? 'bg-amber-500' : 'bg-emerald-500'
+                        }`}
+                      />
+                      <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{risk.score}</span>
+                      <Badge tone={risk.tone}>{risk.label}</Badge>
+                    </div>
+                  </div>
+                  <Link
+                    to={`/${slug}/interventions?${new URLSearchParams({
+                      open: '1',
+                      studentId: s.studentId,
+                      studentName: s.name,
+                      reason: buildInterventionReason(s),
+                    }).toString()}`}
+                    className="rounded-full border border-brand-300 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-50 dark:border-brand-700 dark:text-brand-300 dark:hover:bg-brand-900/30"
                   >
-                    WhatsApp
-                  </a>
-                )}
-                <Button
-                  variant="secondary"
-                  className="!px-3 !py-1.5 !text-xs"
-                  disabled={nudgeMutation.isPending}
-                  onClick={() => nudgeMutation.mutate(s.studentId)}
-                >
-                  Email nudge
-                </Button>
-                {s.guardianEmail && (
+                    Intervene
+                  </Link>
+                  {s.whatsappUrl && (
+                    <a
+                      href={s.whatsappUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5"
+                    >
+                      WhatsApp
+                    </a>
+                  )}
                   <Button
-                    variant="secondary"
+                    variant="outlineBrand"
                     className="!px-3 !py-1.5 !text-xs"
-                    disabled={parentLinkMutation.isPending}
-                    onClick={() => parentLinkMutation.mutate(s.studentId)}
+                    disabled={nudgeMutation.isPending}
+                    onClick={() => nudgeMutation.mutate(s.studentId)}
                   >
-                    Parent report
+                    Email nudge
                   </Button>
-                )}
-              </div>
-            </li>
-          ))}
+                  {s.guardianEmail && (
+                    <Button
+                      variant="secondary"
+                      className="!px-3 !py-1.5 !text-xs"
+                      disabled={parentLinkMutation.isPending}
+                      onClick={() => parentLinkMutation.mutate(s.studentId)}
+                    >
+                      Parent report
+                    </Button>
+                  )}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
 
-      {msg && <p className="mt-2 text-sm text-emerald-600">{msg}</p>}
-      {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
+      <div className="mt-4 border-t border-slate-100 pt-3 dark:border-white/5">
+        <Link
+          to={`/${slug}/interventions`}
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:underline dark:text-brand-300"
+        >
+          View at-risk report
+          <span aria-hidden>→</span>
+        </Link>
+      </div>
+
+      {msg && <p className="mt-3 text-sm text-emerald-600">{msg}</p>}
+      {err && <p className="mt-3 text-sm text-red-600">{err}</p>}
     </Card>
   );
 }

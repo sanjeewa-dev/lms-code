@@ -65,6 +65,7 @@ router.patch(
       if (data.guardianEmail !== undefined) update.guardianEmail = data.guardianEmail || null;
       if (data.area !== undefined) update.area = data.area || null;
       if (data.district !== undefined) update.district = data.district || null;
+      if (data.school !== undefined) update.school = data.school || null;
     }
 
     const updated = await basePrisma.user.update({

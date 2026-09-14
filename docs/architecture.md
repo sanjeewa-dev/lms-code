@@ -4,6 +4,14 @@ System architecture diagrams for the multi-tenant Learning Management System.
 
 **Stack:** React + Vite (frontend) · Express + TypeScript (backend) · PostgreSQL + Prisma · local disk uploads
 
+**Docs in this set**
+
+| Doc | Purpose |
+|-----|---------|
+| [architecture-current.md](./architecture-current.md) | High-level as-built architecture (diagrams) |
+| [architecture-microservices.md](./architecture-microservices.md) | Production-grade microservices target architecture |
+| This file | Detailed monolith maps (API, tenancy, modules) |
+
 ---
 
 ## 1. High-level system context

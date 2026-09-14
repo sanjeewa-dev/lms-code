@@ -23,6 +23,7 @@ interface RosterStudent {
   guardianEmail?: string | null;
   area?: string | null;
   district?: string | null;
+  school?: string | null;
   address?: string | null;
 }
 
@@ -48,6 +49,7 @@ type RosterRow = StudentRow & {
   guardianEmail?: string | null;
   area?: string | null;
   district?: string | null;
+  school?: string | null;
   address?: string | null;
 };
 
@@ -59,6 +61,7 @@ const EMPTY_FORM = {
   guardianPhone: '',
   area: '',
   district: '',
+  school: '',
   address: '',
   freeIdCard: false,
   feeWaiverAmount: '',
@@ -121,6 +124,7 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
       guardianEmail: e.student.guardianEmail,
       area: e.student.area,
       district: e.student.district,
+      school: e.student.school,
       address: e.student.address,
       regId: `#${list.length - i}`,
       grade: classTitle,
@@ -181,6 +185,7 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
       if (form.guardianPhone.trim()) payload.guardianPhone = form.guardianPhone.trim();
       if (form.area.trim()) payload.area = form.area.trim();
       if (form.district) payload.district = form.district;
+      if (form.school.trim()) payload.school = form.school.trim();
       if (form.address.trim()) payload.address = form.address.trim();
 
       const res = await t.post<{ invited: boolean }>(`/classes/${classId}/students`, payload);
@@ -272,6 +277,29 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
     }
   }
 
+  async function sendFeeReminder(row: RosterRow) {
+    setActionError('');
+    setBusyId(row.id);
+    try {
+      const { data } = await t.post<{
+        monthLabels: string[];
+        emailed: string;
+      }>(`/classes/${classId}/students/${row.id}/fee-reminder`);
+      const months = data.monthLabels ?? [];
+      showToast(
+        months.length > 1
+          ? `Fee reminder sent to ${row.name} for ${months.join(' & ')}.`
+          : `Fee reminder sent to ${row.name} for ${months[0] ?? 'this month'}.`
+      );
+    } catch (err) {
+      const msg = apiErrorMessage(err);
+      setActionError(msg);
+      showToast(msg, 'error');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function openEdit(row: RosterRow) {
     setEditingId(row.id);
     setEditError('');
@@ -290,6 +318,7 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
       guardianEmail: row.guardianEmail ?? '',
       area: row.area ?? '',
       district: row.district ?? '',
+      school: row.school ?? '',
       address: row.address ?? '',
       freeIdCard: Boolean(row.freeIdCard),
       feeWaiverAmount: String(row.feeWaiverAmount || ''),
@@ -314,6 +343,7 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
         guardianEmail: editForm.guardianEmail.trim() || null,
         area: editForm.area.trim() || null,
         district: editForm.district.trim() || null,
+        school: editForm.school.trim() || null,
         address: editForm.address.trim() || null,
         freeIdCard: editForm.freeIdCard,
       });
@@ -452,6 +482,18 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
                           className="grid h-8 w-8 place-items-center rounded-lg bg-slate-700 text-white transition hover:bg-slate-800 dark:bg-slate-600 dark:hover:bg-slate-500"
                         >
                           <Icon name="edit" width={16} height={16} />
+                        </button>
+                        <button
+                          onClick={() => sendFeeReminder(r)}
+                          disabled={
+                            busyId === r.id ||
+                            r.enrollmentStatus !== 'active' ||
+                            !(typeof r.netFee === 'number' && r.netFee > 0)
+                          }
+                          title="Send fee reminder"
+                          className="grid h-8 w-8 place-items-center rounded-lg bg-sky-600 text-white transition hover:bg-sky-700 disabled:opacity-40"
+                        >
+                          <Icon name="bell" width={16} height={16} />
                         </button>
                         <button
                           onClick={() => openCard(r)}
@@ -665,6 +707,14 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
                         </option>
                       ))}
                     </select>
+                  </Field>
+                  <Field label="School (optional)">
+                    <input
+                      className={inputCls}
+                      placeholder="e.g. Royal College"
+                      value={form.school}
+                      onChange={(e) => setForm((f) => ({ ...f, school: e.target.value }))}
+                    />
                   </Field>
 
                   <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-brand-200 bg-brand-50/60 p-3 dark:border-brand-800 dark:bg-brand-950/20">
@@ -882,6 +932,14 @@ export function RosterTab({ classId, classTitle }: { classId: string; classTitle
             </Field>
           </div>
 
+          <Field label="School">
+            <input
+              className={inputCls}
+              value={editForm.school}
+              onChange={(e) => setEditForm((f) => ({ ...f, school: e.target.value }))}
+            />
+          </Field>
+
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Guardian name">
               <input
@@ -1010,9 +1068,9 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function StatusBadge({ status }: { status: StudentStatus }) {
   const map: Record<StudentStatus, string> = {
-    approved: 'bg-emerald-100 text-emerald-700',
-    pending: 'bg-amber-100 text-amber-700',
-    rejected: 'bg-red-100 text-red-700',
+    approved: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+    pending: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+    rejected: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300',
   };
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${map[status]}`}>
@@ -1023,9 +1081,9 @@ function StatusBadge({ status }: { status: StudentStatus }) {
 
 function EnrollmentBadge({ status }: { status: EnrollmentStatus }) {
   const map: Record<EnrollmentStatus, string> = {
-    active: 'bg-sky-100 text-sky-700',
-    pending: 'bg-amber-100 text-amber-700',
-    rejected: 'bg-red-100 text-red-700',
+    active: 'bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300',
+    pending: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+    rejected: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300',
   };
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${map[status]}`}>

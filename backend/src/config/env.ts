@@ -76,6 +76,20 @@ export const env = {
   },
   /** Teacher/admin AI calls per user per calendar month. */
   teacherAiMonthlyLimit: parseInt(process.env.TEACHER_AI_MONTHLY_LIMIT ?? '100', 10),
+  nms: {
+    /**
+     * NMS origin or full communications URL.
+     * Local default: http://localhost:8080 → POST /v1/communications
+     * Shared/dev/prod: https://<nms-host> (same path).
+     * Empty string disables dispatch (skip-safe).
+     */
+    baseUrl: (process.env.NMS_BASE_URL ?? (isProd ? '' : 'http://localhost:8080')).replace(
+      /\/+$/,
+      '',
+    ),
+    /** Shared with NMS `NMS_JWT_HS256_SECRET`. Empty = call local NMS without Bearer. */
+    jwtHs256Secret: process.env.NMS_JWT_HS256_SECRET ?? '',
+  },
 };
 
 // Keep `required` available for rare callers that need non-secret vars.

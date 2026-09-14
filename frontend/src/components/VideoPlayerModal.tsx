@@ -124,7 +124,7 @@ export function VideoLessonCard({
         onClick={onPlay}
         className="group relative block w-full aspect-video overflow-hidden bg-slate-900"
       >
-        <div className="absolute inset-0 bg-gradient-to-br from-brand-700/80 to-purple-900/80" />
+        <div className="absolute inset-0 bg-gradient-to-br from-brand-700/80 to-brand-900/80" />
         <span className="relative z-10 grid h-full w-full place-items-center">
           <span className="grid h-16 w-16 place-items-center rounded-full bg-white/20 text-white ring-1 ring-white/30 transition group-hover:scale-105 group-hover:bg-white/30">
             <Icon name="play" width={28} height={28} />

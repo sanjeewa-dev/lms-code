@@ -10,11 +10,10 @@ import { storage } from '../services/storage';
 import { getPageCount, renderWatermarkedPage } from '../services/pdf';
 import { badRequest, forbidden, notFound } from '../utils/httpError';
 import { basePrisma } from '../lib/prisma';
-import { studentHasContentAccess } from '../services/access';
+import { studentHasContentAccess, studentHasMaterialAccess } from '../services/access';
 
 const router = Router({ mergeParams: true });
 
-// Shared field selector for material responses.
 const MATERIAL_SELECT = {
   id: true,
   title: true,
@@ -25,8 +24,43 @@ const MATERIAL_SELECT = {
   dueDate: true,
   maxMarks: true,
   fileId: true,
+  price: true,
+  published: true,
+  classId: true,
   createdAt: true,
 } as const;
+
+function serializeMaterial(
+  m: any,
+  extras?: {
+    purchaseStatus?: 'none' | 'pending' | 'approved' | 'rejected';
+    canPreview?: boolean;
+  }
+) {
+  const price = Number(m.price ?? 0);
+  const purchaseStatus = extras?.purchaseStatus ?? 'none';
+  const canPreview =
+    extras?.canPreview ??
+    (price <= 0 || purchaseStatus === 'approved');
+  return {
+    id: m.id,
+    title: m.title,
+    description: m.description,
+    kind: m.kind,
+    pageCount: m.pageCount,
+    viewOnly: m.viewOnly,
+    dueDate: m.dueDate,
+    maxMarks: m.maxMarks,
+    fileId: m.fileId,
+    classId: m.classId,
+    price,
+    published: m.published !== false,
+    createdAt: m.createdAt,
+    purchaseStatus,
+    canPreview,
+    hasFile: Boolean(m.fileId),
+  };
+}
 
 // Upload a view-only material OR a teacher assessment file.
 router.post(
@@ -66,11 +100,13 @@ router.post(
         viewOnly: true,
         dueDate: data.dueDate ?? null,
         maxMarks: data.maxMarks ?? null,
+        price: data.price ?? 0,
+        published: data.published ?? true,
       },
       select: MATERIAL_SELECT,
     });
 
-    res.status(201).json({ material });
+    res.status(201).json({ material: serializeMaterial(material, { canPreview: true }) });
   })
 );
 
@@ -85,7 +121,9 @@ router.patch(
     if (req.user!.role === 'teacher' && klass.teacherId !== req.user!.sub) {
       throw forbidden('You can only edit materials in your own classes');
     }
-    const material = await prisma.material.findFirst({ where: { id: req.params.materialId, classId: klass.id } });
+    const material = await prisma.material.findFirst({
+      where: { id: req.params.materialId, classId: klass.id },
+    });
     if (!material) throw notFound('Material not found');
 
     const data = materialSchema.partial().parse(req.body);
@@ -96,10 +134,12 @@ router.patch(
         description: data.description,
         dueDate: data.dueDate !== undefined ? data.dueDate : undefined,
         maxMarks: data.maxMarks !== undefined ? data.maxMarks : undefined,
+        price: data.price !== undefined ? data.price : undefined,
+        published: data.published !== undefined ? data.published : undefined,
       },
       select: MATERIAL_SELECT,
     });
-    res.json({ material: updated });
+    res.json({ material: serializeMaterial(updated, { canPreview: true }) });
   })
 );
 
@@ -134,12 +174,65 @@ router.get(
   authenticate,
   requireActiveEnrollment('classId'),
   asyncHandler(async (req, res) => {
+    const user = req.user!;
+    const isStaff =
+      user.role === 'admin' ||
+      user.role === 'superadmin' ||
+      user.role === 'teacher';
+
     const materials = await prisma.material.findMany({
-      where: { classId: req.params.classId },
+      where: {
+        classId: req.params.classId,
+        ...(isStaff ? {} : { published: true }),
+      },
       orderBy: { createdAt: 'desc' },
       select: MATERIAL_SELECT,
     });
-    res.json({ materials });
+
+    if (isStaff) {
+      res.json({
+        materials: materials.map((m) =>
+          serializeMaterial(m, { canPreview: true, purchaseStatus: 'none' })
+        ),
+      });
+      return;
+    }
+
+    const enrollment = await prisma.enrollment.findFirst({
+      where: {
+        classId: req.params.classId,
+        studentId: user.sub,
+        status: 'active',
+      },
+      select: { id: true },
+    });
+
+    const payments = enrollment
+      ? await prisma.payment.findMany({
+          where: {
+            enrollmentId: enrollment.id,
+            paymentType: 'material',
+            materialId: { in: materials.map((m) => m.id) },
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { materialId: true, status: true },
+        })
+      : [];
+
+    const statusByMaterial = new Map<string, 'pending' | 'approved' | 'rejected'>();
+    for (const p of payments) {
+      if (!p.materialId || statusByMaterial.has(p.materialId)) continue;
+      statusByMaterial.set(p.materialId, p.status as 'pending' | 'approved' | 'rejected');
+    }
+
+    res.json({
+      materials: materials.map((m) => {
+        const price = Number(m.price);
+        const purchaseStatus = statusByMaterial.get(m.id) ?? 'none';
+        const canPreview = price <= 0 || purchaseStatus === 'approved';
+        return serializeMaterial(m, { purchaseStatus, canPreview });
+      }),
+    });
   })
 );
 
@@ -147,8 +240,43 @@ router.get(
   '/materials/:materialId/meta',
   authenticate,
   asyncHandler(async (req, res) => {
-    const material = await loadMaterialWithAccess(req);
-    res.json({ material: { ...material, hasFile: Boolean(material.fileId) } });
+    const { material, purchaseStatus, canPreview } = await loadMaterialAccessContext(req, {
+      requireFullPreview: false,
+    });
+    res.json({
+      material: {
+        ...serializeMaterial(material, { purchaseStatus, canPreview }),
+        hasFile: Boolean(material.fileId),
+      },
+    });
+  })
+);
+
+/** Page-1 thumbnail available to enrolled students even before material payment. */
+router.get(
+  '/materials/:materialId/thumbnail',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const { material } = await loadMaterialAccessContext(req, {
+      requireFullPreview: false,
+      thumbnailOnly: true,
+    });
+    if (!material.fileId) throw badRequest('This material has no viewable file');
+
+    const fullMaterial = await prisma.material.findFirst({
+      where: { id: material.id },
+      include: { file: true },
+    });
+    if (!fullMaterial?.file) throw notFound('File not found');
+
+    const original = await storage.read(fullMaterial.file.storageKey);
+    const watermark = `${req.user!.name} - ${req.user!.email}`;
+    const image = await renderWatermarkedPage(original, fullMaterial.file.mimeType, 1, watermark);
+
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Content-Disposition', 'inline');
+    res.send(image);
   })
 );
 
@@ -156,7 +284,7 @@ router.get(
   '/materials/:materialId/pages/:pageNumber',
   authenticate,
   asyncHandler(async (req, res) => {
-    const material = await loadMaterialWithAccess(req);
+    const { material } = await loadMaterialAccessContext(req, { requireFullPreview: true });
     if (!material.fileId) throw badRequest('This material has no viewable file');
     const pageNumber = parseInt(req.params.pageNumber, 10);
     if (Number.isNaN(pageNumber) || pageNumber < 1 || pageNumber > material.pageCount) {
@@ -180,7 +308,10 @@ router.get(
   })
 );
 
-async function loadMaterialWithAccess(req: any) {
+async function loadMaterialAccessContext(
+  req: any,
+  opts: { requireFullPreview: boolean; thumbnailOnly?: boolean }
+) {
   const material = await prisma.material.findFirst({
     where: { id: req.params.materialId },
     include: { class: { select: { teacherId: true } } },
@@ -188,18 +319,42 @@ async function loadMaterialWithAccess(req: any) {
   if (!material) throw notFound('Material not found');
 
   const user = req.user;
-  if (user.role === 'admin' || user.role === 'superadmin') return material;
-  if (material.class.teacherId === user.sub) return material;
+  if (user.role === 'admin' || user.role === 'superadmin' || material.class.teacherId === user.sub) {
+    return {
+      material,
+      purchaseStatus: 'none' as const,
+      canPreview: true,
+    };
+  }
 
-  const access = await studentHasContentAccess({
+  if (!material.published && Number(material.price) > 0) {
+    throw notFound('Material not found');
+  }
+
+  const classAccess = await studentHasContentAccess({
     tenantId: req.tenant!.id,
     classId: material.classId,
     studentId: user.sub,
   });
-  if (!access.ok) {
-    throw forbidden(access.reason ?? 'You must have an approved enrollment to view this material');
+  if (!classAccess.ok) {
+    throw forbidden(classAccess.reason ?? 'You must have an approved enrollment to view this material');
   }
-  return material;
+
+  const materialAccess = await studentHasMaterialAccess({
+    tenantId: req.tenant!.id,
+    materialId: material.id,
+    studentId: user.sub,
+  });
+
+  if (opts.requireFullPreview && !materialAccess.ok) {
+    throw forbidden(materialAccess.reason ?? 'Purchase required to preview this material');
+  }
+
+  return {
+    material,
+    purchaseStatus: materialAccess.purchaseStatus,
+    canPreview: materialAccess.ok,
+  };
 }
 
 export default router;

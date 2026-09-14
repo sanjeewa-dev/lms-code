@@ -307,7 +307,7 @@ function InterventionCard({
       {canEdit && !editing && intervention.status !== 'resolved' && (
         <button
           onClick={() => setEditing(true)}
-          className="mt-3 text-xs font-semibold text-violet-600 hover:text-violet-700 dark:text-violet-400"
+          className="mt-3 text-xs font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400"
         >
           Update Status
         </button>
@@ -323,7 +323,7 @@ function InterventionCard({
                   key={s}
                   onClick={() => setNewStatus(s)}
                   className={`rounded-full px-3 py-1 text-xs font-semibold border transition ${
-                    newStatus === s ? 'border-violet-600 bg-violet-600 text-white' : 'border-slate-200 text-slate-600 dark:border-white/10 dark:text-slate-300'
+                    newStatus === s ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-200 text-slate-600 dark:border-white/10 dark:text-slate-300'
                   }`}
                 >
                   {STATUS_LABELS[s]}
@@ -348,7 +348,7 @@ function InterventionCard({
             <Button
               onClick={() => mut.mutate()}
               disabled={mut.isPending}
-              className="bg-violet-600 hover:bg-violet-700 text-white text-xs py-1.5"
+              className="bg-brand-600 hover:bg-brand-700 text-white text-xs py-1.5"
             >
               {mut.isPending ? <Spinner /> : 'Save'}
             </Button>
@@ -425,7 +425,7 @@ export default function InterventionTimeline() {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Hero */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-blue-600 to-cyan-600 p-7 text-white shadow-lg">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-ink-900 via-brand-700 to-cyan-600 p-7 text-white shadow-lg">
         <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-white/10" />
         <div className="relative">
           <div className="mb-1 inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold">
@@ -447,7 +447,7 @@ export default function InterventionTimeline() {
             onClick={() => setFilterStatus(filterStatus === s ? '' : s)}
             className={`rounded-2xl border p-4 text-left transition ${
               filterStatus === s
-                ? 'border-violet-300 bg-violet-50 dark:border-violet-700 dark:bg-violet-950/20'
+                ? 'border-brand-300 bg-brand-50 dark:border-brand-700 dark:bg-brand-950/20'
                 : 'border-slate-200 bg-white dark:border-white/10 dark:bg-ink-850'
             }`}
           >
@@ -467,7 +467,7 @@ export default function InterventionTimeline() {
         />
         <Button
           onClick={() => setShowCreate(true)}
-          className="bg-violet-600 hover:bg-violet-700 text-white shrink-0"
+          className="bg-brand-600 hover:bg-brand-700 text-white shrink-0"
         >
           + Log Intervention
         </Button>

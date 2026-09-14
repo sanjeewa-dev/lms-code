@@ -15,6 +15,22 @@ export const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+export const forgotPasswordSchema = z.object({
+  email: z.string().email().transform((v) => v.toLowerCase().trim()),
+  tenantSlug: z.string().min(1).optional(),
+});
+
+export const resetPasswordSchema = z
+  .object({
+    token: z.string().min(1),
+    password: passwordSchema,
+    confirmPassword: z.string(),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    message: 'Passwords do not match',
+    path: ['confirmPassword'],
+  });
+
 // --- Platform (superadmin) ---
 export const createTenantSchema = z.object({
   name: z.string().min(2).max(150),
@@ -142,6 +158,7 @@ export const profileUpdateSchema = z.object({
   guardianEmail: z.string().email().optional().nullable().or(z.literal('')),
   area: z.string().max(100).optional().nullable(),
   district: z.string().max(100).optional().nullable(),
+  school: z.string().max(200).optional().nullable(),
 });
 
 export const changePasswordSchema = z
@@ -183,6 +200,7 @@ export const studentInviteSchema = z.object({
   guardianPhone: z.string().max(40).optional(),
   area: z.string().max(120).optional(),
   district: z.string().max(80).optional(),
+  school: z.string().max(200).optional(),
   address: z.string().max(500).optional(),
   freeIdCard: z.coerce.boolean().optional(),
   feeWaiverAmount: z.coerce.number().min(0).max(1_000_000).optional(),
@@ -202,6 +220,7 @@ export const studentOnboardingSchema = z
     guardianPhone: z.string().min(7).max(40),
     area: z.string().min(2).max(120),
     district: z.string().min(2).max(80),
+    school: z.string().max(200).optional().or(z.literal('')),
     address: z.string().min(3).max(500),
     password: passwordSchema,
     confirmPassword: z.string().max(100),
@@ -237,6 +256,7 @@ export const studentUpdateSchema = z.object({
   guardianEmail: z.string().email().optional().nullable().or(z.literal('')),
   area: z.string().max(120).optional().nullable(),
   district: z.string().max(80).optional().nullable(),
+  school: z.string().max(200).optional().nullable(),
   address: z.string().max(500).optional().nullable(),
   freeIdCard: z.coerce.boolean().optional(),
 });
@@ -306,6 +326,23 @@ export const materialSchema = z.object({
   kind: z.enum(['material', 'assessment']).default('material'),
   dueDate: z.coerce.date().optional(),
   maxMarks: z.coerce.number().min(0).optional(),
+  price: z.coerce.number().min(0).optional(),
+  published: z
+    .union([z.boolean(), z.literal('true'), z.literal('false'), z.literal('1'), z.literal('0')])
+    .optional()
+    .transform((v) => {
+      if (v === undefined) return undefined;
+      if (typeof v === 'boolean') return v;
+      return v === 'true' || v === '1';
+    }),
+});
+
+/** One bank slip covering one or more paid class materials. */
+export const materialPaymentSlipSchema = z.object({
+  materialIds: z
+    .union([z.array(z.string().min(1)), z.string().min(1)])
+    .transform((v) => (Array.isArray(v) ? v : v.split(',').map((s) => s.trim()).filter(Boolean)))
+    .pipe(z.array(z.string().min(1)).min(1).max(50)),
 });
 
 // --- Submissions ---

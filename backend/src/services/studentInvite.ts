@@ -86,6 +86,8 @@ export async function inviteStudentToClass(opts: {
       instituteName: tenantName,
       classTitle,
       loginUrl: `${env.clientUrl}/login`,
+      tenantId,
+      relatedId: enrollment.id,
     });
 
     return { enrollment, student, invited: false };
@@ -99,6 +101,7 @@ export async function inviteStudentToClass(opts: {
     guardianPhone: data.guardianPhone?.trim() || null,
     area: data.area?.trim() || null,
     district: data.district || null,
+    school: data.school?.trim() || null,
     address: data.address?.trim() || null,
     freeIdCard,
   };
@@ -125,6 +128,7 @@ export async function inviteStudentToClass(opts: {
         guardianPhone: profileData.guardianPhone || student.guardianPhone,
         area: profileData.area || student.area,
         district: profileData.district || student.district,
+        school: profileData.school || student.school,
         address: profileData.address || student.address,
         freeIdCard: freeIdCard || student.freeIdCard,
       },
@@ -148,7 +152,7 @@ export async function inviteStudentToClass(opts: {
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + INVITE_DAYS * 24 * 60 * 60 * 1000);
 
-  await basePrisma.studentInvite.create({
+  const invite = await basePrisma.studentInvite.create({
     data: {
       tenantId,
       classId,
@@ -161,6 +165,7 @@ export async function inviteStudentToClass(opts: {
       guardianPhone: data.guardianPhone?.trim() || null,
       area: data.area?.trim() || null,
       district: data.district || null,
+      school: data.school?.trim() || null,
       address: data.address?.trim() || null,
       freeIdCard,
       feeWaiverAmount,
@@ -177,6 +182,8 @@ export async function inviteStudentToClass(opts: {
     instituteName: tenantName,
     classTitle,
     inviteUrl: url,
+    tenantId,
+    relatedId: invite.id,
   });
 
   return { enrollment, student, invited: true, inviteUrl: url };
@@ -244,6 +251,8 @@ export async function enrollExistingStudentInClass(opts: {
       instituteName: tenantName,
       classTitle,
       loginUrl: `${env.clientUrl}/login`,
+      tenantId,
+      relatedId: enrollment.id,
     });
   }
 
@@ -281,6 +290,7 @@ export async function getInviteForToken(tenantId: string, token: string) {
       guardianPhone: invite.guardianPhone ?? '',
       area: invite.area ?? '',
       district: invite.district ?? '',
+      school: invite.school ?? '',
       address: invite.address ?? '',
       freeIdCard: invite.freeIdCard,
       feeWaiverAmount,
@@ -315,6 +325,7 @@ export async function acceptInvite(tenantId: string, token: string, data: Onboar
       guardianPhone: data.guardianPhone.trim(),
       area: data.area.trim(),
       district: data.district,
+      school: data.school?.trim() || null,
       address: data.address.trim(),
       freeIdCard: invite.freeIdCard,
       passwordHash,

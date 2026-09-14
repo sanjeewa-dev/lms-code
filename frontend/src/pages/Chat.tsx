@@ -326,7 +326,7 @@ export default function Chat() {
         >
           {!activeId ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
-              <span className="grid h-12 w-12 place-items-center rounded-2xl bg-sky-100 text-sky-600">
+              <span className="grid h-12 w-12 place-items-center rounded-2xl bg-sky-100 text-sky-600 dark:bg-sky-950/40 dark:text-sky-300">
                 <Icon name="chat" width={22} height={22} />
               </span>
               <p className="font-semibold text-slate-900 dark:text-white">Select a conversation</p>

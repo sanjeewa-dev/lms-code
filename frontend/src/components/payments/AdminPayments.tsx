@@ -5,6 +5,7 @@ import { useTenantApi } from '../../hooks/useTenantApi';
 import { apiErrorMessage } from '../../api/client';
 import { Badge, Button, Card, Input, Modal, Select, Spinner, statusTone } from '../ui';
 import { Icon } from '../icons';
+import { showToast } from '../AppToast';
 import { currentMonth, formatMonthLabel, monthOptions } from '../../lib/paymentUtils';
 import type { ClassSummary, Payment, PaymentStatus } from '../../api/types';
 
@@ -40,6 +41,9 @@ export function AdminPayments() {
   const [status, setStatus] = useState<PaymentStatus | ''>(() => initialStatus(searchParams));
   const [forMonth, setForMonth] = useState(() => initialMonth(searchParams));
   const [classId, setClassId] = useState('');
+  const [paymentType, setPaymentType] = useState<'monthly' | 'material'>(() =>
+    searchParams.get('type') === 'material' ? 'material' : 'monthly'
+  );
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [rejectNote, setRejectNote] = useState('');
   const [reviewError, setReviewError] = useState('');
@@ -53,21 +57,23 @@ export function AdminPayments() {
   const [uploadError, setUploadError] = useState('');
 
   const query = useQuery({
-    queryKey: ['payments', t.slug, status, forMonth, classId],
+    queryKey: ['payments', t.slug, status, forMonth, classId, paymentType],
     queryFn: async () =>
       (
         await t.get<{ payments: Payment[] }>('/payments', {
           params: {
             ...(status ? { status } : {}),
-            ...(forMonth ? { forMonth } : {}),
+            ...(paymentType === 'monthly' && forMonth ? { forMonth } : {}),
             ...(classId ? { classId } : {}),
+            ...(paymentType === 'material' ? { paymentType: 'material' } : {}),
           },
         })
       ).data.payments,
   });
 
   const summaryQuery = useQuery({
-    queryKey: ['payments-summary', t.slug, forMonth],
+    queryKey: ['payments-summary', t.slug, forMonth, paymentType],
+    enabled: paymentType === 'monthly',
     queryFn: async () =>
       (
         await t.get<{
@@ -90,11 +96,16 @@ export function AdminPayments() {
     queryKey: ['classes', t.slug],
     queryFn: async () => (await t.get<{ classes: ClassSummary[] }>('/classes')).data.classes,
   });
+
   const rosterQuery = useQuery({
     queryKey: ['payment-slip-roster', t.slug, uploadClassId],
     enabled: Boolean(uploadClassId && uploadOpen),
-    queryFn: async () => (await t.get<{ enrollments: RosterEntry[] }>(`/classes/${uploadClassId}/students`)).data.enrollments,
+    queryFn: async () =>
+      (
+        await t.get<{ enrollments: RosterEntry[] }>(`/classes/${uploadClassId}/students`)
+      ).data.enrollments,
   });
+
   const staffSlipMutation = useMutation({
     mutationFn: async () => {
       if (!uploadFile || !uploadEnrollmentId) throw new Error('Select a student and payment slip');
@@ -113,14 +124,19 @@ export function AdminPayments() {
       queryClient.invalidateQueries({ queryKey: ['payments', t.slug] });
       queryClient.invalidateQueries({ queryKey: ['payments-pending-count', t.slug] });
       queryClient.invalidateQueries({ queryKey: ['payments-summary', t.slug] });
+      showToast('Payment slip uploaded for student. Pending review.');
     },
-    onError: (err) => setUploadError(apiErrorMessage(err)),
+    onError: (err) => {
+      const msg = apiErrorMessage(err);
+      setUploadError(msg);
+      showToast(msg, 'error');
+    },
   });
 
   const reviewMutation = useMutation({
     mutationFn: async ({ id, action, note }: { id: string; action: 'approve' | 'reject'; note?: string }) =>
       (await t.post(`/payments/${id}/${action}`, { note })).data,
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
       reviewingRef.current = null;
       setReviewingId(null);
       setReviewError('');
@@ -129,11 +145,14 @@ export function AdminPayments() {
       queryClient.invalidateQueries({ queryKey: ['payments', t.slug] });
       queryClient.invalidateQueries({ queryKey: ['payments-pending-count', t.slug] });
       queryClient.invalidateQueries({ queryKey: ['payments-summary', t.slug] });
+      showToast(vars.action === 'approve' ? 'Payment approved.' : 'Payment rejected.');
     },
     onError: (err) => {
       reviewingRef.current = null;
       setReviewingId(null);
-      setReviewError(apiErrorMessage(err));
+      const msg = apiErrorMessage(err);
+      setReviewError(msg);
+      showToast(msg, 'error');
       queryClient.invalidateQueries({ queryKey: ['payments', t.slug] });
       queryClient.invalidateQueries({ queryKey: ['payments-pending-count', t.slug] });
       queryClient.invalidateQueries({ queryKey: ['payments-summary', t.slug] });
@@ -153,7 +172,7 @@ export function AdminPayments() {
       const blob = await t.fetchBlob(`/payments/${id}/slip`);
       window.open(URL.createObjectURL(blob), '_blank', 'noopener');
     } catch {
-      alert('Unable to load slip');
+      showToast('Unable to load payment slip', 'error');
     }
   }
 
@@ -168,12 +187,45 @@ export function AdminPayments() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span className="grid h-11 w-11 place-items-center rounded-xl bg-blue-100 text-blue-600"><Icon name="payments" /></span>
-          <div><h1 className="text-xl font-bold text-slate-900 dark:text-white">Payment verification</h1><p className="text-sm text-slate-500 dark:text-slate-400">Review and approve student payment slips by month</p></div>
+        <span className="grid h-11 w-11 place-items-center rounded-xl bg-blue-100 text-blue-600">
+          <Icon name="payments" />
+        </span>
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Payment verification</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Review class fees and paid material slips
+          </p>
+        </div>
         </div>
         <Button onClick={() => setUploadOpen(true)}>Upload slip for student</Button>
       </div>
 
+      <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-white/10 dark:bg-white/5">
+        <button
+          type="button"
+          onClick={() => setPaymentType('monthly')}
+          className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+            paymentType === 'monthly'
+              ? 'bg-white text-slate-900 shadow-sm dark:bg-ink-850 dark:text-white'
+              : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
+          }`}
+        >
+          Class fees
+        </button>
+        <button
+          type="button"
+          onClick={() => setPaymentType('material')}
+          className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+            paymentType === 'material'
+              ? 'bg-white text-slate-900 shadow-sm dark:bg-ink-850 dark:text-white'
+              : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
+          }`}
+        >
+          Material payments
+        </button>
+      </div>
+
+      {paymentType === 'monthly' && (
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
           label={`${monthLabel} payments`}
@@ -204,8 +256,10 @@ export function AdminPayments() {
           loading={summaryQuery.isLoading}
         />
       </div>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-3">
+        {paymentType === 'monthly' && (
         <Select label="Month" value={forMonth} onChange={(e) => setForMonth(e.target.value)}>
           <option value="">All months</option>
           {monthOptions(18).map((m) => (
@@ -214,6 +268,7 @@ export function AdminPayments() {
             </option>
           ))}
         </Select>
+        )}
         <Select label="Status" value={status} onChange={(e) => setStatus(e.target.value as PaymentStatus | '')}>
           <option value="">All</option>
           <option value="pending">Pending</option>
@@ -237,7 +292,15 @@ export function AdminPayments() {
       )}
 
       {reviewError && (
-        <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">{reviewError}</p>
+        <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600 dark:bg-red-950/30 dark:text-red-300">
+          {reviewError}
+        </p>
+      )}
+
+      {query.isError && (
+        <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600 dark:bg-red-950/30 dark:text-red-300">
+          {apiErrorMessage(query.error)}
+        </p>
       )}
 
       {query.isLoading ? (
@@ -252,9 +315,13 @@ export function AdminPayments() {
                   <th className="px-4 py-3 font-semibold">Student name</th>
                   <th className="px-4 py-3 font-semibold">Email</th>
                   <th className="px-4 py-3 font-semibold">Class</th>
-                  <th className="px-4 py-3 font-semibold">Billing month</th>
+                  <th className="px-4 py-3 font-semibold">
+                    {paymentType === 'material' ? 'Material' : 'Billing month'}
+                  </th>
                   <th className="px-4 py-3 font-semibold">Paid amount</th>
-                  <th className="px-4 py-3 font-semibold">Class fee</th>
+                  <th className="px-4 py-3 font-semibold">
+                    {paymentType === 'material' ? 'Material price' : 'Class fee'}
+                  </th>
                   <th className="px-4 py-3 font-semibold">Type</th>
                   <th className="px-4 py-3 font-semibold">Status</th>
                   <th className="px-4 py-3 font-semibold">Submitted</th>
@@ -282,14 +349,21 @@ export function AdminPayments() {
                       <td className="px-4 py-3 font-medium text-slate-700 dark:text-slate-300">
                         {klass?.title ?? '—'}
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{p.forMonthLabel ?? p.forMonth}</td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {paymentType === 'material'
+                          ? p.material?.title ?? '—'
+                          : p.forMonthLabel ?? p.forMonth}
+                      </td>
                       <td className="px-4 py-3">
                         <span className={`font-semibold ${amountMatch ? 'text-emerald-600' : 'text-amber-600'}`}>
                           Rs. {p.amount.toLocaleString()}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-slate-500">
-                        Rs. {klass?.price.toLocaleString() ?? '—'}
+                        Rs.{' '}
+                        {paymentType === 'material'
+                          ? (p.material?.price ?? p.amount).toLocaleString()
+                          : klass?.price.toLocaleString() ?? '—'}
                       </td>
                       <td className="px-4 py-3 capitalize text-slate-500">{p.paymentType}</td>
                       <td className="px-4 py-3">
@@ -360,15 +434,78 @@ export function AdminPayments() {
         </Card>
       )}
 
-      <Modal open={uploadOpen} onClose={() => { if (!staffSlipMutation.isPending) { setUploadOpen(false); setUploadError(''); } }} title="Upload payment slip for student" className="max-w-md">
-        <p className="mb-4 text-sm text-slate-500">Use this for a payment slip a student sent to a staff member. It remains pending for review.</p>
+      <Modal
+        open={uploadOpen}
+        onClose={() => {
+          if (!staffSlipMutation.isPending) {
+            setUploadOpen(false);
+            setUploadError('');
+          }
+        }}
+        title="Upload payment slip for student"
+        className="max-w-md"
+      >
+        <p className="mb-4 text-sm text-slate-500">
+          Use this when a student sends their bank slip to a teacher through WhatsApp or another channel.
+          The payment remains pending for review.
+        </p>
         <div className="space-y-3">
-          <Select label="Class" value={uploadClassId} onChange={(e) => { setUploadClassId(e.target.value); setUploadEnrollmentId(''); }}><option value="">Select a class</option>{(classesQuery.data ?? []).map((klass) => <option key={klass.id} value={klass.id}>{klass.title}</option>)}</Select>
-          <Select label="Student" value={uploadEnrollmentId} disabled={!uploadClassId || rosterQuery.isLoading} onChange={(e) => setUploadEnrollmentId(e.target.value)}><option value="">{rosterQuery.isLoading ? 'Loading students...' : 'Select a student'}</option>{(rosterQuery.data ?? []).filter((entry) => entry.status !== 'rejected').map((entry) => <option key={entry.id} value={entry.id}>{entry.student.name} · {entry.student.email}</option>)}</Select>
-          <Select label="Billing month" value={uploadMonth} onChange={(e) => setUploadMonth(e.target.value)}>{monthOptions(18).map((month) => <option key={month.value} value={month.value}>{month.label}</option>)}</Select>
-          <label className="block"><span className="mb-1 block text-sm font-medium">Payment slip</span><input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)} className="block w-full text-sm" /></label>
+          <Select
+            label="Class"
+            value={uploadClassId}
+            onChange={(e) => {
+              setUploadClassId(e.target.value);
+              setUploadEnrollmentId('');
+            }}
+          >
+            <option value="">Select a class</option>
+            {(classesQuery.data ?? []).map((c) => (
+              <option key={c.id} value={c.id}>{c.title}</option>
+            ))}
+          </Select>
+          <Select
+            label="Student"
+            value={uploadEnrollmentId}
+            disabled={!uploadClassId || rosterQuery.isLoading}
+            onChange={(e) => setUploadEnrollmentId(e.target.value)}
+          >
+            <option value="">{rosterQuery.isLoading ? 'Loading students...' : 'Select a student'}</option>
+            {(rosterQuery.data ?? [])
+              .filter((entry) => entry.status !== 'rejected')
+              .map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.student.name} · {entry.student.email}
+                </option>
+              ))}
+          </Select>
+          <Select label="Billing month" value={uploadMonth} onChange={(e) => setUploadMonth(e.target.value)}>
+            {monthOptions(18).map((m) => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </Select>
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+              Payment slip
+            </span>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+              className="block w-full text-sm text-slate-600 dark:text-slate-300"
+            />
+          </label>
           {uploadError && <p className="text-sm text-red-600">{uploadError}</p>}
-          <div className="flex gap-2"><Button onClick={() => staffSlipMutation.mutate()} disabled={staffSlipMutation.isPending || !uploadEnrollmentId || !uploadFile}>{staffSlipMutation.isPending ? 'Uploading...' : 'Submit for review'}</Button><Button variant="secondary" onClick={() => setUploadOpen(false)}>Cancel</Button></div>
+          <div className="flex gap-2 pt-1">
+            <Button
+              onClick={() => staffSlipMutation.mutate()}
+              disabled={staffSlipMutation.isPending || !uploadEnrollmentId || !uploadFile}
+            >
+              {staffSlipMutation.isPending ? 'Uploading...' : 'Submit for review'}
+            </Button>
+            <Button variant="secondary" disabled={staffSlipMutation.isPending} onClick={() => setUploadOpen(false)}>
+              Cancel
+            </Button>
+          </div>
         </div>
       </Modal>
 

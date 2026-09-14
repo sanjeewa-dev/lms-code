@@ -269,19 +269,16 @@ router.post(
     );
 
     // Emails (fire-and-forget)
-    Promise.allSettled(
-      targets.map((s) =>
-        sendLiveClassStarted({
-          to: s.email,
-          studentName: s.name,
-          teacherName: teacher?.name ?? 'Your teacher',
-          className,
-          instituteName: req.tenant!.name,
-          joinUrl,
-          tenantId: req.tenant!.id,
-        })
-      )
-    );
+    void sendLiveClassStarted({
+      students: targets.map((s) => ({ name: s.name, email: s.email })),
+      teacherName: teacher?.name ?? 'Your teacher',
+      className,
+      instituteName: req.tenant!.name,
+      joinUrl,
+      tenantId: req.tenant!.id,
+      relatedId: schedule.id,
+      idempotencyKind: 'live-invite',
+    });
 
     res.json({ invited: targets.length });
   })

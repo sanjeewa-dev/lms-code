@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button, Input, Select } from '../components/ui';
 import { Icon, type IconName } from '../components/icons';
@@ -122,7 +122,7 @@ export default function PlatformHome() {
               <p className="text-sm font-medium tracking-wide text-sky-300/90">Mindspark LMS</p>
               <h1 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl lg:text-5xl">
                 Learn smarter.
-                <span className="block bg-gradient-to-r from-sky-300 to-blue-400 bg-clip-text text-transparent">
+                <span className="block bg-gradient-to-r from-teal-300 to-cyan-400 bg-clip-text text-transparent">
                   Teach clearer.
                 </span>
               </h1>
@@ -211,6 +211,15 @@ export default function PlatformHome() {
                 required
                 autoComplete="current-password"
               />
+
+              <div className="-mt-2 text-right">
+                <Link
+                  to="/forgot-password"
+                  className="text-xs font-medium text-brand-300 hover:text-brand-200 hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              </div>
 
               {tenantChoices && (
                 <Select

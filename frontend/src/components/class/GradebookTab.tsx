@@ -440,7 +440,7 @@ export function GradebookTab({ classId, classTitle }: { classId: string; classTi
               value={staffStats.columns}
               hint={`${data.assessments.length} assignments · ${data.quizzes.length} quizzes`}
               icon="quiz"
-              tone="bg-violet-100 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300"
+              tone="bg-brand-100 text-brand-600 dark:bg-brand-950/40 dark:text-brand-300"
             />
             <StatTile
               label="Missing scores"
@@ -465,14 +465,14 @@ export function GradebookTab({ classId, classTitle }: { classId: string; classTi
               title="Overall progress"
               subtitle="Quizzes + assignments (%)"
               points={chartBundle?.overall ?? []}
-              color="#2563eb"
+              color="#0d9488"
               emptyMessage="No graded work in this view yet."
             />
             <ChartPanel
               title="Quiz marks"
               subtitle="Quiz score progress (%)"
               points={chartBundle?.quizzes ?? []}
-              color="#7c3aed"
+              color="#06b6d4"
               emptyMessage="No quiz scores in this view yet."
             />
             <ChartPanel
@@ -670,7 +670,7 @@ export function GradebookTab({ classId, classTitle }: { classId: string; classTi
           value={mine.quizzes.length}
           hint={`${takenQuizzes.length} taken`}
           icon="quiz"
-          tone="bg-violet-100 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300"
+          tone="bg-brand-100 text-brand-600 dark:bg-brand-950/40 dark:text-brand-300"
         />
         <StatTile
           label="Assignment avg"
@@ -691,14 +691,14 @@ export function GradebookTab({ classId, classTitle }: { classId: string; classTi
           title="Overall progress"
           subtitle="Your quizzes + assignments"
           points={studentOverall}
-          color="#2563eb"
+          color="#0d9488"
           emptyMessage="No graded work yet."
         />
         <ChartPanel
           title="Quiz marks"
           subtitle="Your quiz scores"
           points={studentQuizPoints}
-          color="#7c3aed"
+          color="#06b6d4"
           emptyMessage="No quiz scores yet."
         />
         <ChartPanel

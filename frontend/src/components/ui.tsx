@@ -15,14 +15,16 @@ export function Button({
   className = '',
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'ghostLight';
+  variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'ghostLight' | 'outlineBrand';
 }) {
   const base =
-    'inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed';
+    'inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed';
   const variants: Record<string, string> = {
     primary: 'bg-brand-600 text-white hover:bg-brand-700 shadow-sm shadow-brand-600/20',
     secondary:
-      'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 dark:bg-white/5 dark:text-slate-200 dark:border-white/10 dark:hover:bg-white/10',
+      'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 dark:bg-white/5 dark:text-slate-200 dark:border-white/10 dark:hover:bg-white/10',
+    outlineBrand:
+      'bg-white text-brand-700 border border-brand-300 hover:bg-brand-50 dark:bg-transparent dark:text-brand-300 dark:border-brand-700 dark:hover:bg-brand-900/30',
     danger: 'bg-red-600 text-white hover:bg-red-700',
     ghost: 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5',
     ghostLight: 'border border-white/20 text-slate-100 hover:bg-white/10',
@@ -33,7 +35,7 @@ export function Button({
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
     <div
-      className={`rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/5 dark:bg-ink-850 ${className}`}
+      className={`rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-white/5 dark:bg-ink-850 ${className}`}
     >
       {children}
     </div>
@@ -59,7 +61,7 @@ export function Input({
       <div className={isPassword ? 'relative' : undefined}>
         <input
           type={resolvedType}
-          className={`w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:focus:ring-brand-900/40 ${
+          className={`w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:focus:ring-brand-900/40 ${
             isPassword ? 'pr-10' : ''
           } ${className}`}
           {...props}
@@ -104,7 +106,7 @@ export function Textarea({
         <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">{label}</span>
       )}
       <textarea
-        className={`w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:focus:ring-brand-900/40 ${className}`}
+        className={`w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:focus:ring-brand-900/40 ${className}`}
         {...props}
       />
     </label>
@@ -123,7 +125,7 @@ export function Select({
         <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">{label}</span>
       )}
       <select
-        className={`w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:focus:ring-brand-900/40 ${className}`}
+        className={`w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:focus:ring-brand-900/40 ${className}`}
         {...props}
       >
         {children}

@@ -26,6 +26,7 @@ export function serializeProfile(user: User & { tenant?: { slug: string; name: s
       guardianEmail: user.guardianEmail,
       area: user.area,
       district: user.district,
+      school: user.school,
     };
   }
 

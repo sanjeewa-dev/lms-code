@@ -258,7 +258,7 @@ export default function Teachers() {
                       <div className="flex justify-end gap-1.5">
                         <button
                           onClick={() => openEdit(teacher)}
-                          className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 text-slate-600 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 dark:border-white/10"
+                          className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 text-slate-600 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 dark:border-white/10 dark:text-slate-300 dark:hover:bg-brand-900/30 dark:hover:text-brand-300"
                           title="Edit"
                         >
                           <Icon name="note" width={16} height={16} />
@@ -379,7 +379,7 @@ function TeacherAvatar({ teacher }: { teacher: Teacher }) {
     .map((p) => p[0]?.toUpperCase() ?? '')
     .join('');
   return (
-    <span className="grid h-10 w-10 place-items-center rounded-full bg-violet-100 text-xs font-bold text-violet-700">
+    <span className="grid h-10 w-10 place-items-center rounded-full bg-brand-100 text-xs font-bold text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
       {initials || '?'}
     </span>
   );

@@ -194,7 +194,7 @@ function InviteModal({
               <button
                 type="button"
                 onClick={selected.size === filtered.length ? clearAll : selectAll}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300"
+            className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
               >
                 {selected.size === filtered.length ? 'Clear all' : 'Select all'}
               </button>

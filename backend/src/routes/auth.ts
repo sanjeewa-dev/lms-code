@@ -5,16 +5,21 @@ import { basePrisma } from '../lib/prisma';
 import { asyncHandler } from '../utils/asyncHandler';
 import { verifyRefreshToken } from '../lib/jwt';
 import { authenticate } from '../middleware/auth';
-import { unauthorized } from '../utils/httpError';
+import { unauthorized, badRequest } from '../utils/httpError';
 import {
   assertUserMayAuthenticate,
   issueTokens,
   publicUser,
 } from '../services/auth';
-import { loginSchema } from '../validation/schemas';
+import { loginSchema, forgotPasswordSchema, resetPasswordSchema } from '../validation/schemas';
 import { getActiveSupportSession } from '../services/supportSession';
 import { hashToken } from '../utils/cryptoTokens';
 import { clearRefreshCookie, REFRESH_COOKIE, setRefreshCookie } from '../utils/authCookies';
+import {
+  requestPasswordReset,
+  resetPasswordWithToken,
+  validatePasswordResetToken,
+} from '../services/passwordReset';
 
 const router = Router();
 
@@ -31,6 +36,16 @@ const refreshLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+const forgotPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const GENERIC_RESET_MESSAGE =
+  'If an account exists for that email, we sent password reset instructions.';
 
 /**
  * Unified sign-in. Resolves the account by email + password across the whole
@@ -81,6 +96,41 @@ router.post(
       ...tokens,
       tenant: user.tenant ? { slug: user.tenant.slug, name: user.tenant.name } : null,
     });
+  })
+);
+
+router.post(
+  '/forgot-password',
+  forgotPasswordLimiter,
+  asyncHandler(async (req, res) => {
+    const { email, tenantSlug } = forgotPasswordSchema.parse(req.body);
+    const result = await requestPasswordReset(email, tenantSlug);
+    if (result.multiple) {
+      res.json({ multiple: true, tenants: result.tenants, message: GENERIC_RESET_MESSAGE });
+      return;
+    }
+    res.json({ message: GENERIC_RESET_MESSAGE });
+  })
+);
+
+router.get(
+  '/reset-password/:token',
+  asyncHandler(async (req, res) => {
+    const token = req.params.token;
+    if (!token) throw badRequest('Invalid reset link');
+    const info = await validatePasswordResetToken(token);
+    if (!info) throw badRequest('This reset link is invalid or has expired.');
+    res.json(info);
+  })
+);
+
+router.post(
+  '/reset-password',
+  authLimiter,
+  asyncHandler(async (req, res) => {
+    const { token, password } = resetPasswordSchema.parse(req.body);
+    await resetPasswordWithToken(token, password);
+    res.json({ message: 'Password updated. You can sign in with your new password.' });
   })
 );
 

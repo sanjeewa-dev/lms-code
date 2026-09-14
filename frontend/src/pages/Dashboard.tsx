@@ -15,12 +15,12 @@ import type { ClassSummary, AdminStats } from '../api/types';
 type Tone = 'blue' | 'green' | 'purple' | 'amber' | 'pink' | 'sky';
 
 const toneChip: Record<Tone, string> = {
-  blue: 'bg-blue-100 text-blue-600',
-  green: 'bg-emerald-100 text-emerald-600',
-  purple: 'bg-violet-100 text-violet-600',
-  amber: 'bg-amber-100 text-amber-600',
-  pink: 'bg-pink-100 text-pink-600',
-  sky: 'bg-sky-100 text-sky-600',
+  blue: 'bg-blue-100 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300',
+  green: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300',
+  purple: 'bg-brand-100 text-brand-600 dark:bg-brand-900/40 dark:text-brand-300',
+  amber: 'bg-amber-100 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300',
+  pink: 'bg-pink-100 text-pink-600 dark:bg-pink-950/40 dark:text-pink-300',
+  sky: 'bg-sky-100 text-sky-600 dark:bg-sky-950/40 dark:text-sky-300',
 };
 
 function WelcomeBanner({
@@ -37,9 +37,9 @@ function WelcomeBanner({
   secondary: { to: string; label: string };
 }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-r from-rose-50 via-white to-sky-50 p-5 shadow-sm dark:border-white/5 dark:from-ink-850 dark:via-ink-850 dark:to-ink-850 sm:p-6">
-      <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-sky-200/45 blur-3xl dark:bg-sky-500/10" />
-      <div className="pointer-events-none absolute -bottom-24 left-[28%] h-48 w-48 rounded-full bg-rose-200/40 blur-3xl dark:bg-rose-500/10" />
+    <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-r from-teal-50 via-white to-cyan-50 p-5 shadow-sm dark:border-white/5 dark:from-ink-850 dark:via-ink-850 dark:to-ink-850 sm:p-6">
+      <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-teal-200/45 blur-3xl dark:bg-teal-500/10" />
+      <div className="pointer-events-none absolute -bottom-24 left-[28%] h-48 w-48 rounded-full bg-cyan-200/40 blur-3xl dark:bg-cyan-500/10" />
       <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand-600 dark:text-brand-400">
@@ -363,7 +363,7 @@ export default function Dashboard() {
                       className="flex items-center justify-between gap-3 py-3 transition hover:bg-slate-50/80 dark:hover:bg-white/5"
                     >
                       <div className="flex min-w-0 items-center gap-3">
-                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-sky-100 text-sky-600">
+                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-sky-100 text-sky-600 dark:bg-sky-950/40 dark:text-sky-300">
                           <Icon name="classes" width={16} height={16} />
                         </span>
                         <div className="min-w-0">
@@ -382,7 +382,7 @@ export default function Dashboard() {
               </ul>
             ) : (
               <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-6 py-12 text-center dark:border-white/10 dark:bg-white/5">
-                <span className="mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-sky-100 text-sky-600">
+                <span className="mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-sky-100 text-sky-600 dark:bg-sky-950/40 dark:text-sky-300">
                   <Icon name="classes" />
                 </span>
                 <p className="font-medium text-slate-700 dark:text-slate-200">No classes yet</p>
@@ -453,8 +453,8 @@ export default function Dashboard() {
                 </p>
                 <p className="text-xs text-slate-500">flagged students</p>
               </div>
-              <div className="rounded-xl border border-violet-100 bg-violet-50/80 p-3 dark:border-violet-900/30 dark:bg-violet-950/20">
-                <p className="text-xs font-semibold uppercase text-violet-700 dark:text-violet-300">Follow-ups</p>
+              <div className="rounded-xl border border-brand-100 bg-brand-50/80 p-3 dark:border-brand-900/30 dark:bg-brand-950/20">
+                <p className="text-xs font-semibold uppercase text-brand-700 dark:text-brand-300">Follow-ups</p>
                 <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">{dash(s?.openInterventions)}</p>
                 <p className="text-xs text-slate-500">open interventions</p>
               </div>
@@ -509,7 +509,7 @@ export default function Dashboard() {
                       {c.title}
                     </Link>
                     <div className="mt-1 flex flex-wrap gap-2 text-xs">
-                      <Link to={`${base}/classes/${c.id}/quizzes`} className="text-violet-600 hover:underline">
+                      <Link to={`${base}/classes/${c.id}/quizzes`} className="text-brand-600 hover:underline">
                         Quizzes
                       </Link>
                       <Link to={`${base}/classes/${c.id}/students`} className="text-sky-600 hover:underline">
@@ -619,7 +619,7 @@ export default function Dashboard() {
             </div>
             <Link
               to={`${base}/ai`}
-              className="rounded-xl bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-700"
+              className="rounded-xl bg-brand-600 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-700"
             >
               Open AI Area
             </Link>
@@ -635,7 +635,7 @@ export default function Dashboard() {
               <Link
                 key={tool}
                 to={`${base}/ai?tool=${tool}`}
-                className="rounded-xl border border-slate-200 px-2 py-3 text-center text-xs font-semibold text-slate-700 transition hover:border-violet-200 hover:bg-violet-50 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5"
+                className="rounded-xl border border-slate-200 px-2 py-3 text-center text-xs font-semibold text-slate-700 transition hover:border-brand-200 hover:bg-brand-50 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5"
               >
                 {label}
               </Link>
@@ -651,7 +651,7 @@ export default function Dashboard() {
         <Card className="flex h-full flex-col lg:col-span-7">
           <div className="mb-4 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <span className="grid h-9 w-9 place-items-center rounded-xl bg-amber-100 text-amber-600">
+              <span className="grid h-9 w-9 place-items-center rounded-xl bg-amber-100 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300">
                 <Icon name="quiz" width={18} height={18} />
               </span>
               <div>
@@ -684,7 +684,7 @@ export default function Dashboard() {
             </ul>
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-6 py-10 text-center dark:border-white/10 dark:bg-white/5">
-              <span className="mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-amber-100 text-amber-600">
+              <span className="mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-amber-100 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300">
                 <Icon name="quiz" />
               </span>
               <p className="font-medium text-slate-700 dark:text-slate-200">No pending quizzes</p>
@@ -703,7 +703,7 @@ export default function Dashboard() {
               </p>
               <Link
                 to={`${base}/attempts/${todo.recentAttempt.id}/result`}
-                className="mt-2 inline-block text-xs font-semibold text-violet-600 hover:underline"
+                className="mt-2 inline-block text-xs font-semibold text-brand-600 hover:underline"
               >
                 Review & explain with AI
               </Link>
@@ -749,7 +749,7 @@ export default function Dashboard() {
                     className="flex items-center justify-between gap-3 py-3 transition hover:bg-slate-50/80 dark:hover:bg-white/5"
                   >
                     <div className="flex min-w-0 items-center gap-3">
-                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-sky-100 text-sky-600">
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-sky-100 text-sky-600 dark:bg-sky-950/40 dark:text-sky-300">
                         <Icon name="classes" width={16} height={16} />
                       </span>
                       <div className="min-w-0">

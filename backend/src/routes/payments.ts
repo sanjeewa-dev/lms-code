@@ -12,6 +12,7 @@ import {
   reviewPaymentSchema,
   payhereInitSchema,
   staffPaymentSlipSchema,
+  materialPaymentSlipSchema,
 } from '../validation/schemas';
 import { badRequest, conflict, forbidden, notFound } from '../utils/httpError';
 import { storage } from '../services/storage';
@@ -27,6 +28,9 @@ const PAYMENT_INCLUDE = {
       class: { select: { id: true, title: true, price: true, teacherId: true } },
     },
   },
+  material: {
+    select: { id: true, title: true, price: true, classId: true },
+  },
   reviewedBy: { select: { id: true, name: true } },
 } as const;
 
@@ -41,9 +45,11 @@ function formatMonthLabel(forMonth: string) {
 }
 
 function serializePayment(p: any, studentRegId?: string) {
+  const student = p.enrollment?.student;
   return {
     id: p.id,
     enrollmentId: p.enrollmentId,
+    materialId: p.materialId ?? null,
     amount: Number(p.amount),
     paymentType: p.paymentType,
     forMonth: p.forMonth,
@@ -53,19 +59,31 @@ function serializePayment(p: any, studentRegId?: string) {
     createdAt: p.createdAt,
     reviewedAt: p.reviewedAt,
     reviewedBy: p.reviewedBy ?? null,
+    material: p.material
+      ? {
+          id: p.material.id,
+          title: p.material.title,
+          price: Number(p.material.price),
+          classId: p.material.classId,
+        }
+      : null,
     enrollment: p.enrollment
       ? {
           id: p.enrollment.id,
           status: p.enrollment.status,
-          student: {
-            ...p.enrollment.student,
-            regId: studentRegId ?? null,
-            phone: p.enrollment.student.phone ?? null,
-          },
-          class: {
-            ...p.enrollment.class,
-            price: Number(p.enrollment.class.price),
-          },
+          student: student
+            ? {
+                ...student,
+                regId: studentRegId ?? null,
+                phone: student.phone ?? null,
+              }
+            : null,
+          class: p.enrollment.class
+            ? {
+                ...p.enrollment.class,
+                price: Number(p.enrollment.class.price),
+              }
+            : null,
         }
       : undefined,
   };
@@ -98,6 +116,24 @@ async function assertNoDuplicatePayment(
       existing.status === 'pending'
         ? `You already have a pending ${paymentType} payment for ${formatMonthLabel(forMonth)}`
         : `A ${paymentType} payment for ${formatMonthLabel(forMonth)} is already approved`
+    );
+  }
+}
+
+async function assertNoDuplicateMaterialPayment(enrollmentId: string, materialId: string) {
+  const existing = await prisma.payment.findFirst({
+    where: {
+      enrollmentId,
+      materialId,
+      paymentType: 'material',
+      status: { in: ['pending', 'approved'] },
+    },
+  });
+  if (existing) {
+    throw conflict(
+      existing.status === 'pending'
+        ? 'You already have a pending payment for this material'
+        : 'This material is already purchased'
     );
   }
 }
@@ -235,6 +271,243 @@ router.post(
   })
 );
 
+/** Student: list paid materials available to purchase across enrolled classes. */
+router.get(
+  '/payments/materials/status',
+  authenticate,
+  requireRole('student'),
+  asyncHandler(async (req, res) => {
+    const enrollments = await prisma.enrollment.findMany({
+      where: { studentId: req.user!.sub, status: 'active' },
+      include: {
+        class: { select: { id: true, title: true } },
+      },
+    });
+    const classIds = enrollments.map((e) => e.classId);
+    const enrollmentByClass = new Map(enrollments.map((e) => [e.classId, e]));
+
+    const materials = classIds.length
+      ? await prisma.material.findMany({
+          where: {
+            classId: { in: classIds },
+            kind: 'material',
+            published: true,
+            price: { gt: 0 },
+          },
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            price: true,
+            classId: true,
+            pageCount: true,
+            fileId: true,
+            createdAt: true,
+          },
+        })
+      : [];
+
+    const enrollmentIds = enrollments.map((e) => e.id);
+    const payments = enrollmentIds.length
+      ? await prisma.payment.findMany({
+          where: {
+            enrollmentId: { in: enrollmentIds },
+            paymentType: 'material',
+            materialId: { in: materials.map((m) => m.id) },
+          },
+          include: PAYMENT_INCLUDE,
+          orderBy: { createdAt: 'desc' },
+        })
+      : [];
+
+    const paymentByMaterial = new Map<string, (typeof payments)[number]>();
+    for (const p of payments) {
+      if (p.materialId && !paymentByMaterial.has(p.materialId)) {
+        paymentByMaterial.set(p.materialId, p);
+      }
+    }
+
+    res.json({
+      items: materials.map((m) => {
+        const enrollment = enrollmentByClass.get(m.classId)!;
+        const payment = paymentByMaterial.get(m.id) ?? null;
+        const status = payment
+          ? (payment.status as 'pending' | 'approved' | 'rejected')
+          : 'none';
+        return {
+          materialId: m.id,
+          title: m.title,
+          description: m.description,
+          price: Number(m.price),
+          pageCount: m.pageCount,
+          hasFile: Boolean(m.fileId),
+          classId: m.classId,
+          classTitle: enrollment.class.title,
+          enrollmentId: enrollment.id,
+          purchaseStatus: status,
+          canPreview: status === 'approved',
+          payment: payment ? serializePayment(payment) : null,
+        };
+      }),
+    });
+  })
+);
+
+/** Student: upload one slip covering one or more paid materials. */
+router.post(
+  '/payments/materials/slip',
+  authenticate,
+  requireRole('student'),
+  uploadSlip,
+  enterTenantContext,
+  asyncHandler(async (req, res) => {
+    if (!req.file) throw badRequest('A payment slip file is required');
+    const data = materialPaymentSlipSchema.parse({
+      materialIds: req.body?.materialIds,
+    });
+    const uniqueIds = [...new Set(data.materialIds)];
+
+    const materials = await prisma.material.findMany({
+      where: {
+        id: { in: uniqueIds },
+        kind: 'material',
+        published: true,
+        price: { gt: 0 },
+      },
+      select: {
+        id: true,
+        title: true,
+        price: true,
+        classId: true,
+      },
+    });
+    if (materials.length !== uniqueIds.length) {
+      throw badRequest('One or more selected materials were not found or are not purchasable');
+    }
+
+    const classIds = [...new Set(materials.map((m) => m.classId))];
+    const enrollments = await prisma.enrollment.findMany({
+      where: {
+        studentId: req.user!.sub,
+        classId: { in: classIds },
+        status: 'active',
+      },
+      select: { id: true, classId: true },
+    });
+    const enrollmentByClass = new Map(enrollments.map((e) => [e.classId, e]));
+
+    for (const m of materials) {
+      const enrollment = enrollmentByClass.get(m.classId);
+      if (!enrollment) {
+        throw forbidden(`You must be enrolled in the class to purchase "${m.title}"`);
+      }
+      await assertNoDuplicateMaterialPayment(enrollment.id, m.id);
+    }
+
+    const slip = await persistUploadedFile(req.file, req.user!.sub, 'slip');
+    const forMonth = currentMonth();
+
+    let payments;
+    try {
+      payments = await prisma.$transaction(
+        materials.map((m) => {
+          const enrollment = enrollmentByClass.get(m.classId)!;
+          return prisma.payment.create({
+            data: {
+              tenantId: req.tenant!.id,
+              enrollmentId: enrollment.id,
+              materialId: m.id,
+              amount: m.price,
+              slipFileId: slip.id,
+              paymentType: 'material',
+              forMonth,
+              status: 'pending',
+            },
+            include: PAYMENT_INCLUDE,
+          });
+        })
+      );
+    } catch (err) {
+      if (err && typeof err === 'object' && 'code' in err && (err as { code?: string }).code === 'P2002') {
+        throw conflict('A pending or approved payment already exists for one of these materials');
+      }
+      throw err;
+    }
+
+    const total = payments.reduce((sum, p) => sum + Number(p.amount), 0);
+    res.status(201).json({
+      payments: payments.map((p) => serializePayment(p)),
+      total,
+      materialCount: payments.length,
+    });
+  })
+);
+
+/** Replace the slip on a pending payment (e.g. student uploaded the wrong file). */
+router.patch(
+  '/payments/:paymentId/slip',
+  authenticate,
+  requireRole('student'),
+  uploadSlip,
+  enterTenantContext,
+  asyncHandler(async (req, res) => {
+    if (!req.file) throw badRequest('A payment slip file is required');
+
+    const payment = await prisma.payment.findFirst({
+      where: { id: req.params.paymentId },
+      include: { enrollment: { select: { studentId: true } } },
+    });
+    if (!payment) throw notFound('Payment not found');
+    if (payment.enrollment.studentId !== req.user!.sub) {
+      throw forbidden('You can only update your own payments');
+    }
+    if (payment.status !== 'pending') {
+      throw badRequest(
+        payment.status === 'rejected'
+          ? 'This payment was rejected. Upload a new slip from the payments list instead.'
+          : 'Approved payments cannot be changed.'
+      );
+    }
+
+    const slip = await persistUploadedFile(req.file, req.user!.sub, 'slip');
+    const oldSlipFileId = payment.slipFileId;
+
+    const siblings = await prisma.payment.findMany({
+      where: {
+        slipFileId: oldSlipFileId,
+        status: 'pending',
+        enrollment: { studentId: req.user!.sub },
+      },
+      select: { id: true },
+    });
+
+    await prisma.$transaction(
+      siblings.map((p) =>
+        prisma.payment.update({
+          where: { id: p.id },
+          data: { slipFileId: slip.id, reviewedAt: null, reviewedById: null, note: null },
+        })
+      )
+    );
+
+    const stillUsed = await prisma.payment.count({ where: { slipFileId: oldSlipFileId } });
+    if (stillUsed === 0) {
+      const oldFile = await prisma.file.findFirst({ where: { id: oldSlipFileId } });
+      if (oldFile) {
+        await storage.remove(oldFile.storageKey).catch(() => undefined);
+        await prisma.file.delete({ where: { id: oldFile.id } }).catch(() => undefined);
+      }
+    }
+
+    const updated = await prisma.payment.findFirst({
+      where: { id: payment.id },
+      include: PAYMENT_INCLUDE,
+    });
+    res.json({ payment: serializePayment(updated), replacedCount: siblings.length });
+  })
+);
+
 /** Staff may record an externally received slip for an eligible student. */
 router.post(
   '/payments/staff-slip',
@@ -296,10 +569,16 @@ router.get(
   requireRole('student'),
   asyncHandler(async (req, res) => {
     const forMonth = (req.query.forMonth as string) || undefined;
+    const paymentType = (req.query.paymentType as string) || undefined;
     const payments = await prisma.payment.findMany({
       where: {
         enrollment: { studentId: req.user!.sub },
         ...(forMonth ? { forMonth } : {}),
+        ...(paymentType === 'material'
+          ? { paymentType: 'material' }
+          : paymentType
+            ? { paymentType: paymentType as 'enrollment' | 'monthly' }
+            : { paymentType: { in: ['enrollment', 'monthly'] } }),
       },
       include: PAYMENT_INCLUDE,
       orderBy: [{ forMonth: 'desc' }, { createdAt: 'desc' }],
@@ -320,7 +599,7 @@ router.get(
       include: {
         class: { select: { id: true, title: true, price: true } },
         payments: {
-          where: { forMonth },
+          where: { forMonth, paymentType: { in: ['enrollment', 'monthly'] } },
           orderBy: { createdAt: 'desc' },
           take: 1,
         },
@@ -349,11 +628,20 @@ router.get(
     const status = (req.query.status as string) || undefined;
     const forMonth = (req.query.forMonth as string) || undefined;
     const classId = (req.query.classId as string) || undefined;
+    const paymentType = (req.query.paymentType as string) || undefined;
 
     const where: any = {};
     if (status) where.status = status;
     if (forMonth) where.forMonth = forMonth;
     if (classId) where.enrollment = { classId };
+    if (paymentType === 'material') {
+      where.paymentType = 'material';
+    } else if (paymentType === 'enrollment' || paymentType === 'monthly') {
+      where.paymentType = paymentType;
+    } else {
+      // Default staff list: class fees only (exclude material purchases).
+      where.paymentType = { in: ['enrollment', 'monthly'] };
+    }
 
     if (req.user!.role === 'teacher') {
       where.enrollment = { ...(where.enrollment ?? {}), class: { teacherId: req.user!.sub } };
@@ -380,7 +668,10 @@ router.get(
   requireRole('admin', 'teacher', 'superadmin'),
   asyncHandler(async (req, res) => {
     const forMonth = (req.query.forMonth as string) || currentMonth();
-    const baseWhere: any = { forMonth };
+    const baseWhere: any = {
+      forMonth,
+      paymentType: { in: ['enrollment', 'monthly'] },
+    };
     if (req.user!.role === 'teacher') {
       baseWhere.enrollment = { class: { teacherId: req.user!.sub } };
     }
@@ -408,7 +699,10 @@ router.get(
   authenticate,
   requireRole('admin', 'teacher', 'superadmin'),
   asyncHandler(async (req, res) => {
-    const where: any = { status: 'pending' };
+    const where: any = {
+      status: 'pending',
+      paymentType: { in: ['enrollment', 'monthly', 'material'] },
+    };
     if (req.user!.role === 'teacher') {
       where.enrollment = { class: { teacherId: req.user!.sub } };
     }
@@ -463,14 +757,14 @@ async function reviewPayment(paymentId: string, reviewerId: string, approve: boo
     throw badRequest('This payment has already been reviewed');
   }
 
-  // Apply the review to payments created from the same multi-class slip.
+  // Apply the review to payments created from the same multi-class / multi-material slip.
   const siblings = await prisma.payment.findMany({
     where: {
       id: { not: paymentId },
       slipFileId: payment.slipFileId,
-      forMonth: payment.forMonth,
       status: 'pending',
       enrollment: { studentId: payment.enrollment.studentId },
+      ...(payment.paymentType === 'material' ? { paymentType: 'material' } : { forMonth: payment.forMonth }),
     },
     select: { id: true },
   });
@@ -509,15 +803,28 @@ async function reviewPayment(paymentId: string, reviewerId: string, approve: boo
     return updated;
   });
 
+  const materialTitle =
+    payment.paymentType === 'material' && payment.materialId
+      ? (
+          await prisma.material.findFirst({
+            where: { id: payment.materialId },
+            select: { title: true },
+          })
+        )?.title
+      : null;
+  const subjectLabel = materialTitle
+    ? `${materialTitle} (${payment.enrollment.class.title})`
+    : payment.enrollment.class.title;
+
   await createNotification({
     tenantId: payment.tenantId,
     userId: payment.enrollment.studentId,
     type: approve ? 'payment_approved' : 'payment_rejected',
     title: approve ? 'Payment approved' : 'Payment rejected',
     body: approve
-      ? `Your payment for ${payment.enrollment.class.title} (${payment.forMonth}) was approved.`
-      : `Your payment for ${payment.enrollment.class.title} (${payment.forMonth}) was rejected.${note ? ` Note: ${note}` : ''}`,
-    link: '/payments',
+      ? `Your payment for ${subjectLabel} (${payment.forMonth}) was approved.`
+      : `Your payment for ${subjectLabel} (${payment.forMonth}) was rejected.${note ? ` Note: ${note}` : ''}`,
+    link: payment.paymentType === 'material' ? '/payments?section=materials' : '/payments',
   });
 
   return updatedPayment;

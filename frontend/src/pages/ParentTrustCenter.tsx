@@ -33,17 +33,23 @@ interface ParentReport {
 }
 
 function AttendanceBar({ rate }: { rate: number | null }) {
-  if (rate === null) return <span className="text-slate-400 text-xs">Not enough data</span>;
+  if (rate === null) return <span className="text-xs text-slate-400">Not enough data</span>;
   const color = rate >= 80 ? 'bg-emerald-500' : rate >= 60 ? 'bg-amber-400' : 'bg-red-500';
   return (
     <div className="flex items-center gap-3">
-      <div className="flex-1 h-2 rounded-full bg-slate-200 dark:bg-ink-700 overflow-hidden">
+      <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
         <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${rate}%` }} />
       </div>
-      <span className="text-sm font-semibold text-slate-700 dark:text-slate-300 w-12 text-right">{rate}%</span>
+      <span className="w-12 text-right text-sm font-semibold text-slate-700 dark:text-slate-300">{rate}%</span>
     </div>
   );
 }
+
+const shell = 'min-h-screen bg-slate-50 dark:bg-ink-900';
+const panel =
+  'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-ink-850';
+const stat =
+  'rounded-2xl border border-slate-200 bg-white p-4 text-center shadow-sm dark:border-white/10 dark:bg-ink-850';
 
 export default function ParentTrustCenter() {
   const { slug } = useParams<{ slug: string }>();
@@ -62,9 +68,11 @@ export default function ParentTrustCenter() {
 
   if (!token) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="rounded-2xl bg-white p-8 shadow-lg text-center max-w-sm">
-          <p className="text-slate-600">No access token provided. Please use the link sent to your email.</p>
+      <div className={`${shell} flex items-center justify-center`}>
+        <div className="max-w-sm rounded-2xl bg-white p-8 text-center shadow-lg dark:bg-ink-850 dark:shadow-none dark:ring-1 dark:ring-white/10">
+          <p className="text-slate-600 dark:text-slate-300">
+            No access token provided. Please use the link sent to your email.
+          </p>
         </div>
       </div>
     );
@@ -72,7 +80,7 @@ export default function ParentTrustCenter() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className={`${shell} flex items-center justify-center`}>
         <Spinner />
       </div>
     );
@@ -80,15 +88,15 @@ export default function ParentTrustCenter() {
 
   if (error || !data) {
     const msg =
-      (error as any)?.response?.data?.error ??
-      (error as any)?.message ??
+      (error as { response?: { data?: { error?: string } }; message?: string })?.response?.data?.error ??
+      (error as { message?: string })?.message ??
       'Failed to load report.';
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-        <div className="rounded-2xl bg-white p-8 shadow-lg text-center max-w-sm">
-          <div className="text-4xl mb-3">⚠️</div>
-          <h2 className="font-bold text-slate-900 mb-2">Unable to load report</h2>
-          <p className="text-slate-500 text-sm">{msg}</p>
+      <div className={`${shell} flex items-center justify-center p-4`}>
+        <div className="max-w-sm rounded-2xl bg-white p-8 text-center shadow-lg dark:bg-ink-850 dark:shadow-none dark:ring-1 dark:ring-white/10">
+          <div className="mb-3 text-4xl">⚠️</div>
+          <h2 className="mb-2 font-bold text-slate-900 dark:text-white">Unable to load report</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{msg}</p>
         </div>
       </div>
     );
@@ -100,13 +108,12 @@ export default function ParentTrustCenter() {
       : null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-indigo-50 to-slate-50 py-8 px-4">
-      <div className="max-w-2xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="rounded-3xl bg-gradient-to-br from-indigo-600 to-purple-600 p-7 text-white shadow-lg">
-          <p className="text-indigo-200 text-sm mb-1">Parent Progress Report</p>
+    <div className="min-h-screen bg-gradient-to-b from-brand-50 to-slate-50 py-8 px-4 dark:from-ink-900 dark:to-ink-950">
+      <div className="mx-auto max-w-2xl space-y-6">
+        <div className="rounded-3xl bg-gradient-to-br from-brand-600 to-cyan-600 p-7 text-white shadow-lg">
+          <p className="mb-1 text-sm text-brand-100">Parent Progress Report</p>
           <h1 className="text-2xl font-black">{data.student.name}</h1>
-          <p className="text-indigo-200 text-sm mt-1">{slug?.toUpperCase()} Learning Institute</p>
+          <p className="mt-1 text-sm text-brand-100">{slug?.toUpperCase()} Learning Institute</p>
           {data.pendingPayments > 0 && (
             <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-red-500/30 px-3 py-1 text-xs font-semibold text-white">
               ⚠️ {data.pendingPayments} pending payment{data.pendingPayments > 1 ? 's' : ''}
@@ -114,38 +121,60 @@ export default function ParentTrustCenter() {
           )}
         </div>
 
-        {/* Quick stats */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 text-center shadow-sm">
-            <p className="text-3xl font-black text-indigo-600">{data.classes.length}</p>
-            <p className="text-xs text-slate-500 mt-0.5">Enrolled Classes</p>
+          <div className={stat}>
+            <p className="text-3xl font-black text-brand-600 dark:text-brand-400">{data.classes.length}</p>
+            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Enrolled Classes</p>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 text-center shadow-sm">
-            <p className={`text-3xl font-black ${avgQuiz !== null ? (avgQuiz >= 70 ? 'text-emerald-600' : avgQuiz >= 50 ? 'text-amber-600' : 'text-red-600') : 'text-slate-400'}`}>
+          <div className={stat}>
+            <p
+              className={`text-3xl font-black ${
+                avgQuiz !== null
+                  ? avgQuiz >= 70
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : avgQuiz >= 50
+                      ? 'text-amber-600 dark:text-amber-400'
+                      : 'text-red-600 dark:text-red-400'
+                  : 'text-slate-400'
+              }`}
+            >
               {avgQuiz !== null ? `${avgQuiz}%` : '—'}
             </p>
-            <p className="text-xs text-slate-500 mt-0.5">Quiz Average</p>
+            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Quiz Average</p>
           </div>
-          <div className={`rounded-2xl border p-4 text-center shadow-sm ${data.pendingPayments > 0 ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-white'}`}>
-            <p className={`text-3xl font-black ${data.pendingPayments > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+          <div
+            className={`rounded-2xl border p-4 text-center shadow-sm ${
+              data.pendingPayments > 0
+                ? 'border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/30'
+                : 'border-slate-200 bg-white dark:border-white/10 dark:bg-ink-850'
+            }`}
+          >
+            <p
+              className={`text-3xl font-black ${
+                data.pendingPayments > 0
+                  ? 'text-red-600 dark:text-red-400'
+                  : 'text-emerald-600 dark:text-emerald-400'
+              }`}
+            >
               {data.pendingPayments > 0 ? data.pendingPayments : '✓'}
             </p>
-            <p className="text-xs text-slate-500 mt-0.5">Pending Fees</p>
+            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Pending Fees</p>
           </div>
         </div>
 
-        {/* Attendance */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="font-bold text-slate-900 mb-4">Attendance (Last 60 Days)</h2>
+        <div className={panel}>
+          <h2 className="mb-4 font-bold text-slate-900 dark:text-white">Attendance (Last 60 Days)</h2>
           {data.attendanceSummary.length === 0 ? (
-            <p className="text-slate-400 text-sm">No attendance records found.</p>
+            <p className="text-sm text-slate-400">No attendance records found.</p>
           ) : (
             <div className="space-y-4">
               {data.attendanceSummary.map((a) => (
                 <div key={a.classId}>
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="text-sm font-medium text-slate-700">{a.className}</p>
-                    <span className="text-xs text-slate-400">{a.present}/{a.sessions} sessions</span>
+                  <div className="mb-1 flex items-center justify-between">
+                    <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{a.className}</p>
+                    <span className="text-xs text-slate-400">
+                      {a.present}/{a.sessions} sessions
+                    </span>
                   </div>
                   <AttendanceBar rate={a.rate} />
                 </div>
@@ -154,21 +183,30 @@ export default function ParentTrustCenter() {
           )}
         </div>
 
-        {/* Quiz Performance */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="font-bold text-slate-900 mb-4">Recent Quiz Results</h2>
+        <div className={panel}>
+          <h2 className="mb-4 font-bold text-slate-900 dark:text-white">Recent Quiz Results</h2>
           {data.quizPerformance.length === 0 ? (
-            <p className="text-slate-400 text-sm">No quiz results yet.</p>
+            <p className="text-sm text-slate-400">No quiz results yet.</p>
           ) : (
             <div className="space-y-3">
               {data.quizPerformance.map((q, i) => (
                 <div key={i} className="flex items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-800 truncate">{q.quizTitle}</p>
-                    <p className="text-xs text-slate-400">{q.className} · {new Date(q.submittedAt).toLocaleDateString()}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{q.quizTitle}</p>
+                    <p className="text-xs text-slate-400">
+                      {q.className} · {new Date(q.submittedAt).toLocaleDateString()}
+                    </p>
                   </div>
-                  <div className="text-right shrink-0">
-                    <p className={`text-sm font-bold ${q.percentage >= 70 ? 'text-emerald-600' : q.percentage >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
+                  <div className="shrink-0 text-right">
+                    <p
+                      className={`text-sm font-bold ${
+                        q.percentage >= 70
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : q.percentage >= 50
+                            ? 'text-amber-600 dark:text-amber-400'
+                            : 'text-red-600 dark:text-red-400'
+                      }`}
+                    >
                       {q.score}/{q.totalMarks}
                     </p>
                     <p className="text-xs text-slate-400">{q.percentage}%</p>
@@ -179,27 +217,32 @@ export default function ParentTrustCenter() {
           )}
         </div>
 
-        {/* Payments */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="font-bold text-slate-900 mb-4">Recent Payments</h2>
+        <div className={panel}>
+          <h2 className="mb-4 font-bold text-slate-900 dark:text-white">Recent Payments</h2>
           {data.paymentSummary.length === 0 ? (
-            <p className="text-slate-400 text-sm">No payment records found.</p>
+            <p className="text-sm text-slate-400">No payment records found.</p>
           ) : (
             <div className="space-y-2">
               {data.paymentSummary.map((p) => (
                 <div key={p.id} className="flex items-center justify-between text-sm">
                   <div>
-                    <span className="font-medium text-slate-700 capitalize">{p.type}</span>
-                    {p.month && <span className="text-slate-400 ml-1">· {p.month}</span>}
+                    <span className="font-medium capitalize text-slate-700 dark:text-slate-300">{p.type}</span>
+                    {p.month && <span className="ml-1 text-slate-400">· {p.month}</span>}
                     <p className="text-xs text-slate-400">{new Date(p.createdAt).toLocaleDateString()}</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-slate-800">Rs. {p.amount.toLocaleString()}</p>
-                    <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${
-                      p.status === 'approved' ? 'bg-emerald-100 text-emerald-700'
-                      : p.status === 'pending' ? 'bg-amber-100 text-amber-700'
-                      : 'bg-red-100 text-red-700'
-                    }`}>
+                    <p className="font-semibold text-slate-800 dark:text-slate-100">
+                      Rs. {p.amount.toLocaleString()}
+                    </p>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                        p.status === 'approved'
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                          : p.status === 'pending'
+                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+                            : 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+                      }`}
+                    >
                       {p.status}
                     </span>
                   </div>
@@ -209,7 +252,7 @@ export default function ParentTrustCenter() {
           )}
         </div>
 
-        <p className="text-center text-xs text-slate-400 pb-6">
+        <p className="pb-6 text-center text-xs text-slate-400">
           This report was prepared by {slug} institute. Link expires after 48 hours.
         </p>
       </div>

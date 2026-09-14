@@ -16,6 +16,7 @@ interface InviteDetails {
   guardianPhone: string;
   area: string;
   district: string;
+  school: string;
   address: string;
   freeIdCard: boolean;
   classTitle: string | null;
@@ -30,6 +31,7 @@ export default function StudentInvite() {
     guardianPhone: '',
     area: '',
     district: '',
+    school: '',
     address: '',
     password: '',
     confirmPassword: '',
@@ -59,6 +61,7 @@ export default function StudentInvite() {
       guardianPhone: f.guardianPhone || invite.guardianPhone,
       area: f.area || invite.area,
       district: f.district || invite.district,
+      school: f.school || invite.school || '',
       address: f.address || invite.address,
     }));
   }, [invite]);
@@ -268,6 +271,13 @@ export default function StudentInvite() {
               </option>
             ))}
           </Select>
+
+          <Input
+            label="School (optional)"
+            placeholder="e.g. Royal College"
+            value={form.school}
+            onChange={(e) => setForm({ ...form, school: e.target.value })}
+          />
 
           <Input
             label="Password"

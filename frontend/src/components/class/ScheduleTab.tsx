@@ -677,7 +677,7 @@ export function ScheduleTab({
                               setCreating(false);
                               setEditingId(schedule.id);
                             }}
-                            className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 dark:border-white/10 dark:bg-white/5"
+                            className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 dark:border-white/10 dark:bg-white/5 dark:hover:bg-brand-900/30 dark:hover:text-brand-300"
                           >
                             <Icon name="note" width={16} height={16} />
                           </button>
