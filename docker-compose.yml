@@ -1,0 +1,70 @@
+# Local / team Docker stack (Mac + Windows Docker Desktop)
+#
+# Usage:
+#   cp .env.docker.example .env
+#   docker compose up --build -d
+#   open http://localhost:8080
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mindspark}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-mindspark}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-mindspark} -d ${POSTGRES_DB:-mindspark}']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - lms
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-mindspark}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-mindspark}?schema=public
+      PORT: '4000'
+      NODE_ENV: production
+      UPLOAD_DIR: /app/uploads
+      CLIENT_URL: ${CLIENT_URL:-http://localhost:8080}
+      API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:8080}
+      SEED_ON_START: ${SEED_ON_START:-true}
+      NMS_BASE_URL: ${NMS_BASE_URL:-}
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - lms
+    expose:
+      - '4000'
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - '${HOST_PORT:-8080}:80'
+    depends_on:
+      - backend
+    networks:
+      - lms
+
+volumes:
+  pgdata:
+  uploads:
+
+networks:
+  lms:
+    driver: bridge

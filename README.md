@@ -4,6 +4,16 @@ A multi-tenant Learning Management System built with **Node.js + Express + TypeS
 
 One platform hosts many **institutes/tutors (tenants)**, each with their own students, classes, branding and fully isolated data. A platform **super-admin** provisions tenants manually.
 
+## Run with Docker
+
+For Mac or Windows teammates with **Docker Desktop** only (no local Node/Postgres):
+
+1. `cp .env.docker.example .env` (PowerShell: `Copy-Item .env.docker.example .env`)
+2. `docker compose up --build -d`
+3. Open [http://localhost:8080](http://localhost:8080)
+
+Full steps, demo logins, and OS notes: **[docs/DOCKER_SETUP.md](docs/DOCKER_SETUP.md)**.
+
 ## Features
 
 ### Platform (super-admin)
