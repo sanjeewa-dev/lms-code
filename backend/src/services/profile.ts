@@ -1,5 +1,11 @@
 import type { Role, User } from '@prisma/client';
 
+function shippingLabelPhotoUrl(user: User, tenantSlug: string | null | undefined) {
+  if (!user.shippingLabelPhotoFileId || !tenantSlug) return null;
+  // Include file id so clients reload preview after replace (path alone is stable).
+  return `/api/t/${tenantSlug}/profile/shipping-label-photo?v=${user.shippingLabelPhotoFileId}`;
+}
+
 export function serializeProfile(user: User & { tenant?: { slug: string; name: string } | null }) {
   const base = {
     id: user.id,
@@ -15,7 +21,13 @@ export function serializeProfile(user: User & { tenant?: { slug: string; name: s
   };
 
   if (user.role === 'teacher') {
-    return { ...base, subject: user.subject };
+    return {
+      ...base,
+      subject: user.subject,
+      address: user.address,
+      shippingLabelPhotoUrl: shippingLabelPhotoUrl(user, user.tenant?.slug),
+      shippingLabelPhotoOnly: user.shippingLabelPhotoOnly,
+    };
   }
 
   if (user.role === 'student') {
@@ -27,6 +39,7 @@ export function serializeProfile(user: User & { tenant?: { slug: string; name: s
       area: user.area,
       district: user.district,
       school: user.school,
+      address: user.address,
     };
   }
 

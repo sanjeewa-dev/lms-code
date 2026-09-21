@@ -5,7 +5,10 @@ import { apiErrorMessage } from '../../api/client';
 import { useTenantApi } from '../../hooks/useTenantApi';
 import { Badge, Button, Card, Spinner, statusTone } from '../ui';
 import { showToast } from '../AppToast';
-import type { MaterialPaymentItem } from '../../api/types';
+import type { MaterialPaymentItem, UserProfile } from '../../api/types';
+
+const inputCls =
+  'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-white/10 dark:bg-white/5';
 
 export function StudentMaterialPayments({ highlightMaterialId }: { highlightMaterialId?: string | null }) {
   const t = useTenantApi();
@@ -15,11 +18,19 @@ export function StudentMaterialPayments({ highlightMaterialId }: { highlightMate
   const fileRef = useRef<HTMLInputElement>(null);
   const replaceFileRef = useRef<HTMLInputElement>(null);
   const [replacingPaymentId, setReplacingPaymentId] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [delivery, setDelivery] = useState({ name: '', email: '', phone: '', address: '' });
 
   const statusQuery = useQuery({
     queryKey: ['payments-materials-status', t.slug],
     queryFn: async () =>
       (await t.get<{ items: MaterialPaymentItem[] }>('/payments/materials/status')).data.items,
+  });
+
+  const profileQuery = useQuery({
+    queryKey: ['profile', t.slug],
+    queryFn: async () => (await t.get<{ profile: UserProfile }>('/profile')).data.profile,
   });
 
   useEffect(() => {
@@ -31,8 +42,25 @@ export function StudentMaterialPayments({ highlightMaterialId }: { highlightMate
     });
   }, [highlightMaterialId]);
 
+  useEffect(() => {
+    const p = profileQuery.data;
+    if (!p) return;
+    setDelivery({
+      name: p.name,
+      email: p.email,
+      phone: p.phone ?? '',
+      address: p.address ?? '',
+    });
+  }, [profileQuery.data]);
+
   const uploadMutation = useMutation({
     mutationFn: async ({ materialIds, file }: { materialIds: string[]; file: File }) => {
+      await t.patch('/profile', {
+        name: delivery.name.trim(),
+        email: delivery.email.trim(),
+        phone: delivery.phone.trim(),
+        address: delivery.address.trim(),
+      });
       const body = new FormData();
       body.append('slip', file);
       for (const id of materialIds) body.append('materialIds', id);
@@ -41,15 +69,18 @@ export function StudentMaterialPayments({ highlightMaterialId }: { highlightMate
     onSuccess: (_data, vars) => {
       setSelected(new Set());
       setError('');
+      setConfirmOpen(false);
+      setPendingFile(null);
       if (fileRef.current) fileRef.current.value = '';
       queryClient.invalidateQueries({ queryKey: ['payments-materials-status', t.slug] });
       queryClient.invalidateQueries({ queryKey: ['payments-mine', t.slug] });
       queryClient.invalidateQueries({ queryKey: ['materials', t.slug] });
+      queryClient.invalidateQueries({ queryKey: ['profile', t.slug] });
       const count = vars.materialIds.length;
       showToast(
         count === 1
-          ? 'Material payment slip submitted. Waiting for approval.'
-          : `Payment slip submitted for ${count} materials. Waiting for approval.`
+          ? 'Material order submitted. Waiting for approval.'
+          : `Order submitted for ${count} materials. Waiting for approval.`
       );
     },
     onError: (err) => {
@@ -104,14 +135,28 @@ export function StudentMaterialPayments({ highlightMaterialId }: { highlightMate
 
   function onFileChosen(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
     const ids = [...selected];
     if (!ids.length) {
       showToast('Select at least one material to pay for.', 'error');
-      e.target.value = '';
       return;
     }
-    uploadMutation.mutate({ materialIds: ids, file });
+    setPendingFile(file);
+    setConfirmOpen(true);
+  }
+
+  function confirmAndUpload() {
+    if (!pendingFile) return;
+    if (!delivery.phone.trim() || !delivery.address.trim()) {
+      showToast('Phone and delivery address are required.', 'error');
+      return;
+    }
+    if (!delivery.name.trim() || !delivery.email.trim()) {
+      showToast('Name and email are required.', 'error');
+      return;
+    }
+    uploadMutation.mutate({ materialIds: [...selected], file: pendingFile });
   }
 
   function onReplaceFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -138,7 +183,8 @@ export function StudentMaterialPayments({ highlightMaterialId }: { highlightMate
       <Card className="rounded-2xl">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Material payments</h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Select paid tutes/materials, upload one bank slip, and unlock full preview after approval.
+          Select paid tutes/materials, confirm your delivery details, upload one bank slip, and unlock
+          full preview after approval.
         </p>
       </Card>
 
@@ -154,6 +200,68 @@ export function StudentMaterialPayments({ highlightMaterialId }: { highlightMate
         className="hidden"
         onChange={onReplaceFile}
       />
+
+      {confirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <Card className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl">
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Confirm delivery details</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              These details will be used for your tute order shipping label. Edit if needed.
+            </p>
+            <div className="mt-4 space-y-3">
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium">Full name *</span>
+                <input
+                  className={inputCls}
+                  value={delivery.name}
+                  onChange={(e) => setDelivery({ ...delivery, name: e.target.value })}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium">Email *</span>
+                <input
+                  type="email"
+                  className={inputCls}
+                  value={delivery.email}
+                  onChange={(e) => setDelivery({ ...delivery, email: e.target.value })}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium">Phone *</span>
+                <input
+                  className={inputCls}
+                  value={delivery.phone}
+                  onChange={(e) => setDelivery({ ...delivery, phone: e.target.value })}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium">Delivery address *</span>
+                <textarea
+                  className={inputCls}
+                  rows={3}
+                  value={delivery.address}
+                  onChange={(e) => setDelivery({ ...delivery, address: e.target.value })}
+                />
+              </label>
+            </div>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setConfirmOpen(false);
+                  setPendingFile(null);
+                }}
+                disabled={uploadMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button onClick={confirmAndUpload} disabled={uploadMutation.isPending}>
+                {uploadMutation.isPending ? 'Submitting…' : 'Confirm & upload slip'}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
 
       {statusQuery.isLoading ? (
         <Spinner label="Loading materials..." />

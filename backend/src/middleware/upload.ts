@@ -13,15 +13,43 @@ const DOC_TYPES = [
   'text/plain',
 ];
 
+const EXT_MIME: Record<string, string> = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+  '.pdf': 'application/pdf',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.zip': 'application/zip',
+  '.txt': 'text/plain',
+};
+
+function normalizeUploadMime(file: Express.Multer.File, allowed: string[]): string | null {
+  const mime = (file.mimetype || '').toLowerCase();
+  if (allowed.includes(mime)) return mime;
+  // Browsers sometimes send empty or generic MIME for Office docs.
+  if (!mime || mime === 'application/octet-stream') {
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    const guessed = EXT_MIME[ext];
+    if (guessed && allowed.includes(guessed)) {
+      file.mimetype = guessed;
+      return guessed;
+    }
+  }
+  return null;
+}
+
 function makeUploader(allowed: string[]) {
   return multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: env.maxUploadBytes },
     fileFilter: (_req, file, cb) => {
-      if (allowed.includes(file.mimetype)) {
+      if (normalizeUploadMime(file, allowed)) {
         cb(null, true);
       } else {
-        cb(badRequest(`Unsupported file type: ${file.mimetype}`));
+        cb(badRequest(`Unsupported file type: ${file.mimetype || path.extname(file.originalname) || 'unknown'}`));
       }
     },
   });
@@ -41,6 +69,9 @@ export const uploadCover = makeUploader(IMAGE_TYPES).single('cover');
 
 // Institute logo.
 export const uploadLogo = makeUploader(IMAGE_TYPES).single('logo');
+
+// Teacher shipping-label branding photo / flyer.
+export const uploadShippingLabelPhoto = makeUploader(IMAGE_TYPES).single('photo');
 
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'];
 

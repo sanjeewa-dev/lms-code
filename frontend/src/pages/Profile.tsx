@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, apiErrorMessage } from '../api/client';
+import { api, apiErrorMessage, authFetchBlob } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useTenantApi } from '../hooks/useTenantApi';
 import { Badge, Button, Card, Input, Select, Spinner } from '../components/ui';
@@ -8,6 +8,7 @@ import { Icon } from '../components/icons';
 import { PasswordRequirements, passwordMismatchError } from '../components/PasswordRequirements';
 import { validatePassword } from '../lib/passwordValidation';
 import { PageHeader } from '../components/tenant/TenantUi';
+import { showToast } from '../components/AppToast';
 import { SRI_LANKAN_DISTRICTS } from '../lib/districts';
 import type { UserProfile } from '../api/types';
 
@@ -19,6 +20,7 @@ export default function Profile() {
   const t = useTenantApi();
   const queryClient = useQueryClient();
   const isSuperAdmin = user?.role === 'superadmin';
+  const slug = t.slug;
 
   const [form, setForm] = useState({
     name: '',
@@ -31,7 +33,13 @@ export default function Profile() {
     area: '',
     district: '',
     school: '',
+    address: '',
+    shippingLabelPhotoOnly: false,
   });
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const photoObjectUrlRef = useRef<string | null>(null);
+  const loadedPhotoKeyRef = useRef<string | null>(null);
   const [profileError, setProfileError] = useState('');
   const [profileSuccess, setProfileSuccess] = useState('');
 
@@ -40,7 +48,7 @@ export default function Profile() {
   const [pwdSuccess, setPwdSuccess] = useState('');
 
   const profileQuery = useQuery({
-    queryKey: ['profile', isSuperAdmin ? 'platform' : t.slug],
+    queryKey: ['profile', isSuperAdmin ? 'platform' : slug],
     queryFn: async () => {
       if (isSuperAdmin) {
         return (await api.get<{ profile: UserProfile }>('/admin/profile')).data.profile;
@@ -48,24 +56,84 @@ export default function Profile() {
       return (await t.get<{ profile: UserProfile }>('/profile')).data.profile;
     },
     enabled: Boolean(user),
+    staleTime: 30_000,
   });
+
+  const photoKey = profileQuery.data?.shippingLabelPhotoUrl ?? null;
 
   useEffect(() => {
     const p = profileQuery.data;
     if (!p) return;
-    setForm({
-      name: p.name,
-      email: p.email,
-      phone: p.phone ?? '',
-      subject: p.subject ?? '',
-      guardianName: p.guardianName ?? '',
-      guardianPhone: p.guardianPhone ?? '',
-      guardianEmail: (p as { guardianEmail?: string | null }).guardianEmail ?? '',
-      area: p.area ?? '',
-      district: p.district ?? '',
-      school: p.school ?? '',
+    setForm((prev) => {
+      const next = {
+        name: p.name,
+        email: p.email,
+        phone: p.phone ?? '',
+        subject: p.subject ?? '',
+        guardianName: p.guardianName ?? '',
+        guardianPhone: p.guardianPhone ?? '',
+        guardianEmail: (p as { guardianEmail?: string | null }).guardianEmail ?? '',
+        area: p.area ?? '',
+        district: p.district ?? '',
+        school: p.school ?? '',
+        address: p.address ?? '',
+        shippingLabelPhotoOnly: Boolean(p.shippingLabelPhotoOnly),
+      };
+      const same = (Object.keys(next) as (keyof typeof next)[]).every((k) => prev[k] === next[k]);
+      return same ? prev : next;
     });
   }, [profileQuery.data]);
+
+  // Load shipping-label photo once per photoKey; never revoke the active blob in effect cleanup
+  // (that caused StrictMode / remount flicker loops).
+  useEffect(() => {
+    if (user?.role !== 'teacher' || !slug || !photoKey) {
+      if (photoObjectUrlRef.current) {
+        URL.revokeObjectURL(photoObjectUrlRef.current);
+        photoObjectUrlRef.current = null;
+      }
+      loadedPhotoKeyRef.current = null;
+      setPhotoPreviewUrl(null);
+      return;
+    }
+
+    if (loadedPhotoKeyRef.current === photoKey && photoObjectUrlRef.current) {
+      return;
+    }
+
+    let cancelled = false;
+    const path = photoKey.startsWith('/api/') ? photoKey.slice(4) : photoKey;
+
+    void (async () => {
+      try {
+        const blob = await authFetchBlob(path);
+        if (cancelled) return;
+        const url = URL.createObjectURL(blob);
+        if (photoObjectUrlRef.current) URL.revokeObjectURL(photoObjectUrlRef.current);
+        photoObjectUrlRef.current = url;
+        loadedPhotoKeyRef.current = photoKey;
+        setPhotoPreviewUrl(url);
+      } catch {
+        if (!cancelled) {
+          loadedPhotoKeyRef.current = null;
+          setPhotoPreviewUrl(null);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [photoKey, slug, user?.role]);
+
+  useEffect(() => {
+    return () => {
+      if (photoObjectUrlRef.current) {
+        URL.revokeObjectURL(photoObjectUrlRef.current);
+        photoObjectUrlRef.current = null;
+      }
+    };
+  }, []);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -78,13 +146,17 @@ export default function Profile() {
         ).data;
       }
 
-      const payload: Record<string, string> = {
+      const payload: Record<string, unknown> = {
         name: form.name.trim(),
         email: form.email.trim(),
         phone: form.phone.trim(),
       };
 
-      if (user?.role === 'teacher') payload.subject = form.subject.trim();
+      if (user?.role === 'teacher') {
+        payload.subject = form.subject.trim();
+        payload.address = form.address.trim();
+        payload.shippingLabelPhotoOnly = form.shippingLabelPhotoOnly;
+      }
       if (user?.role === 'student') {
         payload.guardianName = form.guardianName.trim();
         payload.guardianPhone = form.guardianPhone.trim();
@@ -92,6 +164,7 @@ export default function Profile() {
         payload.area = form.area.trim();
         if (form.district) payload.district = form.district;
         payload.school = form.school.trim();
+        payload.address = form.address.trim();
       }
 
       return (await t.patch<{ profile: UserProfile; user: typeof user }>('/profile', payload)).data;
@@ -99,10 +172,15 @@ export default function Profile() {
     onSuccess: (data) => {
       setProfileError('');
       setProfileSuccess('Profile updated successfully.');
+      showToast('Profile updated.');
       if (data.user) updateUser(data.user);
       queryClient.invalidateQueries({ queryKey: ['profile', isSuperAdmin ? 'platform' : t.slug] });
     },
-    onError: (err) => setProfileError(apiErrorMessage(err)),
+    onError: (err) => {
+      const msg = apiErrorMessage(err);
+      setProfileError(msg);
+      showToast(msg, 'error');
+    },
   });
 
   const passwordMutation = useMutation({
@@ -120,9 +198,14 @@ export default function Profile() {
     onSuccess: () => {
       setPwdError('');
       setPwdSuccess('Password changed successfully.');
+      showToast('Password changed.');
       setPwd({ current: '', next: '', confirm: '' });
     },
-    onError: (err) => setPwdError(apiErrorMessage(err)),
+    onError: (err) => {
+      const msg = apiErrorMessage(err);
+      setPwdError(msg);
+      showToast(msg, 'error');
+    },
   });
 
   function submitProfile(e: React.FormEvent) {
@@ -212,10 +295,148 @@ export default function Profile() {
               )}
 
               {user?.role === 'teacher' && (
-                <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Subject</span>
-                  <input className={inputCls} value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} placeholder="e.g. Mathematics" />
-                </label>
+                <>
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Subject</span>
+                    <input className={inputCls} value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} placeholder="e.g. Mathematics" />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Shipping / sender address
+                    </span>
+                    <textarea
+                      className={inputCls}
+                      rows={2}
+                      value={form.address}
+                      onChange={(e) => setForm({ ...form, address: e.target.value })}
+                      placeholder="Address printed as FROM on tute shipping labels"
+                      disabled={form.shippingLabelPhotoOnly}
+                    />
+                    <span className="mt-1 block text-xs text-slate-400">
+                      {form.shippingLabelPhotoOnly
+                        ? 'Not used while photo-only shipping labels are enabled.'
+                        : 'Used as the sender address on material order shipping labels.'}
+                    </span>
+                  </label>
+
+                  <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-white/5">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                        Shipping label photo
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        Upload your branded flyer / photo used on tute delivery labels (like a mail-merge insert).
+                      </p>
+                    </div>
+
+                    {photoPreviewUrl ? (
+                      <img
+                        src={photoPreviewUrl}
+                        alt="Shipping label photo preview"
+                        className="max-h-56 w-full rounded-lg border border-slate-200 object-contain bg-white dark:border-white/10"
+                      />
+                    ) : (
+                      <div className="flex h-28 items-center justify-center rounded-lg border border-dashed border-slate-300 text-xs text-slate-400 dark:border-white/15">
+                        No photo uploaded yet
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap gap-2">
+                      <label className="inline-flex cursor-pointer">
+                        <span className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700">
+                          {photoBusy ? 'Uploading…' : photoPreviewUrl ? 'Replace photo' : 'Upload photo'}
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/gif"
+                          className="hidden"
+                          disabled={photoBusy}
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = '';
+                            if (!file) return;
+                            setPhotoBusy(true);
+                            const localPreview = URL.createObjectURL(file);
+                            if (photoObjectUrlRef.current) URL.revokeObjectURL(photoObjectUrlRef.current);
+                            photoObjectUrlRef.current = localPreview;
+                            loadedPhotoKeyRef.current = null;
+                            setPhotoPreviewUrl(localPreview);
+                            try {
+                              const body = new FormData();
+                              body.append('photo', file);
+                              await t.post('/profile/shipping-label-photo', body);
+                              showToast('Shipping label photo uploaded');
+                              await queryClient.invalidateQueries({
+                                queryKey: ['profile', isSuperAdmin ? 'platform' : slug],
+                              });
+                            } catch (err) {
+                              if (photoObjectUrlRef.current === localPreview) {
+                                URL.revokeObjectURL(localPreview);
+                                photoObjectUrlRef.current = null;
+                              }
+                              setPhotoPreviewUrl(null);
+                              showToast(apiErrorMessage(err), 'error');
+                            } finally {
+                              setPhotoBusy(false);
+                            }
+                          }}
+                        />
+                      </label>
+                      {photoPreviewUrl && (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          disabled={photoBusy}
+                          onClick={async () => {
+                            setPhotoBusy(true);
+                            try {
+                              await t.del('/profile/shipping-label-photo');
+                              if (photoObjectUrlRef.current) {
+                                URL.revokeObjectURL(photoObjectUrlRef.current);
+                                photoObjectUrlRef.current = null;
+                              }
+                              loadedPhotoKeyRef.current = null;
+                              setPhotoPreviewUrl(null);
+                              setForm((f) => ({ ...f, shippingLabelPhotoOnly: false }));
+                              showToast('Shipping label photo removed');
+                              queryClient.invalidateQueries({
+                                queryKey: ['profile', isSuperAdmin ? 'platform' : slug],
+                              });
+                            } catch (err) {
+                              showToast(apiErrorMessage(err), 'error');
+                            } finally {
+                              setPhotoBusy(false);
+                            }
+                          }}
+                        >
+                          Remove
+                        </Button>
+                      )}
+                    </div>
+
+                    <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/5">
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={form.shippingLabelPhotoOnly}
+                        disabled={!photoPreviewUrl && !form.shippingLabelPhotoOnly}
+                        onChange={(e) =>
+                          setForm({ ...form, shippingLabelPhotoOnly: e.target.checked })
+                        }
+                      />
+                      <span>
+                        <span className="block text-sm font-medium text-slate-800 dark:text-slate-200">
+                          Prefer photo labels (skip text-only 4-up)
+                        </span>
+                        <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">
+                          When enabled, printing uses your photo on the left and full delivery details on
+                          the right (even without a sender address). Turn off to allow classic text-only
+                          labels when no photo is used.
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+                </>
               )}
 
               {user?.role === 'student' && (
@@ -248,8 +469,23 @@ export default function Profile() {
                     </Select>
                   </div>
                   <label className="block">
-                    <span className="mb-1 block text-sm font-medium text-slate-700">School</span>
-                    <input className={inputCls} value={form.school} onChange={(e) => setForm({ ...form, school: e.target.value })} />
+                    <span className="mb-1 block text-sm font-medium text-slate-700">School (optional)</span>
+                    <input
+                      className={inputCls}
+                      value={form.school}
+                      onChange={(e) => setForm({ ...form, school: e.target.value })}
+                      placeholder="e.g. Royal College, Colombo"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-medium text-slate-700">Delivery address</span>
+                    <textarea
+                      className={inputCls}
+                      rows={2}
+                      value={form.address}
+                      onChange={(e) => setForm({ ...form, address: e.target.value })}
+                      placeholder="Full address for tute / material delivery"
+                    />
                   </label>
                 </div>
               )}

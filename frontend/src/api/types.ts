@@ -32,6 +32,9 @@ export interface UserProfile {
   area?: string | null;
   district?: string | null;
   school?: string | null;
+  address?: string | null;
+  shippingLabelPhotoUrl?: string | null;
+  shippingLabelPhotoOnly?: boolean;
   status?: string;
   createdAt: string;
 }
@@ -109,6 +112,7 @@ export interface Teacher {
   email: string;
   subject: string;
   phone: string;
+  address?: string;
   createdAt: string;
   classes?: { id: string; title: string }[];
 }
@@ -390,6 +394,7 @@ export interface PublicTenant {
 }
 
 export type SelfEnrollmentAudience = 'all_students' | 'batches' | 'enrolled_in_classes';
+
 export type SelfEnrollmentScope = 'all_classes' | 'selected_classes';
 
 export interface SelfEnrollmentRule {
@@ -438,3 +443,57 @@ export interface ChatMessage {
   createdAt: string;
   mine: boolean;
 }
+
+export type MaterialOrderStatus =
+  | 'approval_pending'
+  | 'active'
+  | 'processing'
+  | 'delivered'
+  | 'cancelled'
+  | 'rejected';
+
+export interface MaterialOrderItem {
+  id: string;
+  paymentId: string;
+  materialId: string;
+  classId: string;
+  materialTitle: string;
+  classTitle: string;
+  amount: number;
+  teacherId?: string | null;
+  teacher?: {
+    id: string;
+    name: string;
+    phone: string | null;
+    address: string | null;
+    shippingLabelPhotoFileId?: string | null;
+    shippingLabelPhotoOnly?: boolean;
+  } | null;
+}
+
+export interface MaterialOrder {
+  id: string;
+  orderNo: string;
+  shippingLabelNo: string | null;
+  status: MaterialOrderStatus;
+  recipientName: string;
+  email: string;
+  phone: string;
+  address: string;
+  grade: string;
+  remarks: string | null;
+  slipFileId: string;
+  createdAt: string;
+  updatedAt: string;
+  statusChangedAt: string;
+  reviewedAt: string | null;
+  reviewedBy: { id: string; name: string } | null;
+  cancelledAt: string | null;
+  cancelledBy: { id: string; name: string } | null;
+  cancelNote: string | null;
+  materials: string[];
+  relatedClasses: string[];
+  items: MaterialOrderItem[];
+  student: { id: string; name: string; email: string; phone: string | null } | null;
+}
+

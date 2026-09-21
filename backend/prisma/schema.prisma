@@ -38,6 +38,15 @@ enum PaymentType {
   material
 }
 
+enum MaterialOrderStatus {
+  approval_pending
+  active
+  processing
+  delivered
+  cancelled
+  rejected
+}
+
 enum MaterialKind {
   material
   assessment
@@ -64,6 +73,7 @@ enum FileKind {
   avatar
   video
   logo
+  shipping_label
 }
 
 enum VideoProvider {
@@ -194,6 +204,7 @@ model Tenant {
   conversations  Conversation[]
   chatMessages   Message[]
   selfEnrollmentRules SelfEnrollmentRule[]
+  materialOrders      MaterialOrder[]
 }
 
 model User {
@@ -217,6 +228,9 @@ model User {
   freeIdCard     Boolean   @default(false)
   subject        String?
   avatarFileId   String?
+  shippingLabelPhotoFileId String?   @unique
+  shippingLabelPhotoFile   File?     @relation("UserShippingLabelPhoto", fields: [shippingLabelPhotoFileId], references: [id], onDelete: SetNull)
+  shippingLabelPhotoOnly   Boolean   @default(false)
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
@@ -248,6 +262,9 @@ model User {
   conversationsAsTeacher Conversation[] @relation("ConversationTeacher")
   conversationsAsStudent Conversation[] @relation("ConversationStudent")
   chatMessages       Message[]        @relation("MessageSender")
+  materialOrders     MaterialOrder[]  @relation("MaterialOrderStudent")
+  materialOrdersReviewed MaterialOrder[] @relation("MaterialOrderReviewer")
+  materialOrdersCancelled MaterialOrder[] @relation("MaterialOrderCanceller")
 
   @@unique([tenantId, email])
   @@index([role])
@@ -296,6 +313,8 @@ model File {
   paymentSlips Payment[]
   classCovers  Class[]
   videoLessons VideoLesson[]
+  materialOrders MaterialOrder[]
+  shippingLabelUsers User[] @relation("UserShippingLabelPhoto")
 
   @@index([tenantId])
   @@index([ownerId])
@@ -349,6 +368,7 @@ model Class {
   aiToolHistories AiToolHistory[]
   selfEnrollmentTargetRules SelfEnrollmentRule[] @relation("SelfEnrollmentTarget")
   selfEnrollmentSourceRules SelfEnrollmentRuleSourceClass[] @relation("SelfEnrollmentSource")
+  materialOrderItems MaterialOrderItem[]
 
   @@index([tenantId])
   @@index([teacherId])
@@ -576,6 +596,8 @@ model Payment {
   @@index([forMonth])
   @@index([enrollmentId, forMonth])
   @@index([paymentType])
+
+  materialOrderItem MaterialOrderItem?
 }
 
 model Material {
@@ -600,9 +622,67 @@ model Material {
 
   submissions Submission[]
   payments    Payment[]
+  orderItems  MaterialOrderItem[]
 
   @@index([tenantId])
   @@index([classId])
+}
+
+model MaterialOrder {
+  id               String              @id @default(cuid())
+  tenantId         String
+  tenant           Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  studentId        String
+  student          User                @relation("MaterialOrderStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  orderNo          String
+  shippingLabelNo  String?
+  status           MaterialOrderStatus @default(approval_pending)
+  recipientName    String
+  email            String
+  phone            String
+  address          String
+  grade            String              @default("")
+  remarks          String?             @db.Text
+  slipFileId       String
+  slipFile         File                @relation(fields: [slipFileId], references: [id])
+  reviewedById     String?
+  reviewedBy       User?               @relation("MaterialOrderReviewer", fields: [reviewedById], references: [id])
+  reviewedAt       DateTime?
+  cancelledAt      DateTime?
+  cancelledById    String?
+  cancelledBy      User?               @relation("MaterialOrderCanceller", fields: [cancelledById], references: [id])
+  cancelNote       String?
+  statusChangedAt  DateTime            @default(now())
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  items MaterialOrderItem[]
+
+  @@unique([tenantId, orderNo])
+  @@unique([tenantId, shippingLabelNo])
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+  @@index([studentId])
+  @@index([slipFileId])
+}
+
+model MaterialOrderItem {
+  id            String        @id @default(cuid())
+  orderId       String
+  order         MaterialOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  paymentId     String        @unique
+  payment       Payment       @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  materialId    String
+  material      Material      @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  classId       String
+  class         Class         @relation(fields: [classId], references: [id], onDelete: Cascade)
+  materialTitle String
+  classTitle    String
+  amount        Decimal       @db.Decimal(10, 2)
+
+  @@index([orderId])
+  @@index([classId])
+  @@index([materialId])
 }
 
 model Submission {

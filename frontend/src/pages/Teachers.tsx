@@ -15,6 +15,7 @@ interface FormState {
   password: string;
   subject: string;
   phone: string;
+  address: string;
   classIds: string[];
 }
 
@@ -24,6 +25,7 @@ const EMPTY_FORM: FormState = {
   password: '',
   subject: '',
   phone: '',
+  address: '',
   classIds: [],
 };
 
@@ -81,6 +83,7 @@ export default function Teachers() {
       password: '',
       subject: teacher.subject,
       phone: teacher.phone,
+      address: teacher.address ?? '',
       classIds: teacher.classes?.map((c) => c.id) ?? [],
     });
     setFormError('');
@@ -127,6 +130,7 @@ export default function Teachers() {
         email: form.email.trim(),
         subject: form.subject.trim(),
         phone: form.phone.trim(),
+        address: form.address.trim(),
         classIds: form.classIds,
         ...(form.password ? { password: form.password } : {}),
       };
@@ -319,6 +323,15 @@ export default function Teachers() {
                   <input className={inputCls} value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="077..." />
                 </Field>
               </div>
+              <Field label="Sender / shipping address">
+                <textarea
+                  className={inputCls}
+                  rows={2}
+                  value={form.address}
+                  onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
+                  placeholder="Address used as FROM on tute shipping labels"
+                />
+              </Field>
 
               <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 dark:border-white/10 dark:bg-white/5">
                 <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Assign to classes</p>

@@ -21,6 +21,7 @@ import aiTeacherRoutes from './aiTeacher';
 import interventionRoutes from './interventions';
 import parentTrustRoutes from './parentTrust';
 import chatRoutes from './chat';
+import materialOrderRoutes from './materialOrders';
 
 // Mounted at /api/t/:slug - all routes require an authenticated user that
 // belongs to the resolved tenant, and run inside the tenant query context.
@@ -31,6 +32,7 @@ router.use(resolveTenant, authenticate, requireTenantMatch, enterTenantContext);
 router.use(classRoutes);
 router.use(paymentRoutes);
 router.use(materialRoutes);
+router.use(materialOrderRoutes);
 router.use(submissionRoutes);
 router.use(quizRoutes);
 router.use(scheduleRoutes);

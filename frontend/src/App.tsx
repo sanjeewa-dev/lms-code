@@ -44,6 +44,7 @@ import AiTeacherCopilot from './pages/AiTeacherCopilot';
 import InterventionTimeline from './pages/InterventionTimeline';
 import ParentTrustCenter from './pages/ParentTrustCenter';
 import Chat from './pages/Chat';
+import MaterialOrders from './pages/MaterialOrders';
 
 export default function App() {
   return (
@@ -116,6 +117,14 @@ export default function App() {
             }
           />
           <Route path="payments" element={<Payments />} />
+          <Route
+            path="material-orders"
+            element={
+              <ProtectedTenant roles={['admin', 'teacher']}>
+                <MaterialOrders />
+              </ProtectedTenant>
+            }
+          />
           <Route path="profile" element={<Profile />} />
           <Route path="videos" element={<Videos />} />
           <Route path="notices" element={<Notices />} />

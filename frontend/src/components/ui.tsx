@@ -323,8 +323,8 @@ export function Modal({
 }
 
 export function statusTone(status: string): 'green' | 'amber' | 'red' | 'slate' {
-  if (status === 'active' || status === 'approved') return 'green';
-  if (status === 'pending') return 'amber';
-  if (status === 'rejected') return 'red';
+  if (status === 'active' || status === 'approved' || status === 'delivered') return 'green';
+  if (status === 'pending' || status === 'approval_pending' || status === 'processing') return 'amber';
+  if (status === 'rejected' || status === 'cancelled') return 'red';
   return 'slate';
 }

@@ -16,6 +16,7 @@ const teacherSelect = {
   name: true,
   email: true,
   phone: true,
+  address: true,
   subject: true,
   createdAt: true,
 } as const;
@@ -25,6 +26,7 @@ function serializeTeacher(t: {
   name: string;
   email: string;
   phone: string | null;
+  address?: string | null;
   subject: string | null;
   createdAt: Date;
   classesOwned?: { id: string; title: string }[];
@@ -34,6 +36,7 @@ function serializeTeacher(t: {
     name: t.name,
     email: t.email,
     phone: t.phone ?? '',
+    address: t.address ?? '',
     subject: t.subject ?? '',
     createdAt: t.createdAt,
     classes: t.classesOwned?.map((c) => ({ id: c.id, title: c.title })) ?? [],
@@ -520,6 +523,7 @@ router.post(
         status: 'approved',
         subject: data.subject || null,
         phone: data.phone || null,
+        address: data.address?.trim() || null,
       },
       select: {
         ...teacherSelect,
@@ -572,6 +576,7 @@ router.patch(
       email: data.email,
       subject: data.subject ?? undefined,
       phone: data.phone ?? undefined,
+      address: data.address !== undefined ? data.address?.trim() || null : undefined,
     };
     if (data.password) update.passwordHash = await bcrypt.hash(data.password, 10);
 

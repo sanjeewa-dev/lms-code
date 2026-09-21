@@ -18,6 +18,10 @@ import { badRequest, conflict, forbidden, notFound } from '../utils/httpError';
 import { storage } from '../services/storage';
 import { createNotification } from '../services/notifications';
 import { netClassFee } from '../lib/fees';
+import {
+  createMaterialOrderFromPayments,
+  syncMaterialOrderFromPaymentReview,
+} from '../services/materialOrders';
 
 const router = Router({ mergeParams: true });
 
@@ -393,7 +397,17 @@ router.post(
         classId: { in: classIds },
         status: 'active',
       },
-      select: { id: true, classId: true },
+      select: {
+        id: true,
+        classId: true,
+        class: {
+          select: {
+            id: true,
+            title: true,
+            batch: { select: { name: true } },
+          },
+        },
+      },
     });
     const enrollmentByClass = new Map(enrollments.map((e) => [e.classId, e]));
 
@@ -403,6 +417,17 @@ router.post(
         throw forbidden(`You must be enrolled in the class to purchase "${m.title}"`);
       }
       await assertNoDuplicateMaterialPayment(enrollment.id, m.id);
+    }
+
+    const student = await prisma.user.findFirst({
+      where: { id: req.user!.sub },
+      select: { name: true, email: true, phone: true, address: true },
+    });
+    if (!student) throw notFound('Student not found');
+    const phone = (student.phone ?? '').trim();
+    const address = (student.address ?? '').trim();
+    if (!phone || !address) {
+      throw badRequest('Please confirm your phone and delivery address before submitting a material order');
     }
 
     const slip = await persistUploadedFile(req.file, req.user!.sub, 'slip');
@@ -424,7 +449,24 @@ router.post(
               forMonth,
               status: 'pending',
             },
-            include: PAYMENT_INCLUDE,
+            include: {
+              ...PAYMENT_INCLUDE,
+              material: { select: { id: true, title: true, price: true, classId: true } },
+              enrollment: {
+                include: {
+                  student: { select: { id: true, name: true, email: true, phone: true, createdAt: true } },
+                  class: {
+                    select: {
+                      id: true,
+                      title: true,
+                      price: true,
+                      teacherId: true,
+                      batch: { select: { name: true } },
+                    },
+                  },
+                },
+              },
+            },
           });
         })
       );
@@ -435,11 +477,43 @@ router.post(
       throw err;
     }
 
+    const orderPayments = payments.map((p) => ({
+      id: p.id,
+      materialId: p.materialId!,
+      amount: p.amount,
+      material: p.material!,
+      enrollment: {
+        class: {
+          id: p.enrollment.class.id,
+          title: p.enrollment.class.title,
+          batch: (p.enrollment.class as any).batch ?? null,
+        },
+      },
+    }));
+
+    const order = await createMaterialOrderFromPayments({
+      tenantId: req.tenant!.id,
+      studentId: req.user!.sub,
+      slipFileId: slip.id,
+      payments: orderPayments,
+      recipient: {
+        name: student.name,
+        email: student.email,
+        phone,
+        address,
+      },
+    });
+
     const total = payments.reduce((sum, p) => sum + Number(p.amount), 0);
     res.status(201).json({
       payments: payments.map((p) => serializePayment(p)),
       total,
       materialCount: payments.length,
+      order: {
+        id: order.id,
+        orderNo: order.orderNo,
+        status: order.status,
+      },
     });
   })
 );
@@ -491,8 +565,18 @@ router.patch(
       )
     );
 
+    await prisma.materialOrder.updateMany({
+      where: {
+        slipFileId: oldSlipFileId,
+        studentId: req.user!.sub,
+        status: 'approval_pending',
+      },
+      data: { slipFileId: slip.id },
+    });
+
     const stillUsed = await prisma.payment.count({ where: { slipFileId: oldSlipFileId } });
-    if (stillUsed === 0) {
+    const orderStillUses = await prisma.materialOrder.count({ where: { slipFileId: oldSlipFileId } });
+    if (stillUsed === 0 && orderStillUses === 0) {
       const oldFile = await prisma.file.findFirst({ where: { id: oldSlipFileId } });
       if (oldFile) {
         await storage.remove(oldFile.storageKey).catch(() => undefined);
@@ -826,6 +910,16 @@ async function reviewPayment(paymentId: string, reviewerId: string, approve: boo
       : `Your payment for ${subjectLabel} (${payment.forMonth}) was rejected.${note ? ` Note: ${note}` : ''}`,
     link: payment.paymentType === 'material' ? '/payments?section=materials' : '/payments',
   });
+
+  if (payment.paymentType === 'material') {
+    await syncMaterialOrderFromPaymentReview(
+      payment.slipFileId,
+      payment.enrollment.studentId,
+      approve,
+      reviewerId,
+      note
+    );
+  }
 
   return updatedPayment;
 }

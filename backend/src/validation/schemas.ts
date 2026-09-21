@@ -11,7 +11,7 @@ export const registerSchema = z.object({
 });
 
 export const loginSchema = z.object({
-  email: z.string().email(),
+  email: z.string().email().transform((v) => v.toLowerCase().trim()),
   password: z.string().min(1),
 });
 
@@ -135,6 +135,7 @@ export const teacherCreateSchema = z.object({
   password: passwordSchema,
   subject: z.string().max(120).optional(),
   phone: z.string().max(40).optional(),
+  address: z.string().max(500).optional(),
   classIds: z.array(z.string().min(1)).optional(),
 });
 
@@ -144,6 +145,7 @@ export const teacherUpdateSchema = z.object({
   password: passwordSchema.optional(),
   subject: z.string().max(120).optional(),
   phone: z.string().max(40).optional(),
+  address: z.string().max(500).optional().nullable(),
   classIds: z.array(z.string().min(1)).optional(),
 });
 
@@ -159,6 +161,8 @@ export const profileUpdateSchema = z.object({
   area: z.string().max(100).optional().nullable(),
   district: z.string().max(100).optional().nullable(),
   school: z.string().max(200).optional().nullable(),
+  address: z.string().max(500).optional().nullable(),
+  shippingLabelPhotoOnly: z.coerce.boolean().optional(),
 });
 
 export const changePasswordSchema = z
@@ -179,7 +183,7 @@ export const classSchema = z.object({
   price: z.coerce.number().min(0).default(0),
   batchId: z.string().optional(),
   isPublished: z.coerce.boolean().optional(),
-  /** Institute admins may assign or reassign the class teacher. */
+  /** Institute admin may assign / reassign the class teacher. */
   teacherId: z.string().min(1).optional(),
 });
 
