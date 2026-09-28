@@ -10,6 +10,7 @@ import type { Batch, ClassSummary, Teacher } from '../../api/types';
 type ClassFormState = {
   title: string;
   description: string;
+  subject: string;
   price: string;
   batchId: string;
   teacherId: string;
@@ -20,6 +21,7 @@ function formFromClass(klass: ClassSummary): ClassFormState {
   return {
     title: klass.title,
     description: klass.description ?? '',
+    subject: klass.subject ?? '',
     price: String(klass.price ?? 0),
     batchId: klass.batch?.id ?? '',
     teacherId: klass.teacher?.id ?? '',
@@ -45,6 +47,7 @@ export function ClassEditModal({
   const [form, setForm] = useState<ClassFormState>({
     title: '',
     description: '',
+    subject: '',
     price: '0',
     batchId: '',
     teacherId: '',
@@ -77,6 +80,7 @@ export function ClassEditModal({
       const payload: Record<string, unknown> = {
           title: form.title.trim(),
           description: form.description,
+          subject: form.subject.trim(),
           price: Number(form.price) || 0,
           batchId: form.batchId || '',
           isPublished: form.isPublished,
@@ -88,6 +92,7 @@ export function ClassEditModal({
       qc.invalidateQueries({ queryKey: ['classes', t.slug] });
       qc.invalidateQueries({ queryKey: ['class', klass?.id] });
       qc.invalidateQueries({ queryKey: ['classes-catalog', t.slug] });
+      qc.invalidateQueries({ queryKey: ['question-bank-meta', t.slug] });
       onSaved?.(updated);
       onClose();
     },
@@ -106,6 +111,12 @@ export function ClassEditModal({
           label="Title"
           value={form.title}
           onChange={(e) => setForm({ ...form, title: e.target.value })}
+        />
+        <Input
+          label="Subject"
+          value={form.subject}
+          onChange={(e) => setForm({ ...form, subject: e.target.value })}
+          placeholder="e.g. ICT, Combined Maths"
         />
         <Textarea
           label="Description"

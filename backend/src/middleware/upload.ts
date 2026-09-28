@@ -61,7 +61,7 @@ export const uploadSlip = makeUploader([...IMAGE_TYPES, 'application/pdf']).sing
 // Teacher view-only materials: PDF or images (rendered server-side).
 export const uploadMaterial = makeUploader([...IMAGE_TYPES, 'application/pdf']).single('file');
 
-// Student submissions: documents or images.
+// Student submissions: documents or images (no generic zip/txt unless needed elsewhere).
 export const uploadSubmission = makeUploader([...IMAGE_TYPES, ...DOC_TYPES]).single('file');
 
 // Class cover image.
@@ -72,6 +72,26 @@ export const uploadLogo = makeUploader(IMAGE_TYPES).single('logo');
 
 // Teacher shipping-label branding photo / flyer.
 export const uploadShippingLabelPhoto = makeUploader(IMAGE_TYPES).single('photo');
+
+/** Question bank paper uploads: JPEG/PNG, PDF, or Word .docx (ScoreSmart parity). */
+export const QUESTION_BANK_PAPER_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+];
+
+export const uploadQuestionBankPaper = makeUploader(QUESTION_BANK_PAPER_TYPES).single('paper');
+
+/** Legacy attachment uploads: images, PDF, or Word. */
+export const QUESTION_BANK_UPLOAD_TYPES = [
+  ...IMAGE_TYPES,
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+];
+
+export const uploadQuestionBankFile = makeUploader(QUESTION_BANK_UPLOAD_TYPES).single('file');
 
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'];
 

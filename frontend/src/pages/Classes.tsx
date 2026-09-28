@@ -18,7 +18,14 @@ export default function Classes() {
   const base = `/${slug}`;
 
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ title: '', description: '', price: '0', batchId: '', teacherId: '' });
+  const [form, setForm] = useState({
+    title: '',
+    description: '',
+    subject: '',
+    price: '0',
+    batchId: '',
+    teacherId: '',
+  });
   const [error, setError] = useState('');
   const [showBatchForm, setShowBatchForm] = useState(false);
   const [newBatch, setNewBatch] = useState({ name: '', year: '' });
@@ -59,6 +66,7 @@ export default function Classes() {
       const body = new FormData();
       body.append('title', form.title);
       body.append('description', form.description);
+      body.append('subject', form.subject.trim());
       body.append('price', form.price);
       if (form.batchId) body.append('batchId', form.batchId);
       if (isAdmin && form.teacherId) body.append('teacherId', form.teacherId);
@@ -66,9 +74,10 @@ export default function Classes() {
     },
     onSuccess: () => {
       setShowForm(false);
-      setForm({ title: '', description: '', price: '0', batchId: '', teacherId: '' });
+      setForm({ title: '', description: '', subject: '', price: '0', batchId: '', teacherId: '' });
       setError('');
       queryClient.invalidateQueries({ queryKey: ['classes', slug] });
+      queryClient.invalidateQueries({ queryKey: ['question-bank-meta', slug] });
       showToast('Class created');
     },
     onError: (err) => setError(apiErrorMessage(err)),
@@ -130,6 +139,12 @@ export default function Classes() {
           <h2 className="mb-3 text-lg font-semibold">Create a class</h2>
           <div className="space-y-3">
             <Input label="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+            <Input
+              label="Subject"
+              value={form.subject}
+              onChange={(e) => setForm({ ...form, subject: e.target.value })}
+              placeholder="e.g. ICT, Combined Maths"
+            />
             <Textarea
               label="Description"
               rows={3}
@@ -210,7 +225,10 @@ export default function Classes() {
               </div>
             )}
             {error && <p className="text-sm text-red-600">{error}</p>}
-            <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending || !form.title}>
+            <Button
+              onClick={() => createMutation.mutate()}
+              disabled={createMutation.isPending || !form.title.trim() || !form.subject.trim()}
+            >
               {createMutation.isPending ? 'Creating...' : 'Create class'}
             </Button>
           </div>

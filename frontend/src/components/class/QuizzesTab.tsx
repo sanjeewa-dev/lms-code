@@ -149,6 +149,12 @@ export function QuizzesTab({
     <div className="space-y-4">
       {canManage && !editorOpen && (
         <div className="flex flex-wrap items-center justify-end gap-2">
+          <Link
+            to={`${appBase}/quiz-analytics`}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
+          >
+            Quiz analytics
+          </Link>
           <button
             type="button"
             onClick={() => {
@@ -164,14 +170,16 @@ export function QuizzesTab({
             AI generate
           </button>
           <button
+            type="button"
             onClick={() => {
               setEditingQuizId(null);
               setAiOpen(false);
               setBuilding(true);
             }}
-            className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700"
+            className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700"
           >
-            <span className="text-lg leading-none">+</span> New quiz
+            <Icon name="quiz" width={16} height={16} />
+            Create MCQ quiz
           </button>
         </div>
       )}
@@ -302,7 +310,25 @@ export function QuizzesTab({
             })}
           </ul>
         ) : (
-          <p className="p-5 text-sm text-slate-500">No quizzes yet.</p>
+          <p className="p-5 text-sm text-slate-500">
+            No quizzes yet.
+            {canManage && (
+              <>
+                {' '}
+                <button
+                  type="button"
+                  className="font-semibold text-brand-700 hover:underline dark:text-brand-300"
+                  onClick={() => {
+                    setEditingQuizId(null);
+                    setAiOpen(false);
+                    setBuilding(true);
+                  }}
+                >
+                  Create MCQ quiz
+                </button>
+              </>
+            )}
+          </p>
         )}
       </Card>
     </div>

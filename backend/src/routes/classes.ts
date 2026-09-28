@@ -22,6 +22,7 @@ import { assertCanManageClass, isInstituteAdminRole } from '../services/classAcc
 import { canStudentSelfEnroll, listCatalogClassIds } from '../services/selfEnrollmentPolicy';
 import { sendEnrollmentFeeReminder } from '../services/smartJobs';
 import { badRequest, forbidden, notFound } from '../utils/httpError';
+import { ensureQuestionBank, normalizeSubject } from '../services/questionBank';
 import { z } from 'zod';
 
 // Mounted under /api/t/:slug (tenant context already established).
@@ -32,6 +33,7 @@ function serializeClass(klass: any) {
     id: klass.id,
     title: klass.title,
     description: klass.description,
+    subject: klass.subject ?? '',
     price: Number(klass.price),
     isPublished: klass.isPublished,
     coverImageId: klass.coverImageId,
@@ -184,6 +186,7 @@ router.post(
         tenantId: req.tenant!.id,
         title: data.title,
         description: data.description ?? '',
+        subject: normalizeSubject(data.subject),
         price: data.price,
         isPublished: data.isPublished ?? true,
         teacherId,
@@ -195,6 +198,15 @@ router.post(
         batch: { select: { id: true, name: true } },
       },
     });
+
+    // Ensure question bank for teacher + class subject (+ batch grade when present)
+    await ensureQuestionBank({
+      tenantId: req.tenant!.id,
+      ownerId: teacherId,
+      subject: klass.subject,
+      grade: klass.batch?.name ?? '',
+    });
+
     res.status(201).json({ class: serializeClass(klass) });
   })
 );
@@ -227,6 +239,7 @@ router.patch(
       data: {
         ...(data.title !== undefined ? { title: data.title } : {}),
         ...(data.description !== undefined ? { description: data.description } : {}),
+        ...(data.subject !== undefined ? { subject: normalizeSubject(data.subject) } : {}),
         ...(data.price !== undefined ? { price: data.price } : {}),
         ...(data.isPublished !== undefined ? { isPublished: data.isPublished } : {}),
         ...(data.batchId !== undefined ? { batchId: data.batchId || null } : {}),
@@ -238,6 +251,16 @@ router.patch(
         _count: { select: { enrollments: true } },
       },
     });
+
+    if (updated.subject) {
+      await ensureQuestionBank({
+        tenantId: req.tenant!.id,
+        ownerId: updated.teacherId,
+        subject: updated.subject,
+        grade: updated.batch?.name ?? '',
+      });
+    }
+
     res.json({ class: serializeClass(updated) });
   })
 );

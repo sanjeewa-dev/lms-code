@@ -4,10 +4,47 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { authenticate, requireRole, requireActiveEnrollment } from '../middleware/auth';
 import { quizSchema, quizUpdateSchema, submitAttemptSchema } from '../validation/schemas';
 import { gradeAttempt, isAttemptExpired } from '../services/quiz';
+import { buildTopicMapping, seededShuffle } from '../services/topicMapping';
 import { studentHasContentAccess } from '../services/access';
 import { badRequest, conflict, forbidden, notFound } from '../utils/httpError';
 
 const router = Router({ mergeParams: true });
+
+type QuestionInput = {
+  text: string;
+  options: string[];
+  correctIndex: number;
+  marks: number;
+  topic?: string;
+  quizTopicId?: string | null;
+  complexity?: string;
+  imageUrls?: string[];
+  sourceBankItemId?: string;
+};
+
+function questionCreateData(tenantId: string, q: QuestionInput, index: number) {
+  return {
+    tenantId,
+    text: q.text,
+    options: q.options,
+    correctIndex: q.correctIndex,
+    marks: q.marks,
+    order: index,
+    topic: q.topic?.trim() || 'General',
+    quizTopicId: q.quizTopicId ?? null,
+    complexity: q.complexity ?? 'not_defined',
+    sourceBankItemId: q.sourceBankItemId,
+    images: q.imageUrls?.length
+      ? {
+          create: q.imageUrls.map((imageUrl, i) => ({
+            tenantId,
+            imageUrl,
+            sortOrder: i,
+          })),
+        }
+      : undefined,
+  };
+}
 
 async function assertClassOwner(req: any, classId: string) {
   const klass = await prisma.class.findFirst({ where: { id: classId } });
@@ -39,15 +76,17 @@ router.post(
         availableFrom: data.availableFrom,
         availableTo: data.availableTo,
         isPublished: data.isPublished ?? false,
-        questions: {
-          create: data.questions.map((q, index) => ({
-            tenantId,
-            text: q.text,
-            options: q.options,
-            correctIndex: q.correctIndex,
-            marks: q.marks,
+        shuffleQuestions: data.shuffleQuestions ?? false,
+        navigationMode: data.navigationMode ?? 'bidirectional',
+        timeRemindersMinutes: data.timeRemindersMinutes ?? [],
+        topicMapping: buildTopicMapping(
+          data.questions.map((q, index) => ({
+            topic: q.topic,
             order: index,
-          })),
+          }))
+        ),
+        questions: {
+          create: data.questions.map((q, index) => questionCreateData(tenantId, q, index)),
         },
       },
       include: { _count: { select: { questions: true } } },
@@ -114,7 +153,7 @@ router.get(
     const quiz = await prisma.quiz.findFirst({
       where: { id: req.params.quizId },
       include: {
-        questions: { orderBy: { order: 'asc' } },
+        questions: { orderBy: { order: 'asc' }, include: { images: { orderBy: { sortOrder: 'asc' } } } },
         class: { select: { teacherId: true } },
         _count: { select: { attempts: true } },
       },
@@ -222,6 +261,9 @@ router.patch(
       data.availableFrom === undefined &&
       data.availableTo === undefined &&
       data.isPublished === undefined &&
+      data.shuffleQuestions === undefined &&
+      data.navigationMode === undefined &&
+      data.timeRemindersMinutes === undefined &&
       data.questions === undefined
     ) {
       throw badRequest('No fields to update');
@@ -241,7 +283,11 @@ router.patch(
       availableFrom?: Date | null;
       availableTo?: Date | null;
       isPublished?: boolean;
+      shuffleQuestions?: boolean;
+      navigationMode?: string;
+      timeRemindersMinutes?: number[];
       totalMarks?: number;
+      topicMapping?: ReturnType<typeof buildTopicMapping>;
     } = {};
 
     if (data.title !== undefined) updateData.title = data.title;
@@ -250,9 +296,17 @@ router.patch(
     if (data.availableFrom !== undefined) updateData.availableFrom = data.availableFrom;
     if (data.availableTo !== undefined) updateData.availableTo = data.availableTo;
     if (data.isPublished !== undefined) updateData.isPublished = data.isPublished;
+    if (data.shuffleQuestions !== undefined) updateData.shuffleQuestions = data.shuffleQuestions;
+    if (data.navigationMode !== undefined) updateData.navigationMode = data.navigationMode;
+    if (data.timeRemindersMinutes !== undefined) {
+      updateData.timeRemindersMinutes = data.timeRemindersMinutes;
+    }
 
     if (data.questions) {
       updateData.totalMarks = data.questions.reduce((sum, q) => sum + q.marks, 0);
+      updateData.topicMapping = buildTopicMapping(
+        data.questions.map((q, index) => ({ topic: q.topic, order: index }))
+      );
       await prisma.$transaction([
         prisma.question.deleteMany({ where: { quizId: quiz.id } }),
         prisma.quiz.update({
@@ -260,14 +314,7 @@ router.patch(
           data: {
             ...updateData,
             questions: {
-              create: data.questions.map((q, index) => ({
-                tenantId,
-                text: q.text,
-                options: q.options,
-                correctIndex: q.correctIndex,
-                marks: q.marks,
-                order: index,
-              })),
+              create: data.questions.map((q, index) => questionCreateData(tenantId, q, index)),
             },
           },
           include: { _count: { select: { questions: true } } },
@@ -282,7 +329,10 @@ router.patch(
 
     const updated = await prisma.quiz.findFirst({
       where: { id: quiz.id },
-      include: { _count: { select: { questions: true } }, questions: { orderBy: { order: 'asc' } } },
+      include: {
+        _count: { select: { questions: true } },
+        questions: { orderBy: { order: 'asc' }, include: { images: true } },
+      },
     });
     res.json({ quiz: updated });
   })
@@ -314,7 +364,12 @@ router.post(
   asyncHandler(async (req, res) => {
     const quiz = await prisma.quiz.findFirst({
       where: { id: req.params.quizId },
-      include: { questions: { orderBy: { order: 'asc' } } },
+      include: {
+        questions: {
+          orderBy: { order: 'asc' },
+          include: { images: { orderBy: { sortOrder: 'asc' } } },
+        },
+      },
     });
     if (!quiz || !quiz.isPublished) throw notFound('Quiz not found');
 
@@ -344,12 +399,21 @@ router.post(
     let attempt = existing;
     if (!attempt) {
       try {
+        const orderedIds = quiz.shuffleQuestions
+          ? seededShuffle(
+              quiz.questions.map((q) => q.id),
+              `${quiz.id}:${req.user!.sub}`
+            )
+          : quiz.questions.map((q) => q.id);
         attempt = await prisma.quizAttempt.create({
-          data: { tenantId: req.tenant!.id, quizId: quiz.id, studentId: req.user!.sub },
+          data: {
+            tenantId: req.tenant!.id,
+            quizId: quiz.id,
+            studentId: req.user!.sub,
+            displayOrder: orderedIds,
+          },
         });
       } catch (err) {
-        // Concurrent "Start" (e.g. React Strict Mode double-mount) can race the unique
-        // (quizId, studentId) constraint — recover by loading the winner.
         const code = typeof err === 'object' && err && 'code' in err ? (err as { code?: string }).code : undefined;
         if (code !== 'P2002') throw err;
         attempt = await prisma.quizAttempt.findFirst({
@@ -360,17 +424,32 @@ router.post(
       }
     }
 
+    const orderIds = Array.isArray(attempt.displayOrder)
+      ? (attempt.displayOrder as string[])
+      : quiz.questions.map((q) => q.id);
+    const byId = new Map(quiz.questions.map((q) => [q.id, q]));
+    const orderedQuestions = orderIds.map((id) => byId.get(id)).filter(Boolean) as typeof quiz.questions;
+
+    const reminders = Array.isArray(quiz.timeRemindersMinutes)
+      ? (quiz.timeRemindersMinutes as number[])
+      : [];
+
     res.status(201).json({
       attempt: { id: attempt.id, startedAt: attempt.startedAt },
       quiz: {
         id: quiz.id,
         title: quiz.title,
         timeLimitSec: quiz.timeLimitSec,
-        questions: quiz.questions.map((q) => ({
+        navigationMode: quiz.navigationMode,
+        shuffleQuestions: quiz.shuffleQuestions,
+        timeRemindersMinutes: reminders,
+        questions: orderedQuestions.map((q) => ({
           id: q.id,
           text: q.text,
           options: q.options,
           marks: q.marks,
+          topic: q.topic,
+          images: q.images.map((img) => ({ id: img.id, imageUrl: img.imageUrl })),
         })),
       },
     });
@@ -409,7 +488,12 @@ router.post(
       }),
       prisma.quizAttempt.update({
         where: { id: attempt.id },
-        data: { submittedAt: new Date(), score: result.score },
+        data: {
+          submittedAt: new Date(),
+          score: result.score,
+          topicBreakdown: result.topicBreakdown,
+          questionScores: result.questionScores,
+        },
       }),
     ]);
 
@@ -419,6 +503,7 @@ router.post(
         totalMarks: result.totalMarks,
         correctCount: result.correctCount,
         questionCount: attempt.quiz.questions.length,
+        topicBreakdown: result.topicBreakdown,
       },
     });
   })
@@ -433,7 +518,13 @@ router.get(
       include: {
         answers: true,
         quiz: {
-          include: { questions: { orderBy: { order: 'asc' } }, class: { select: { teacherId: true } } },
+          include: {
+            questions: {
+              orderBy: { order: 'asc' },
+              include: { images: { orderBy: { sortOrder: 'asc' } } },
+            },
+            class: { select: { teacherId: true } },
+          },
         },
       },
     });
@@ -458,6 +549,7 @@ router.get(
         quizId: attempt.quizId,
         quizTitle: attempt.quiz.title,
         classId: attempt.quiz.classId,
+        topicBreakdown: attempt.topicBreakdown ?? null,
         questions: attempt.quiz.questions.map((q) => {
           const ans = answerMap.get(q.id);
           const steps = ans?.explanationSteps;
@@ -468,6 +560,8 @@ router.get(
             correctIndex: q.correctIndex,
             selectedIndex: ans?.selectedIndex ?? -1,
             marks: q.marks,
+            topic: q.topic,
+            images: q.images.map((img) => ({ id: img.id, imageUrl: img.imageUrl })),
             explanation: ans?.explanation ?? null,
             explanationSteps: Array.isArray(steps) ? (steps as string[]) : null,
           };

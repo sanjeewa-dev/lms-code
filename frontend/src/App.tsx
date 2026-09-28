@@ -45,6 +45,8 @@ import InterventionTimeline from './pages/InterventionTimeline';
 import ParentTrustCenter from './pages/ParentTrustCenter';
 import Chat from './pages/Chat';
 import MaterialOrders from './pages/MaterialOrders';
+import QuestionBankPage from './pages/QuestionBankPage';
+import QuizAnalyticsPage from './pages/QuizAnalyticsPage';
 
 export default function App() {
   return (
@@ -100,6 +102,15 @@ export default function App() {
           <Route path="materials/:materialId" element={<MaterialViewer />} />
           <Route path="quizzes/:quizId/take" element={<QuizRunner />} />
           <Route path="attempts/:attemptId/result" element={<QuizResult />} />
+          <Route
+            path="question-bank"
+            element={
+              <ProtectedTenant roles={['admin', 'teacher']}>
+                <QuestionBankPage />
+              </ProtectedTenant>
+            }
+          />
+          <Route path="quiz-analytics" element={<QuizAnalyticsPage />} />
           <Route
             path="students"
             element={

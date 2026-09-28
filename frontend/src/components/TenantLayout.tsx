@@ -81,6 +81,8 @@ export function TenantLayout() {
         { to: `${base}/material-orders`, label: 'Tute Orders', icon: 'payments', roles: ['admin', 'teacher'] },
         { to: `${base}/attendance`, label: 'Attendance', icon: 'note', roles: ['admin', 'teacher'] },
         { to: `${base}/ai-copilot`, label: 'AI Copilot', icon: 'spark', roles: ['admin', 'teacher'] },
+        { to: `${base}/question-bank`, label: 'Question bank', icon: 'note', roles: ['admin', 'teacher'] },
+        { to: `${base}/quiz-analytics`, label: 'Quiz analytics', icon: 'dashboard', roles: ['admin', 'teacher', 'student'] },
         { to: `${base}/interventions`, label: 'Interventions', icon: 'bell', roles: ['admin', 'teacher'] },
       ],
     },

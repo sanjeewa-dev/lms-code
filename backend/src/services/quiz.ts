@@ -1,8 +1,17 @@
 import type { Question } from '@prisma/client';
+import { aggregateTopicBreakdown, type TopicBreakdown } from './topicMapping';
 
 export interface SubmittedAnswer {
   questionId: string;
   selectedIndex: number;
+}
+
+export interface QuestionScoreRow {
+  questionId: string;
+  correct: boolean;
+  marks: number;
+  earned: number;
+  topic: string;
 }
 
 export interface GradeResult {
@@ -10,6 +19,8 @@ export interface GradeResult {
   totalMarks: number;
   correctCount: number;
   gradedAnswers: { questionId: string; selectedIndex: number; correct: boolean }[];
+  questionScores: QuestionScoreRow[];
+  topicBreakdown: TopicBreakdown;
 }
 
 /**
@@ -26,19 +37,32 @@ export function gradeAttempt(
   let correctCount = 0;
   let totalMarks = 0;
   const gradedAnswers: GradeResult['gradedAnswers'] = [];
+  const questionScores: QuestionScoreRow[] = [];
 
   for (const question of questions) {
     totalMarks += question.marks;
     const selectedIndex = answerMap.get(question.id) ?? -1;
     const correct = selectedIndex === question.correctIndex;
+    const topic = (question as Question & { topic?: string }).topic?.trim() || 'General';
     if (correct) {
       score += question.marks;
       correctCount += 1;
     }
     gradedAnswers.push({ questionId: question.id, selectedIndex, correct });
+    questionScores.push({
+      questionId: question.id,
+      correct,
+      marks: question.marks,
+      earned: correct ? question.marks : 0,
+      topic,
+    });
   }
 
-  return { score, totalMarks, correctCount, gradedAnswers };
+  const topicBreakdown = aggregateTopicBreakdown(
+    questionScores.map((q) => ({ topic: q.topic, correct: q.correct }))
+  );
+
+  return { score, totalMarks, correctCount, gradedAnswers, questionScores, topicBreakdown };
 }
 
 /**

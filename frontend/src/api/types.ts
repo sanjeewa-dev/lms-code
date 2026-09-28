@@ -121,6 +121,7 @@ export interface ClassSummary {
   id: string;
   title: string;
   description: string;
+  subject?: string;
   price: number;
   isPublished: boolean;
   coverImageId?: string | null;
@@ -264,11 +265,27 @@ export interface AttemptQuestion {
   text: string;
   options: string[];
   marks: number;
+  topic?: string;
+  images?: { id: string; imageUrl: string }[];
 }
 
 export interface AttemptStart {
   attempt: { id: string; startedAt: string };
-  quiz: { id: string; title: string; timeLimitSec: number; questions: AttemptQuestion[] };
+  quiz: {
+    id: string;
+    title: string;
+    timeLimitSec: number;
+    navigationMode?: string;
+    shuffleQuestions?: boolean;
+    timeRemindersMinutes?: number[];
+    questions: AttemptQuestion[];
+  };
+}
+
+export interface TopicBreakdownStat {
+  correct: number;
+  total: number;
+  percentage: number;
 }
 
 export interface AttemptResult {
@@ -280,6 +297,7 @@ export interface AttemptResult {
   quizId?: string;
   quizTitle?: string;
   classId?: string;
+  topicBreakdown?: Record<string, TopicBreakdownStat> | null;
   questions?: {
     id: string;
     text: string;
@@ -287,6 +305,8 @@ export interface AttemptResult {
     correctIndex: number;
     selectedIndex: number;
     marks: number;
+    topic?: string;
+    images?: { id: string; imageUrl: string }[];
     explanation?: string | null;
     explanationSteps?: string[] | null;
   }[];

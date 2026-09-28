@@ -180,6 +180,8 @@ export const changePasswordSchema = z
 export const classSchema = z.object({
   title: z.string().min(2).max(150),
   description: z.string().max(5000).optional(),
+  /** Class subject — used with teacher (+ batch grade) for question banks. */
+  subject: z.string().min(1).max(120),
   price: z.coerce.number().min(0).default(0),
   batchId: z.string().optional(),
   isPublished: z.coerce.boolean().optional(),
@@ -361,6 +363,11 @@ export const questionInputSchema = z.object({
   options: z.array(z.string().min(1)).min(2).max(8),
   correctIndex: z.coerce.number().int().min(0),
   marks: z.coerce.number().min(0).default(1),
+  topic: z.string().min(1).max(120).default('General'),
+  quizTopicId: z.string().min(1).nullable().optional(),
+  complexity: z.enum(['not_defined', 'low', 'medium', 'high']).default('not_defined'),
+  imageUrls: z.array(z.string().min(1)).max(5).optional(),
+  sourceBankItemId: z.string().min(1).optional(),
 });
 
 export const quizSchema = z
@@ -371,6 +378,9 @@ export const quizSchema = z
     availableFrom: z.coerce.date().optional(),
     availableTo: z.coerce.date().optional(),
     isPublished: z.coerce.boolean().optional(),
+    shuffleQuestions: z.coerce.boolean().optional(),
+    navigationMode: z.enum(['bidirectional', 'unidirectional']).optional(),
+    timeRemindersMinutes: z.array(z.coerce.number().int().positive()).max(6).optional(),
     questions: z.array(questionInputSchema).min(1),
   })
   .refine((data) => data.questions.every((q) => q.correctIndex < q.options.length), {
@@ -386,6 +396,9 @@ export const quizUpdateSchema = z
     availableFrom: z.coerce.date().nullable().optional(),
     availableTo: z.coerce.date().nullable().optional(),
     isPublished: z.coerce.boolean().optional(),
+    shuffleQuestions: z.coerce.boolean().optional(),
+    navigationMode: z.enum(['bidirectional', 'unidirectional']).optional(),
+    timeRemindersMinutes: z.array(z.coerce.number().int().positive()).max(6).optional(),
     questions: z.array(questionInputSchema).min(1).optional(),
   })
   .refine(
@@ -397,6 +410,92 @@ export const quizUpdateSchema = z
       path: ['questions'],
     }
   );
+
+export const quizTopicSchema = z.object({
+  name: z.string().min(1).max(120),
+});
+
+export const questionBankItemSchema = z
+  .object({
+    bankId: z.string().min(1, 'Select a question bank first'),
+    subject: z.string().min(1).max(120).optional(),
+    grade: z.string().max(120).optional(),
+    text: z.string().min(1),
+    options: z.array(z.string().min(1)).min(2).max(8),
+    correctIndex: z.coerce.number().int().min(0),
+    marks: z.coerce.number().min(0).default(1),
+    topic: z.string().min(1).max(120).default('General'),
+    complexity: z.enum(['not_defined', 'low', 'medium', 'high']).default('not_defined'),
+    imageUrls: z.array(z.string().min(1)).max(5).optional(),
+  })
+  .refine((data) => data.correctIndex < data.options.length, {
+    message: 'correctIndex must be within the options range',
+    path: ['correctIndex'],
+  });
+
+export const questionBankBulkItemsSchema = z.object({
+  bankId: z.string().min(1, 'Select a question bank first'),
+  items: z
+    .array(
+      z
+        .object({
+          text: z.string().min(1),
+          options: z.array(z.string().min(1)).min(2).max(8),
+          correctIndex: z.coerce.number().int().min(0),
+          marks: z.coerce.number().min(0).default(1),
+          topic: z.string().min(1).max(120).default('General'),
+          complexity: z.enum(['not_defined', 'low', 'medium', 'high']).default('not_defined'),
+        })
+        .refine((data) => data.correctIndex < data.options.length, {
+          message: 'correctIndex must be within the options range',
+        })
+    )
+    .min(1)
+    .max(200),
+});
+
+export const questionBankConfirmPaperSchema = z.object({
+  items: z
+    .array(
+      z
+        .object({
+          text: z.string().min(1),
+          options: z.array(z.string()).min(2).max(8),
+          correctIndex: z.coerce.number().int().min(0),
+          marks: z.coerce.number().min(0).default(1),
+          topic: z.string().min(1).max(120).default('General'),
+          complexity: z.enum(['not_defined', 'low', 'medium', 'high']).default('not_defined'),
+          imageUrls: z.array(z.string().min(1)).max(5).optional(),
+        })
+        .refine((data) => data.correctIndex < data.options.length, {
+          message: 'Pick a correct answer for each question',
+          path: ['correctIndex'],
+        })
+        .refine((data) => data.options.filter((o) => o.trim()).length >= 2, {
+          message: 'Each question needs at least 2 options',
+          path: ['options'],
+        })
+    )
+    .min(1)
+    .max(200),
+});
+
+export const questionBankCreateSchema = z.object({
+  subject: z.string().min(1).max(120),
+  grade: z.string().max(120).optional().default(''),
+  title: z.string().min(1).max(200).optional(),
+});
+
+export const importBankItemsSchema = z.object({
+  itemIds: z.array(z.string().min(1)).min(1).max(100),
+});
+
+export const saveQuestionsToBankSchema = z.object({
+  questionIds: z.array(z.string().min(1)).min(1).max(100).optional(),
+  subject: z.string().min(1).max(120).optional(),
+  grade: z.string().max(120).optional(),
+  bankId: z.string().min(1).optional(),
+});
 
 export const submitAttemptSchema = z.object({
   answers: z

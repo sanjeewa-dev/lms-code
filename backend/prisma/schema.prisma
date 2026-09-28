@@ -74,6 +74,8 @@ enum FileKind {
   video
   logo
   shipping_label
+  question_figure
+  question_bank
 }
 
 enum VideoProvider {
@@ -178,12 +180,19 @@ model Tenant {
   submissions  Submission[]
   quizzes      Quiz[]
   questions    Question[]
+  questionImages QuestionImage[]
   attempts     QuizAttempt[]
   answers      Answer[]
   files        File[]
   batches      Batch[]
   videoLessons VideoLesson[]
   classTopics  ClassTopic[]
+  quizTopics   QuizTopic[]
+  questionBanks QuestionBank[]
+  questionBankItems QuestionBankItem[]
+  questionBankImages QuestionBankItemImage[]
+  questionBankAttachments QuestionBankAttachment[]
+  questionBankPapers QuestionBankPaper[]
   notices      Notice[]
   events       Event[]
   studentInvites StudentInvite[]
@@ -248,6 +257,9 @@ model User {
   adminInvitesReceived AdminInvite[] @relation("AdminInvitesReceived")
   classInviteLinksCreated ClassInviteLink[] @relation("ClassInviteLinkCreator")
   noticeReads        NoticeRead[]
+  quizTopicsCreated  QuizTopic[]     @relation("QuizTopicCreator")
+  questionBanks      QuestionBank[]  @relation("QuestionBankOwner")
+  questionBankPapers QuestionBankPaper[] @relation("QuestionBankPaperUploader")
   attendancesMarked  Attendance[]    @relation("AttendanceMarker")
   attendances        Attendance[]    @relation("AttendanceStudent")
   notifications      Notification[]
@@ -315,6 +327,7 @@ model File {
   videoLessons VideoLesson[]
   materialOrders MaterialOrder[]
   shippingLabelUsers User[] @relation("UserShippingLabelPhoto")
+  questionBankAttachments QuestionBankAttachment[]
 
   @@index([tenantId])
   @@index([ownerId])
@@ -341,6 +354,8 @@ model Class {
   tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   title        String
   description  String   @default("")
+  /// Subject taught in this class (drives question-bank teacher+subject[+grade] matching).
+  subject      String   @default("")
   price        Decimal  @default(0) @db.Decimal(10, 2)
   coverImageId String?
   coverImage   File?    @relation(fields: [coverImageId], references: [id])
@@ -358,6 +373,7 @@ model Class {
   quizzes      Quiz[]
   videoLessons VideoLesson[]
   topics       ClassTopic[]
+  quizTopicLinks QuizTopicClass[]
   studentInvites StudentInvite[]
   classInviteLinks ClassInviteLink[]
   noticeClasses  NoticeClass[]
@@ -707,20 +723,28 @@ model Submission {
 }
 
 model Quiz {
-  id            String    @id @default(cuid())
-  tenantId      String
-  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  classId       String
-  class         Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
-  title         String
-  description   String    @default("")
-  timeLimitSec  Int       @default(0)
-  totalMarks    Float     @default(0)
-  availableFrom DateTime?
-  availableTo   DateTime?
-  isPublished   Boolean   @default(false)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                   String    @id @default(cuid())
+  tenantId             String
+  tenant               Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  classId              String
+  class                Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  title                String
+  description          String    @default("")
+  timeLimitSec         Int       @default(0)
+  totalMarks           Float     @default(0)
+  availableFrom        DateTime?
+  availableTo          DateTime?
+  isPublished          Boolean   @default(false)
+  /// Present questions in a per-student shuffled order.
+  shuffleQuestions     Boolean   @default(false)
+  /// bidirectional | unidirectional
+  navigationMode       String    @default("bidirectional")
+  /// Minutes-before-end alerts, e.g. [30, 15, 10]
+  timeRemindersMinutes Json      @default("[]")
+  /// Aggregated topic → question numbers for analytics { entries: [{ topic, questionNumbers }] }
+  topicMapping         Json?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   questions Question[]
   attempts  QuizAttempt[]
@@ -730,40 +754,208 @@ model Quiz {
 }
 
 model Question {
-  id           String   @id @default(cuid())
-  tenantId     String
-  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  quizId       String
-  quiz         Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
-  text         String
-  options      Json
-  correctIndex Int
-  marks        Float    @default(1)
-  order        Int      @default(0)
+  id               String    @id @default(cuid())
+  tenantId         String
+  tenant           Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  quizId           String
+  quiz             Quiz      @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  text             String
+  options          Json
+  correctIndex     Int
+  marks            Float     @default(1)
+  order            Int       @default(0)
+  topic            String    @default("General")
+  quizTopicId      String?
+  quizTopic        QuizTopic? @relation(fields: [quizTopicId], references: [id], onDelete: SetNull)
+  /// not_defined | low | medium | high
+  complexity       String    @default("not_defined")
+  sourceBankItemId String?
 
   answers Answer[]
+  images  QuestionImage[]
 
   @@index([tenantId])
   @@index([quizId])
+  @@index([quizTopicId])
+}
+
+model QuestionImage {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  questionId String
+  question  Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  imageUrl  String
+  fileId    String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([questionId])
 }
 
 model QuizAttempt {
-  id          String    @id @default(cuid())
-  tenantId    String
-  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  quizId      String
-  quiz        Quiz      @relation(fields: [quizId], references: [id], onDelete: Cascade)
-  studentId   String
-  student     User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  startedAt   DateTime  @default(now())
-  submittedAt DateTime?
-  score       Float?
+  id             String    @id @default(cuid())
+  tenantId       String
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  quizId         String
+  quiz           Quiz      @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  studentId      String
+  student        User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  startedAt      DateTime  @default(now())
+  submittedAt    DateTime?
+  score          Float?
+  /// Per-topic { correct, total, percentage }
+  topicBreakdown Json?
+  /// Per-question score rows [{ questionId, correct, marks, earned, topic }]
+  questionScores Json?
+  /// Shuffled question id order for this attempt
+  displayOrder   Json?
 
   answers Answer[]
 
   @@unique([quizId, studentId])
   @@index([tenantId])
   @@index([studentId])
+}
+
+/// Exam taxonomy topics (separate from video ClassTopic playlists).
+model QuizTopic {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  createdById String?
+  createdBy   User?    @relation("QuizTopicCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  classes   QuizTopicClass[]
+  questions Question[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model QuizTopicClass {
+  quizTopicId String
+  classId     String
+  quizTopic   QuizTopic @relation(fields: [quizTopicId], references: [id], onDelete: Cascade)
+  class       Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@id([quizTopicId, classId])
+  @@index([classId])
+}
+
+model QuestionBank {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ownerId   String
+  owner     User     @relation("QuestionBankOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  /// Teacher subject this bank belongs to (e.g. ICT, Maths).
+  subject   String
+  /// Optional grade/batch label. Empty string = subject-wide bank (no grade).
+  grade     String   @default("")
+  title     String   @default("My question bank")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items       QuestionBankItem[]
+  attachments QuestionBankAttachment[]
+  papers      QuestionBankPaper[]
+
+  @@unique([tenantId, ownerId, subject, grade])
+  @@index([tenantId])
+  @@index([ownerId, subject])
+}
+
+/// Uploaded source files for a bank (images, Word, PDF only).
+model QuestionBankAttachment {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bankId       String
+  bank         QuestionBank @relation(fields: [bankId], references: [id], onDelete: Cascade)
+  fileId       String
+  file         File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  originalName String
+  mimeType     String
+  createdAt    DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([bankId])
+  @@index([fileId])
+}
+
+enum PaperExtractionStatus {
+  pending
+  processing
+  pending_review
+  completed
+  failed
+}
+
+/// Uploaded exam paper / worksheet — AI extracts questions for teacher review.
+model QuestionBankPaper {
+  id               String                @id @default(cuid())
+  tenantId         String
+  tenant           Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bankId           String
+  bank             QuestionBank          @relation(fields: [bankId], references: [id], onDelete: Cascade)
+  uploaderId       String
+  uploader         User                  @relation("QuestionBankPaperUploader", fields: [uploaderId], references: [id], onDelete: Cascade)
+  /// First page preview storage key (or original file key).
+  imageKey         String
+  sourceKind       String                @default("image")
+  pageCount        Int                   @default(1)
+  /// JSON sidecar: pageKeys[], textContent?, embeddedImageKeys?
+  sidecar          Json?
+  extractionStatus PaperExtractionStatus @default(pending)
+  draftItems       Json?
+  errorMessage     String?               @db.Text
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  @@index([tenantId])
+  @@index([bankId])
+  @@index([extractionStatus])
+}
+
+model QuestionBankItem {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bankId       String
+  bank         QuestionBank @relation(fields: [bankId], references: [id], onDelete: Cascade)
+  text         String
+  options      Json
+  correctIndex Int
+  marks        Float    @default(1)
+  topic        String   @default("General")
+  complexity   String   @default("not_defined")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  images QuestionBankItemImage[]
+
+  @@index([tenantId])
+  @@index([bankId])
+  @@index([topic])
+}
+
+model QuestionBankItemImage {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  itemId    String
+  item      QuestionBankItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  imageUrl  String
+  fileId    String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([itemId])
 }
 
 model Answer {

@@ -118,6 +118,39 @@ export default function QuizResult() {
         </div>
       </Card>
 
+      {result.topicBreakdown && Object.keys(result.topicBreakdown).length > 0 && (
+        <Card>
+          <h2 className="mb-3 text-lg font-semibold text-slate-900 dark:text-white">Topic mastery</h2>
+          <ul className="space-y-2">
+            {Object.entries(result.topicBreakdown)
+              .map(([topic, stat]) => ({ topic, ...stat }))
+              .sort((a, b) => a.percentage - b.percentage)
+              .map((row) => (
+                <li key={row.topic}>
+                  <div className="mb-0.5 flex justify-between text-xs">
+                    <span className="font-medium">{row.topic}</span>
+                    <span className="tabular-nums text-slate-500">
+                      {row.percentage}% ({row.correct}/{row.total})
+                    </span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10">
+                    <div
+                      className={`h-full rounded-full ${
+                        row.percentage >= 70
+                          ? 'bg-emerald-500'
+                          : row.percentage >= 40
+                            ? 'bg-amber-500'
+                            : 'bg-red-500'
+                      }`}
+                      style={{ width: `${Math.min(100, row.percentage)}%` }}
+                    />
+                  </div>
+                </li>
+              ))}
+          </ul>
+        </Card>
+      )}
+
       {result.quizId && (
         <QuizLeaderboardPanel
           quizId={result.quizId}
@@ -134,6 +167,7 @@ export default function QuizResult() {
             const saved = explanations[q.id];
             return (
               <Card key={q.id}>
+                <p className="mb-1 text-xs font-medium text-slate-500">{q.topic || 'General'}</p>
                 <p className="mb-3 font-medium text-slate-800 dark:text-slate-200">
                   {idx + 1}. {q.text}
                 </p>
