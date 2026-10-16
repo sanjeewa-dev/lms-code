@@ -418,7 +418,7 @@ export async function sendParentDigestsForTenant(tenantId: string) {
 
 export async function runFeeRemindersAllTenants() {
   const tenants = await basePrisma.tenant.findMany({ where: { isActive: true }, select: { id: true, slug: true } });
-  const results = [];
+  const results: Array<{ slug: string } & Awaited<ReturnType<typeof sendFeeRemindersForTenant>>> = [];
   for (const t of tenants) {
     results.push({ slug: t.slug, ...(await sendFeeRemindersForTenant(t.id)) });
   }
@@ -427,7 +427,7 @@ export async function runFeeRemindersAllTenants() {
 
 export async function runParentDigestsAllTenants() {
   const tenants = await basePrisma.tenant.findMany({ where: { isActive: true }, select: { id: true, slug: true } });
-  const results = [];
+  const results: Array<{ slug: string } & Awaited<ReturnType<typeof sendParentDigestsForTenant>>> = [];
   for (const t of tenants) {
     results.push({ slug: t.slug, ...(await sendParentDigestsForTenant(t.id)) });
   }

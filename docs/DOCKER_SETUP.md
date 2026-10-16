@@ -109,6 +109,7 @@ docker compose up --build -d
 | Empty login / no demo users | Ensure `SEED_ON_START=true` in `.env`, then restart backend: `docker compose up -d --force-recreate backend` or reset with `down -v`. |
 | Build fails on low memory | Increase Docker Desktop RAM (≥6 GB) and retry. |
 | Backend build fails on `canvas` / `node-gyp` / `gyp ERR!` | Pull latest `backend/Dockerfile` (includes Cairo/Pango build deps), then `docker compose build --no-cache backend && docker compose up -d`. |
+| Backend build fails on `error TS7xxx` during `npm run build` | TypeScript compile failed. Pull latest backend `src/`, then `docker compose build --no-cache backend`. Locally: `cd backend && npm run build`. |
 | JWT / CRON secret errors on start | Secrets in `.env` must be ≥32 characters (see `.env.docker.example`). |
 
 ## Architecture (local)

@@ -157,7 +157,14 @@ export async function getClassesAnalytics(params: StaffScope) {
     orderBy: { title: 'asc' },
   });
 
-  const results = [];
+  type ClassAnalyticsRow = {
+    classId: string;
+    classTitle: string;
+    attemptCount: number;
+    averagePercentage: number | null;
+    topicMastery: ReturnType<typeof finalizeTopics>;
+  };
+  const results: ClassAnalyticsRow[] = [];
   for (const klass of classes) {
     const attempts = await prisma.quizAttempt.findMany({
       where: {
@@ -293,7 +300,18 @@ export async function getStudentsAnalytics(params: StaffScope & { classId?: stri
   }
 
   const seen = new Set<string>();
-  const students = [];
+  type TopicRow = ReturnType<typeof finalizeTopics>[number];
+  type StudentAnalyticsRow = {
+    studentId: string;
+    name: string;
+    email: string;
+    attemptCount: number;
+    averagePercentage: number | null;
+    topicMastery: ReturnType<typeof finalizeTopics>;
+    strengths: TopicRow[];
+    weaknesses: TopicRow[];
+  };
+  const students: StudentAnalyticsRow[] = [];
   for (const e of enrollments) {
     if (seen.has(e.student.id)) continue;
     seen.add(e.student.id);
@@ -858,7 +876,16 @@ export async function getTrendSeries(params: StaffScope & {
     orderBy: { createdAt: 'asc' },
   });
 
-  const points = [];
+  type ProgressPoint = {
+    at: string;
+    scorePercent: number;
+    sampleCount: number;
+    assessmentTitle: string;
+    assessmentId: string;
+    quizId: string;
+    quizTitle: string;
+  };
+  const points: ProgressPoint[] = [];
   for (const quiz of quizzes) {
     const attempts = await prisma.quizAttempt.findMany({
       where: {

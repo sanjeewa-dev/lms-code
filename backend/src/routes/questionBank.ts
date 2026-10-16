@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { asyncHandler } from '../utils/asyncHandler';
 import { authenticate, requireRole } from '../middleware/auth';
@@ -382,7 +383,8 @@ router.post(
     const grade = normalizeGrade(quiz.class.batch?.name);
     const tenantId = req.tenant!.id;
     let order = quiz.questions.length;
-    const created = [];
+    type CreatedQuestion = Prisma.QuestionGetPayload<{ include: { images: true } }>;
+    const created: CreatedQuestion[] = [];
     for (const item of items) {
       if (item.bank.ownerId !== quiz.class.teacherId) continue;
       if (normalizeSubject(item.bank.subject) !== subject) continue;

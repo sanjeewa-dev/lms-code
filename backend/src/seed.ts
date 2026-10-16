@@ -624,7 +624,7 @@ async function ensureMaterialOrder(params: {
         ? 'pending'
         : 'approved';
 
-  const payments = [];
+  const payments: Awaited<ReturnType<typeof ensureMaterialPayment>>[] = [];
   for (const mat of params.materials) {
     payments.push(
       await ensureMaterialPayment({
@@ -930,7 +930,12 @@ async function seedGrade11IctGradebook(passwordHash: string) {
     { name: 'Tharindu Wickramasinghe', email: 'tharindu@ictpasidu.lms', profile: 'assignmentStar' as const },
   ];
 
-  const students = [];
+  const students: Array<
+    (typeof roster)[number] & {
+      user: Awaited<ReturnType<typeof findOrCreateUser>>;
+      enrollment: Awaited<ReturnType<typeof ensureEnrollment>>;
+    }
+  > = [];
   for (const s of roster) {
     const user = await findOrCreateUser(
       tenant.id,
