@@ -23,9 +23,10 @@ import {
 
 const router = Router();
 
+const authLimitMax = Number.parseInt(process.env.AUTH_RATE_LIMIT_MAX ?? '10', 10);
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: authLimitMax > 0 ? authLimitMax : Number.MAX_SAFE_INTEGER,
   standardHeaders: true,
   legacyHeaders: false,
 });

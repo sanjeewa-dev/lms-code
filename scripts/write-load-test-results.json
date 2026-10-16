@@ -1,0 +1,655 @@
+{
+  "meta": {
+    "startedAt": "2026-09-29T02:24:00.505Z",
+    "finishedAt": "2026-09-29T02:25:12.582Z",
+    "base": "http://localhost:4001",
+    "tenant": "ictpasidu",
+    "classId": "cmrq2mrz80011sxa3ip2m00b3",
+    "studentPool": 7,
+    "quizzesCreated": 9,
+    "requestTimeoutMs": 30000,
+    "notes": [
+      "Write mix: quiz start/submit, uploads, chat, attendance, profile, notifications, AI routes.",
+      "Quiz submit is one attempt per student per quiz; extra VUs return 409 conflict.",
+      "ANTHROPIC_API_KEY is unset locally, so AI POSTs are expected to return 400 unavailable.",
+      "Uploads use a 1x1 PNG. Weight drops at 500+ VU to limit disk growth.",
+      "API and login rate limits were disabled for this run."
+    ]
+  },
+  "stages": [
+    {
+      "name": "vu3000",
+      "vu": 3000,
+      "durationSec": 8,
+      "rps": 221.6,
+      "requests": 1773,
+      "ok": 1,
+      "failed": 1772,
+      "errorRatePct": 99.94,
+      "successRatePct": 0.06,
+      "latencyMs": {
+        "min": 20791.3927,
+        "mean": 40343.7,
+        "p50": 40636.3,
+        "p95": 47040.3,
+        "p99": 47295.9,
+        "max": 47317.3682
+      },
+      "statuses": {
+        "201": 1,
+        "error:timeout": 1772
+      },
+      "classes": {
+        "ok": 1,
+        "timeout": 1772
+      },
+      "byEndpoint": [
+        {
+          "name": "ai_teacher_quiz_gen",
+          "requests": 52,
+          "ok": 0,
+          "failed": 52,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "latencyMs": {
+            "min": 30453.8254,
+            "mean": 41130.1,
+            "p50": 41479.1,
+            "p95": 47259.9,
+            "p99": 47312.8,
+            "max": 47312.808300000004
+          },
+          "statuses": {
+            "error:timeout": 52
+          },
+          "classes": {
+            "timeout": 52
+          }
+        },
+        {
+          "name": "ai_mcq",
+          "requests": 76,
+          "ok": 0,
+          "failed": 76,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "latencyMs": {
+            "min": 30447.7626,
+            "mean": 40837.8,
+            "p50": 40480.8,
+            "p95": 47256.6,
+            "p99": 47289.2,
+            "max": 47289.246
+          },
+          "statuses": {
+            "error:timeout": 76
+          },
+          "classes": {
+            "timeout": 76
+          }
+        },
+        {
+          "name": "student_upload",
+          "requests": 55,
+          "ok": 0,
+          "failed": 55,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "latencyMs": {
+            "min": 30456.873,
+            "mean": 40016.7,
+            "p50": 40146.4,
+            "p95": 47162.4,
+            "p99": 47310.4,
+            "max": 47310.4121
+          },
+          "statuses": {
+            "error:timeout": 55
+          },
+          "classes": {
+            "timeout": 55
+          }
+        },
+        {
+          "name": "teacher_assessment_write",
+          "requests": 137,
+          "ok": 0,
+          "failed": 137,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "latencyMs": {
+            "min": 30349.512700000003,
+            "mean": 40339.9,
+            "p50": 40636.4,
+            "p95": 47144.9,
+            "p99": 47314.9,
+            "max": 47316.0418
+          },
+          "statuses": {
+            "error:timeout": 137
+          },
+          "classes": {
+            "timeout": 137
+          }
+        },
+        {
+          "name": "attendance_upsert",
+          "requests": 166,
+          "ok": 0,
+          "failed": 166,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "latencyMs": {
+            "min": 30418.9825,
+            "mean": 39972.9,
+            "p50": 40478.4,
+            "p95": 47132.3,
+            "p99": 47290.3,
+            "max": 47301.0177
+          },
+          "statuses": {
+            "error:timeout": 166
+          },
+          "classes": {
+            "timeout": 166
+          }
+        },
+        {
+          "name": "ai_teacher_feedback",
+          "requests": 59,
+          "ok": 0,
+          "failed": 59,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "latencyMs": {
+            "min": 30426.495,
+            "mean": 40386.9,
+            "p50": 41113.8,
+            "p95": 47099.3,
+            "p99": 47307.1,
+            "max": 47307.0887
+          },
+          "statuses": {
+            "error:timeout": 59
+          },
+          "classes": {
+            "timeout": 59
+          }
+        },
+        {
+          "name": "teacher_material_upload",
+          "requests": 34,
+          "ok": 0,
+          "failed": 34,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "latencyMs": {
+            "min": 30430.973200000004,
+            "mean": 40714.2,
+            "p50": 41864.8,
+            "p95": 47097,
+            "p99": 47136.3,
+            "max": 47136.2803
+          },
+          "statuses": {
+            "error:timeout": 34
+          },
+          "classes": {
+            "timeout": 34
+          }
+        },
+        {
+          "name": "chat_message",
+          "requests": 296,
+          "ok": 1,
+          "failed": 295,
+          "errorRatePct": 99.66,
+          "successRatePct": 0.34,
+          "latencyMs": {
+            "min": 20791.3927,
+            "mean": 40707.9,
+            "p50": 40760.4,
+            "p95": 47061.1,
+            "p99": 47307.4,
+            "max": 47314.20420000001
+          },
+          "statuses": {
+            "201": 1,
+            "error:timeout": 295
+          },
+          "classes": {
+            "ok": 1,
+            "timeout": 295
+          }
+        },
+        {
+          "name": "quiz_start_submit",
+          "requests": 363,
+          "ok": 0,
+          "failed": 363,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "latencyMs": {
+            "min": 30355.485099999998,
+            "mean": 40433,
+            "p50": 41559.4,
+            "p95": 47024.3,
+            "p99": 47298.2,
+            "max": 47317.3682
+          },
+          "statuses": {
+            "error:timeout": 363
+          },
+          "classes": {
+            "timeout": 363
+          }
+        },
+        {
+          "name": "ai_flashcards",
+          "requests": 73,
+          "ok": 0,
+          "failed": 73,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "latencyMs": {
+            "min": 30418.669299999998,
+            "mean": 40720.2,
+            "p50": 42737.7,
+            "p95": 47019.6,
+            "p99": 47066.5,
+            "max": 47066.4584
+          },
+          "statuses": {
+            "error:timeout": 73
+          },
+          "classes": {
+            "timeout": 73
+          }
+        },
+        {
+          "name": "notification_read_all",
+          "requests": 102,
+          "ok": 0,
+          "failed": 102,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "latencyMs": {
+            "min": 30421.713500000005,
+            "mean": 40246.6,
+            "p50": 40145.5,
+            "p95": 46992,
+            "p99": 47232.5,
+            "max": 47287.3096
+          },
+          "statuses": {
+            "error:timeout": 102
+          },
+          "classes": {
+            "timeout": 102
+          }
+        },
+        {
+          "name": "profile_patch",
+          "requests": 135,
+          "ok": 0,
+          "failed": 135,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "latencyMs": {
+            "min": 30420.041400000002,
+            "mean": 41126.5,
+            "p50": 42482.9,
+            "p95": 46970.9,
+            "p99": 47169.2,
+            "max": 47235.817599999995
+          },
+          "statuses": {
+            "error:timeout": 135
+          },
+          "classes": {
+            "timeout": 135
+          }
+        },
+        {
+          "name": "ai_tutor",
+          "requests": 97,
+          "ok": 0,
+          "failed": 97,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "latencyMs": {
+            "min": 30360.4787,
+            "mean": 38720,
+            "p50": 38791.7,
+            "p95": 46841.9,
+            "p99": 47312.9,
+            "max": 47312.916300000004
+          },
+          "statuses": {
+            "error:timeout": 97
+          },
+          "classes": {
+            "timeout": 97
+          }
+        },
+        {
+          "name": "ai_teacher_weak_topics",
+          "requests": 62,
+          "ok": 0,
+          "failed": 62,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "latencyMs": {
+            "min": 30446.676100000004,
+            "mean": 38971,
+            "p50": 38783.8,
+            "p95": 46712.5,
+            "p99": 47314.1,
+            "max": 47314.1177
+          },
+          "statuses": {
+            "error:timeout": 62
+          },
+          "classes": {
+            "timeout": 62
+          }
+        },
+        {
+          "name": "ai_quota",
+          "requests": 66,
+          "ok": 0,
+          "failed": 66,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "latencyMs": {
+            "min": 30359.8482,
+            "mean": 39823.1,
+            "p50": 40460.4,
+            "p95": 46677.1,
+            "p99": 47292.6,
+            "max": 47292.554299999996
+          },
+          "statuses": {
+            "error:timeout": 66
+          },
+          "classes": {
+            "timeout": 66
+          }
+        }
+      ]
+    }
+  ],
+  "endpointRamp": [
+    {
+      "name": "ai_teacher_quiz_gen",
+      "stages": [
+        {
+          "stage": "vu3000",
+          "vu": 3000,
+          "requests": 52,
+          "p50": 41479.1,
+          "p95": 47259.9,
+          "p99": 47312.8,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "classes": {
+            "timeout": 52
+          }
+        }
+      ]
+    },
+    {
+      "name": "ai_mcq",
+      "stages": [
+        {
+          "stage": "vu3000",
+          "vu": 3000,
+          "requests": 76,
+          "p50": 40480.8,
+          "p95": 47256.6,
+          "p99": 47289.2,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "classes": {
+            "timeout": 76
+          }
+        }
+      ]
+    },
+    {
+      "name": "student_upload",
+      "stages": [
+        {
+          "stage": "vu3000",
+          "vu": 3000,
+          "requests": 55,
+          "p50": 40146.4,
+          "p95": 47162.4,
+          "p99": 47310.4,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "classes": {
+            "timeout": 55
+          }
+        }
+      ]
+    },
+    {
+      "name": "teacher_assessment_write",
+      "stages": [
+        {
+          "stage": "vu3000",
+          "vu": 3000,
+          "requests": 137,
+          "p50": 40636.4,
+          "p95": 47144.9,
+          "p99": 47314.9,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "classes": {
+            "timeout": 137
+          }
+        }
+      ]
+    },
+    {
+      "name": "attendance_upsert",
+      "stages": [
+        {
+          "stage": "vu3000",
+          "vu": 3000,
+          "requests": 166,
+          "p50": 40478.4,
+          "p95": 47132.3,
+          "p99": 47290.3,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "classes": {
+            "timeout": 166
+          }
+        }
+      ]
+    },
+    {
+      "name": "ai_teacher_feedback",
+      "stages": [
+        {
+          "stage": "vu3000",
+          "vu": 3000,
+          "requests": 59,
+          "p50": 41113.8,
+          "p95": 47099.3,
+          "p99": 47307.1,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "classes": {
+            "timeout": 59
+          }
+        }
+      ]
+    },
+    {
+      "name": "teacher_material_upload",
+      "stages": [
+        {
+          "stage": "vu3000",
+          "vu": 3000,
+          "requests": 34,
+          "p50": 41864.8,
+          "p95": 47097,
+          "p99": 47136.3,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "classes": {
+            "timeout": 34
+          }
+        }
+      ]
+    },
+    {
+      "name": "chat_message",
+      "stages": [
+        {
+          "stage": "vu3000",
+          "vu": 3000,
+          "requests": 296,
+          "p50": 40760.4,
+          "p95": 47061.1,
+          "p99": 47307.4,
+          "errorRatePct": 99.66,
+          "successRatePct": 0.34,
+          "classes": {
+            "ok": 1,
+            "timeout": 295
+          }
+        }
+      ]
+    },
+    {
+      "name": "quiz_start_submit",
+      "stages": [
+        {
+          "stage": "vu3000",
+          "vu": 3000,
+          "requests": 363,
+          "p50": 41559.4,
+          "p95": 47024.3,
+          "p99": 47298.2,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "classes": {
+            "timeout": 363
+          }
+        }
+      ]
+    },
+    {
+      "name": "ai_flashcards",
+      "stages": [
+        {
+          "stage": "vu3000",
+          "vu": 3000,
+          "requests": 73,
+          "p50": 42737.7,
+          "p95": 47019.6,
+          "p99": 47066.5,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "classes": {
+            "timeout": 73
+          }
+        }
+      ]
+    },
+    {
+      "name": "notification_read_all",
+      "stages": [
+        {
+          "stage": "vu3000",
+          "vu": 3000,
+          "requests": 102,
+          "p50": 40145.5,
+          "p95": 46992,
+          "p99": 47232.5,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "classes": {
+            "timeout": 102
+          }
+        }
+      ]
+    },
+    {
+      "name": "profile_patch",
+      "stages": [
+        {
+          "stage": "vu3000",
+          "vu": 3000,
+          "requests": 135,
+          "p50": 42482.9,
+          "p95": 46970.9,
+          "p99": 47169.2,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "classes": {
+            "timeout": 135
+          }
+        }
+      ]
+    },
+    {
+      "name": "ai_tutor",
+      "stages": [
+        {
+          "stage": "vu3000",
+          "vu": 3000,
+          "requests": 97,
+          "p50": 38791.7,
+          "p95": 46841.9,
+          "p99": 47312.9,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "classes": {
+            "timeout": 97
+          }
+        }
+      ]
+    },
+    {
+      "name": "ai_teacher_weak_topics",
+      "stages": [
+        {
+          "stage": "vu3000",
+          "vu": 3000,
+          "requests": 62,
+          "p50": 38783.8,
+          "p95": 46712.5,
+          "p99": 47314.1,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "classes": {
+            "timeout": 62
+          }
+        }
+      ]
+    },
+    {
+      "name": "ai_quota",
+      "stages": [
+        {
+          "stage": "vu3000",
+          "vu": 3000,
+          "requests": 66,
+          "p50": 40460.4,
+          "p95": 46677.1,
+          "p99": 47292.6,
+          "errorRatePct": 100,
+          "successRatePct": 0,
+          "classes": {
+            "timeout": 66
+          }
+        }
+      ]
+    }
+  ]
+}

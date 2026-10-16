@@ -9,6 +9,7 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    command: postgres -c max_connections=300 -c shared_buffers=128MB
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-mindspark}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
@@ -31,7 +32,7 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-mindspark}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-mindspark}?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER:-mindspark}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-mindspark}?schema=public&connection_limit=25
       PORT: '4000'
       NODE_ENV: production
       UPLOAD_DIR: /app/uploads
@@ -39,6 +40,12 @@ services:
       API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:8080}
       SEED_ON_START: ${SEED_ON_START:-true}
       NMS_BASE_URL: ${NMS_BASE_URL:-}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-8}
+      UV_THREADPOOL_SIZE: ${UV_THREADPOOL_SIZE:-16}
+      PRISMA_CONNECTION_LIMIT: ${PRISMA_CONNECTION_LIMIT:-25}
+      MAX_IN_FLIGHT_PER_WORKER: ${MAX_IN_FLIGHT_PER_WORKER:-400}
+      MAX_CONNECTIONS_PER_WORKER: ${MAX_CONNECTIONS_PER_WORKER:-1000}
+      API_RATE_LIMIT_MAX: ${API_RATE_LIMIT_MAX:-60000}
     volumes:
       - uploads:/app/uploads
     depends_on:

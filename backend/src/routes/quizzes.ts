@@ -6,6 +6,8 @@ import { quizSchema, quizUpdateSchema, submitAttemptSchema } from '../validation
 import { gradeAttempt, isAttemptExpired } from '../services/quiz';
 import { buildTopicMapping, seededShuffle } from '../services/topicMapping';
 import { studentHasContentAccess } from '../services/access';
+import { isPrismaUniqueConstraint } from '../lib/prismaErrors';
+import { figureImageCreate } from '../lib/questionFigureUrl';
 import { badRequest, conflict, forbidden, notFound } from '../utils/httpError';
 
 const router = Router({ mergeParams: true });
@@ -36,11 +38,7 @@ function questionCreateData(tenantId: string, q: QuestionInput, index: number) {
     sourceBankItemId: q.sourceBankItemId,
     images: q.imageUrls?.length
       ? {
-          create: q.imageUrls.map((imageUrl, i) => ({
-            tenantId,
-            imageUrl,
-            sortOrder: i,
-          })),
+          create: q.imageUrls.map((imageUrl, i) => figureImageCreate(tenantId, imageUrl, i)),
         }
       : undefined,
   };
@@ -414,8 +412,7 @@ router.post(
           },
         });
       } catch (err) {
-        const code = typeof err === 'object' && err && 'code' in err ? (err as { code?: string }).code : undefined;
-        if (code !== 'P2002') throw err;
+        if (!isPrismaUniqueConstraint(err)) throw err;
         attempt = await prisma.quizAttempt.findFirst({
           where: { quizId: quiz.id, studentId: req.user!.sub },
         });

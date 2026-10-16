@@ -1,0 +1,14 @@
+{
+  "name": "mindspark-architect-brief",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Builds docs/ARCHITECT_TECHNICAL_BRIEF.pdf from the Markdown brief",
+  "type": "module",
+  "scripts": {
+    "build": "node build-pdf.mjs"
+  },
+  "dependencies": {
+    "marked": "^15.0.0",
+    "puppeteer": "^24.0.0"
+  }
+}

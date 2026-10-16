@@ -1,3 +1,4 @@
+import os from 'os';
 import dotenv from 'dotenv';
 import path from 'path';
 
@@ -24,6 +25,17 @@ function required(name: string, fallback?: string): string {
   return value;
 }
 
+function parsePositiveInt(name: string, fallback: number): number {
+  const n = Number.parseInt(process.env[name] ?? '', 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function defaultWebConcurrency(): number {
+  if (process.env.NODE_ENV === 'test') return 1;
+  if (isProd) return Math.min(8, Math.max(1, os.cpus().length || 1));
+  return 1;
+}
+
 /** Fail closed in production on missing/weak/short secrets. */
 function requireSecret(name: string, devFallback: string): string {
   const value = process.env[name] ?? (isProd ? undefined : devFallback);
@@ -41,6 +53,14 @@ function requireSecret(name: string, devFallback: string): string {
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
   port: parseInt(process.env.PORT ?? '4000', 10),
+  /** Worker processes for `npm run start` / Docker. `npm run dev` stays 1 unless set. */
+  webConcurrency: parsePositiveInt('WEB_CONCURRENCY', defaultWebConcurrency()),
+  /** Reject extra requests with 503 once this many are in flight on one worker. */
+  maxInFlightPerWorker: parsePositiveInt('MAX_IN_FLIGHT_PER_WORKER', 400),
+  maxConnectionsPerWorker: parsePositiveInt('MAX_CONNECTIONS_PER_WORKER', 1000),
+  prismaConnectionLimit: parsePositiveInt('PRISMA_CONNECTION_LIMIT', 25),
+  /** In-flight Anthropic calls per worker; excess returns 503. */
+  aiMaxConcurrent: parsePositiveInt('AI_MAX_CONCURRENT', 8),
   clientUrl: process.env.CLIENT_URL ?? 'http://localhost:5173',
   jwt: {
     accessSecret: requireSecret('JWT_ACCESS_SECRET', 'dev-access-secret-local-only-not-for-prod!!'),

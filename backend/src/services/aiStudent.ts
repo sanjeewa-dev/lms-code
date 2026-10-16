@@ -5,7 +5,8 @@ import { badRequest, forbidden, notFound, paymentRequired } from '../utils/httpE
 import { weakTopicsForStudent } from './aiCoach';
 import { assertFeature, getAiTokenLimit } from './planGates';
 
-export const AI_TOKEN_LIMIT = 20;
+/** @deprecated Prefer getAiTokenLimit(tenant); kept for callers expecting a constant. */
+export const AI_TOKEN_LIMIT = 100;
 
 export type AiToolId = 'tutor' | 'summarizer' | 'mcq' | 'flashcards' | 'study-plan';
 

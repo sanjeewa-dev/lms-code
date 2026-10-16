@@ -4,6 +4,8 @@ import { apiErrorMessage } from '../../api/client';
 import { useTenantApi } from '../../hooks/useTenantApi';
 import { Button, Card, Input, Spinner } from '../ui';
 import { Icon } from '../icons';
+import { FigureEditor } from '../FigureEditor';
+import { QuestionFigure } from '../QuestionFigure';
 
 interface DraftQuestion {
   text: string;
@@ -238,6 +240,17 @@ export function QuizBuilder({
         i === qIdx ? { ...q, options: q.options.map((o, j) => (j === oIdx ? value : o)) } : q
       )
     );
+  }
+
+  async function uploadFigure(file: File): Promise<string> {
+    const body = new FormData();
+    body.append('figure', file);
+    try {
+      const { data } = await t.post<{ imageUrl: string }>('/question-figures', body);
+      return data.imageUrl;
+    } catch (err) {
+      throw new Error(apiErrorMessage(err));
+    }
   }
 
   const addTopicMutation = useMutation({
@@ -714,6 +727,13 @@ export function QuizBuilder({
                               {item.text.slice(0, 160)}
                               {item.text.length > 160 ? '…' : ''}
                             </span>
+                            {(item.images ?? []).slice(0, 1).map((img) => (
+                              <QuestionFigure
+                                key={img.imageUrl}
+                                src={img.imageUrl}
+                                className="mt-2 max-h-20 w-auto max-w-full rounded-md border border-slate-200 object-contain dark:border-white/10"
+                              />
+                            ))}
                             <span className="mt-1 flex flex-wrap gap-1.5">
                               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-white/10 dark:text-slate-300">
                                 {item.topic || 'General'}
@@ -881,21 +901,13 @@ export function QuizBuilder({
                       disabled={lockedQuestions}
                     />
                   </label>
-                  <label className="ml-auto flex min-w-0 flex-1 items-center gap-1.5 text-xs text-slate-500 sm:max-w-xs">
-                    Figure URL
-                    <input
-                      className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2 py-1 dark:border-white/10 dark:bg-white/5"
-                      placeholder="https://…"
-                      value={q.imageUrls[0] ?? ''}
-                      onChange={(e) =>
-                        updateQuestion(qIdx, {
-                          imageUrls: e.target.value.trim() ? [e.target.value.trim()] : [],
-                        })
-                      }
-                      disabled={lockedQuestions}
-                    />
-                  </label>
                 </div>
+                <FigureEditor
+                  imageUrl={q.imageUrls[0]}
+                  disabled={lockedQuestions}
+                  onChange={(url) => updateQuestion(qIdx, { imageUrls: url ? [url] : [] })}
+                  onUploadFile={uploadFigure}
+                />
               </div>
             ))}
           </div>

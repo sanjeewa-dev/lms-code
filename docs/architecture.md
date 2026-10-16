@@ -8,6 +8,7 @@ System architecture diagrams for the multi-tenant Learning Management System.
 
 | Doc | Purpose |
 |-----|---------|
+| [ARCHITECT_TECHNICAL_BRIEF.md](./ARCHITECT_TECHNICAL_BRIEF.md) | Sendable as-built architect brief (+ PDF) |
 | [architecture-current.md](./architecture-current.md) | High-level as-built architecture (diagrams) |
 | [architecture-microservices.md](./architecture-microservices.md) | Production-grade microservices target architecture |
 | This file | Detailed monolith maps (API, tenancy, modules) |

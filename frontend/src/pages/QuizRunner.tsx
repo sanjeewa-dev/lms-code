@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { apiErrorMessage } from '../api/client';
 import { useTenantApi } from '../hooks/useTenantApi';
 import { Button, Spinner } from '../components/ui';
+import { QuestionFigure } from '../components/QuestionFigure';
 import type { AttemptStart } from '../api/types';
 
 const LEAVE_MSG = 'You have quiz answers that are not submitted. Leave anyway?';
@@ -263,12 +264,7 @@ export default function QuizRunner() {
           {current.text}
         </p>
         {(current.images ?? []).map((img) => (
-          <img
-            key={img.id}
-            src={img.imageUrl}
-            alt=""
-            className="mt-3 max-h-64 rounded-lg border border-slate-200 object-contain"
-          />
+          <QuestionFigure key={img.id} src={img.imageUrl} />
         ))}
         <div className="mt-4 space-y-2">
           {options.map((opt, oi) => {

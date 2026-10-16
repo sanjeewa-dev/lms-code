@@ -9,6 +9,7 @@ import { SmartOpsPanel, WeakTopicsCard } from '../components/SmartOpsPanel';
 import { PerformanceChart, type PerformancePoint } from '../components/PerformanceChart';
 import { ClassCalendar } from '../components/ClassCalendar';
 import { LiveNowStrip } from '../components/LiveNowStrip';
+import { DashboardAnalyticsInsights } from '../components/analytics/DashboardAnalyticsInsights';
 import { currentMonth } from '../lib/paymentUtils';
 import type { ClassSummary, AdminStats } from '../api/types';
 
@@ -22,6 +23,8 @@ const toneChip: Record<Tone, string> = {
   pink: 'bg-pink-100 text-pink-600 dark:bg-pink-950/40 dark:text-pink-300',
   sky: 'bg-sky-100 text-sky-600 dark:bg-sky-950/40 dark:text-sky-300',
 };
+
+const HERO_ILLUSTRATION = '/hero-knowledge-book.png';
 
 function WelcomeBanner({
   eyebrow,
@@ -37,34 +40,58 @@ function WelcomeBanner({
   secondary: { to: string; label: string };
 }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-r from-teal-50 via-white to-cyan-50 p-5 shadow-sm dark:border-white/5 dark:from-ink-850 dark:via-ink-850 dark:to-ink-850 sm:p-6">
-      <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-teal-200/45 blur-3xl dark:bg-teal-500/10" />
-      <div className="pointer-events-none absolute -bottom-24 left-[28%] h-48 w-48 rounded-full bg-cyan-200/40 blur-3xl dark:bg-cyan-500/10" />
-      <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+    <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-[#f7f9fc] shadow-sm dark:border-white/5 dark:bg-ink-850">
+      {/* Subtle grid like the sample */}
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.45] dark:opacity-[0.12]"
+        aria-hidden
+        style={{
+          backgroundImage:
+            'linear-gradient(rgba(148,163,184,0.35) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.35) 1px, transparent 1px)',
+          backgroundSize: '28px 28px',
+          maskImage: 'radial-gradient(ellipse 85% 80% at 40% 40%, black, transparent)',
+        }}
+      />
+      <div className="pointer-events-none absolute -left-20 top-0 h-64 w-64 rounded-full bg-teal-200/35 blur-3xl dark:bg-teal-500/10" />
+      <div className="pointer-events-none absolute -right-10 bottom-0 h-56 w-56 rounded-full bg-cyan-200/30 blur-3xl dark:bg-cyan-500/10" />
+
+      <div className="relative grid items-center gap-6 px-5 py-6 sm:px-7 sm:py-7 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-8">
         <div className="min-w-0">
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand-600 dark:text-brand-400">
             {eyebrow}
           </p>
-          <h1 className="mt-1.5 text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
+          <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-ink-900 dark:text-white sm:text-3xl lg:text-[2.1rem] lg:leading-tight">
             {title}
           </h1>
-          <p className="mt-1.5 max-w-xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+          <p className="mt-2.5 max-w-lg text-sm leading-relaxed text-slate-600 dark:text-slate-400 sm:text-[15px]">
             {description}
           </p>
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+            <Link
+              to={primary.to}
+              className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md shadow-brand-600/25 transition hover:bg-brand-700"
+            >
+              {primary.label}
+              <span aria-hidden className="text-base leading-none">
+                →
+              </span>
+            </Link>
+            <Link
+              to={secondary.to}
+              className="inline-flex items-center justify-center rounded-xl border border-slate-300/90 bg-white px-5 py-2.5 text-sm font-semibold text-ink-900 transition hover:bg-slate-50 dark:border-white/15 dark:bg-white/5 dark:text-slate-100 dark:hover:bg-white/10"
+            >
+              {secondary.label}
+            </Link>
+          </div>
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2.5">
-          <Link
-            to={primary.to}
-            className="inline-flex items-center justify-center rounded-full bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm shadow-brand-600/20 transition hover:bg-brand-700"
-          >
-            {primary.label}
-          </Link>
-          <Link
-            to={secondary.to}
-            className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:hover:bg-white/10"
-          >
-            {secondary.label}
-          </Link>
+
+        <div className="relative mx-auto flex w-full max-w-md items-center justify-center lg:max-w-none lg:justify-end">
+          <img
+            src={HERO_ILLUSTRATION}
+            alt=""
+            className="h-auto w-full max-w-[340px] object-contain drop-shadow-sm sm:max-w-[380px] lg:max-w-[420px]"
+            decoding="async"
+          />
         </div>
       </div>
     </div>
@@ -332,6 +359,8 @@ export default function Dashboard() {
           />
         </div>
 
+        <DashboardAnalyticsInsights />
+
         <div className="grid items-start gap-6 lg:grid-cols-2">
           <AtRiskPanel compact />
           <SmartOpsPanel />
@@ -590,10 +619,10 @@ export default function Dashboard() {
           tone="purple"
         />
         <ShortcutTile
-          to={`${base}/chat`}
-          title="Chat"
-          hint={chatUnread ? `${chatUnread} unread` : 'Message your class'}
-          icon="chat"
+          to={`${base}/quiz-analytics`}
+          title="Progress"
+          hint="Trends, focus topics, next steps"
+          icon="quiz"
           tone="sky"
         />
         <ShortcutTile

@@ -18,6 +18,7 @@ export type ConvertedDocument = {
   kind: 'image' | 'pdf' | 'docx';
   pages: ConvertedPaperPage[];
   textContent?: string;
+  htmlContent?: string;
   embeddedImages?: Buffer[];
 };
 
@@ -113,12 +114,50 @@ async function extractDocxEmbeddedImages(fileBuffer: Buffer): Promise<Buffer[]> 
   return out;
 }
 
+async function docxHtmlWithFigures(
+  fileBuffer: Buffer,
+): Promise<{ html: string; images: Buffer[] }> {
+  const images: Buffer[] = [];
+  const result = await mammoth.convertToHtml(
+    { buffer: fileBuffer },
+    {
+      convertImage: mammoth.images.imgElement((image) =>
+        image.read().then(async (raw) => {
+          if (images.length >= MAX_DOCX_IMAGES) return { src: '' };
+          const buf = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
+          try {
+            const normalized = await normalizeScanOrPhoto(buf);
+            const index = images.length;
+            images.push(normalized);
+            return { src: `figure://${index}` };
+          } catch {
+            return { src: '' };
+          }
+        }),
+      ),
+    },
+  );
+  return { html: result.value || '', images };
+}
+
 async function docxToConvertible(fileBuffer: Buffer): Promise<ConvertedDocument> {
-  const [textResult, embeddedImages] = await Promise.all([
-    mammoth.extractRawText({ buffer: fileBuffer }),
-    extractDocxEmbeddedImages(fileBuffer),
-  ]);
+  const textResult = await mammoth.extractRawText({ buffer: fileBuffer });
   const textContent = (textResult.value || '').trim();
+
+  let htmlContent = '';
+  let embeddedImages: Buffer[] = [];
+  try {
+    const html = await docxHtmlWithFigures(fileBuffer);
+    htmlContent = html.html;
+    embeddedImages = html.images;
+  } catch {
+    embeddedImages = [];
+  }
+
+  if (embeddedImages.length === 0) {
+    embeddedImages = await extractDocxEmbeddedImages(fileBuffer);
+  }
+
   if (!textContent && embeddedImages.length === 0) {
     throw new Error('Word document appears empty');
   }
@@ -144,6 +183,7 @@ async function docxToConvertible(fileBuffer: Buffer): Promise<ConvertedDocument>
     kind: 'docx',
     pages,
     textContent: textContent || undefined,
+    htmlContent: htmlContent || undefined,
     embeddedImages: embeddedImages.length > 0 ? embeddedImages : undefined,
   };
 }

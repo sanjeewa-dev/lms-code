@@ -6,6 +6,7 @@ import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import { env } from './config/env';
 import { errorHandler, notFoundHandler } from './middleware/error';
+import { inFlightLimiter } from './middleware/inFlight';
 
 import authRoutes from './routes/auth';
 import platformRoutes from './routes/platform';
@@ -30,18 +31,22 @@ export function createApp() {
 
   app.use(helmet());
   app.use(cors({ origin: env.clientUrl, credentials: true }));
-  app.use(
-    '/api',
-    rateLimit({
-      windowMs: 60 * 1000,
-      max: 600,
-      standardHeaders: true,
-      legacyHeaders: false,
-    })
-  );
+  app.use(inFlightLimiter(env.maxInFlightPerWorker));
+  const apiRateLimitMax = Number.parseInt(process.env.API_RATE_LIMIT_MAX ?? '60000', 10);
+  if (apiRateLimitMax > 0) {
+    app.use(
+      '/api',
+      rateLimit({
+        windowMs: 60 * 1000,
+        max: apiRateLimitMax,
+        standardHeaders: true,
+        legacyHeaders: false,
+      })
+    );
+  }
   app.use(express.json({ limit: '2mb' }));
   app.use(cookieParser());
-  if (env.nodeEnv !== 'test') app.use(morgan('dev'));
+  if (env.nodeEnv === 'development') app.use(morgan('dev'));
 
   app.get('/api/health', (_req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
 

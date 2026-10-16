@@ -1,8 +1,13 @@
 import { z } from 'zod';
-import { prisma } from '../lib/prisma';
+import { basePrisma, prisma } from '../lib/prisma';
 import { storage } from './storage';
 import { callAnthropicForExtraction, parseJsonObject } from './anthropic';
 import { convertPaperUploadToPages } from '../lib/paperDocumentConvert';
+import { figureIndicesPerQuestionBlock } from '../lib/docxFigureMap';
+import { cropPageFigure } from '../lib/pageFigureCrop';
+import { persistQuestionFigureBuffer } from './questionFigures';
+import { figureImageCreate } from '../lib/questionFigureUrl';
+import { runWithContext } from '../lib/tenantContext';
 import { badRequest, notFound } from '../utils/httpError';
 
 const SYSTEM_JSON =
@@ -16,6 +21,16 @@ const draftQuestionSchema = z.object({
   correctAnswer: z.union([z.number(), z.string(), z.null()]).optional(),
   topic: z.string().optional(),
   confidence: z.number().optional(),
+  hasFigure: z.boolean().optional(),
+  figureBox: z
+    .object({
+      x: z.number(),
+      y: z.number(),
+      w: z.number(),
+      h: z.number(),
+    })
+    .nullable()
+    .optional(),
 });
 
 const extractionSchema = z.object({
@@ -33,11 +48,14 @@ export type PaperDraftItem = {
   complexity: string;
   marks: number;
   imageUrls?: string[];
+  hasFigure?: boolean;
+  figureBox?: { x: number; y: number; w: number; h: number } | null;
 };
 
 type PaperSidecar = {
   pageKeys: string[];
   textContent?: string;
+  htmlContent?: string;
   embeddedImageKeys?: string[];
   sourceKind: 'image' | 'pdf' | 'docx';
 };
@@ -93,6 +111,8 @@ function mapExtractedQuestions(
       topic: (q.topic || 'General').trim() || 'General',
       complexity: 'not_defined',
       marks: 1,
+      hasFigure: q.hasFigure,
+      figureBox: q.figureBox ?? null,
     };
   });
 }
@@ -106,7 +126,10 @@ const ANSWER_RULES =
   'circled letter, highlighted choice, "Ans:", "Answer:", or a separate answers section.\n' +
   '- If the paper is clearly an answer-marked sheet or past paper with answers, fill correctAnswer for every MCQ.\n' +
   '- Only leave correctAnswer null when there is genuinely no indication of the answer.\n' +
-  '- Invent a short topic only if none is labeled.';
+  '- Invent a short topic only if none is labeled.\n' +
+  '- Set hasFigure true when the question includes a diagram, graph, map, circuit, table-as-image, or photo.\n' +
+  '- When hasFigure is true, set figureBox to the region of THIS page as fractions 0–1: {x, y, w, h} from the top-left.\n' +
+  '- If you cannot locate a tight box, set hasFigure true and figureBox null.';
 
 async function extractFromImage(buffer: Buffer): Promise<PaperDraftItem[]> {
   const prompt =
@@ -120,7 +143,9 @@ async function extractFromImage(buffer: Buffer): Promise<PaperDraftItem[]> {
     '      "stem": "full question text",\n' +
     '      "options": ["option 1", "option 2", "option 3", "option 4"],\n' +
     '      "correctAnswer": 1-based option index (1-4) or letter A-D, or null only if unknown,\n' +
-    '      "topic": "short topic label"\n' +
+    '      "topic": "short topic label",\n' +
+    '      "hasFigure": true if this question has a diagram/graph/figure, else false,\n' +
+    '      "figureBox": { "x": 0-1, "y": 0-1, "w": 0-1, "h": 0-1 } or null\n' +
     '    }\n' +
     '  ]\n' +
     '}\n' +
@@ -206,6 +231,7 @@ export async function createPaperAndExtract(params: {
   const sidecar: PaperSidecar = {
     pageKeys,
     textContent: converted.textContent,
+    htmlContent: converted.htmlContent,
     embeddedImageKeys: embeddedImageKeys.length ? embeddedImageKeys : undefined,
     sourceKind: converted.kind,
   };
@@ -242,26 +268,119 @@ export async function processPaperExtraction(paperId: string) {
   const paper = await prisma.questionBankPaper.findFirst({ where: { id: paperId } });
   if (!paper) return;
 
+  await runWithContext({ tenantId: paper.tenantId }, async () => {
+    await processPaperExtractionInTenant(paper);
+  });
+}
+
+function stripFigureMeta(item: PaperDraftItem): PaperDraftItem {
+  const { hasFigure: _h, figureBox: _b, ...rest } = item;
+  return rest;
+}
+
+async function attachDocxFigures(params: {
+  drafts: PaperDraftItem[];
+  sidecar: PaperSidecar;
+  tenantId: string;
+  ownerId: string;
+  slug: string;
+}): Promise<PaperDraftItem[]> {
+  const keys = params.sidecar.embeddedImageKeys ?? [];
+  if (!keys.length) return params.drafts.map(stripFigureMeta);
+
+  const html = params.sidecar.htmlContent ?? '';
+  let blocks = html ? figureIndicesPerQuestionBlock(html) : keys.map((_, i) => [i]);
+  if (html && blocks.length === 0 && keys.length) {
+    blocks = keys.map((_, i) => [i]);
+  }
+
+  const result: PaperDraftItem[] = [];
+  for (let i = 0; i < params.drafts.length; i++) {
+    const draft = params.drafts[i]!;
+    const indices = (blocks[i] ?? []).filter((idx) => idx >= 0 && idx < keys.length);
+    const imageUrls: string[] = [];
+    for (const idx of indices.slice(0, 5)) {
+      try {
+        const buf = await storage.read(keys[idx]!);
+        const saved = await persistQuestionFigureBuffer({
+          tenantId: params.tenantId,
+          ownerId: params.ownerId,
+          slug: params.slug,
+          buffer: buf,
+          originalName: `paper-fig-${idx + 1}.jpg`,
+        });
+        imageUrls.push(saved.imageUrl);
+      } catch {
+        // skip unreadable media
+      }
+    }
+    result.push(stripFigureMeta({ ...draft, imageUrls: imageUrls.length ? imageUrls : undefined }));
+  }
+  return result;
+}
+
+async function attachPdfFigures(params: {
+  drafts: PaperDraftItem[];
+  pageBuffer: Buffer;
+  tenantId: string;
+  ownerId: string;
+  slug: string;
+}): Promise<PaperDraftItem[]> {
+  const result: PaperDraftItem[] = [];
+  for (const draft of params.drafts) {
+    if (!draft.hasFigure) {
+      result.push(stripFigureMeta(draft));
+      continue;
+    }
+    try {
+      const crop = await cropPageFigure(params.pageBuffer, draft.figureBox);
+      const saved = await persistQuestionFigureBuffer({
+        tenantId: params.tenantId,
+        ownerId: params.ownerId,
+        slug: params.slug,
+        buffer: crop,
+        originalName: `q${draft.questionNumber}-figure.jpg`,
+      });
+      result.push(stripFigureMeta({ ...draft, imageUrls: [saved.imageUrl] }));
+    } catch {
+      result.push(stripFigureMeta(draft));
+    }
+  }
+  return result;
+}
+
+async function processPaperExtractionInTenant(
+  paper: {
+    id: string;
+    tenantId: string;
+    uploaderId: string;
+    imageKey: string;
+    sidecar: unknown;
+  },
+) {
   await prisma.questionBankPaper.update({
-    where: { id: paperId },
+    where: { id: paper.id },
     data: { extractionStatus: 'processing', errorMessage: null },
   });
 
   try {
     const sidecar = (paper.sidecar ?? {}) as PaperSidecar;
+    const tenant = await basePrisma.tenant.findUnique({
+      where: { id: paper.tenantId },
+      select: { slug: true },
+    });
+    const slug = tenant?.slug ?? 'unknown';
     let drafts: PaperDraftItem[] = [];
 
     if (sidecar.sourceKind === 'docx' && sidecar.textContent?.trim()) {
       drafts = await extractFromText(sidecar.textContent);
-      // Spread embedded images across questions when present
-      if (sidecar.embeddedImageKeys?.length) {
-        drafts = drafts.map((d, i) => ({
-          ...d,
-          imageUrls: sidecar.embeddedImageKeys![i]
-            ? [`storage:${sidecar.embeddedImageKeys![i]}`]
-            : undefined,
-        }));
-      }
+      drafts = await attachDocxFigures({
+        drafts,
+        sidecar,
+        tenantId: paper.tenantId,
+        ownerId: paper.uploaderId,
+        slug,
+      });
     } else {
       const pageKeys = sidecar.pageKeys?.length ? sidecar.pageKeys : [paper.imageKey];
       let nextNum = 1;
@@ -273,14 +392,21 @@ export async function processPaperExtraction(paperId: string) {
           questionNumber: nextNum + i,
         }));
         nextNum += renumbered.length;
-        drafts.push(...renumbered);
+        const withFigures = await attachPdfFigures({
+          drafts: renumbered,
+          pageBuffer: buf,
+          tenantId: paper.tenantId,
+          ownerId: paper.uploaderId,
+          slug,
+        });
+        drafts.push(...withFigures);
       }
     }
 
     if (!drafts.length) throw new Error('No questions found in the document');
 
     await prisma.questionBankPaper.update({
-      where: { id: paperId },
+      where: { id: paper.id },
       data: {
         extractionStatus: 'pending_review',
         draftItems: drafts as object[],
@@ -289,7 +415,7 @@ export async function processPaperExtraction(paperId: string) {
     });
   } catch (err) {
     await prisma.questionBankPaper.update({
-      where: { id: paperId },
+      where: { id: paper.id },
       data: {
         extractionStatus: 'failed',
         errorMessage: err instanceof Error ? err.message : 'Extraction failed',
@@ -355,11 +481,9 @@ export async function confirmPaper(params: {
         marks: item.marks ?? 1,
         images: item.imageUrls?.length
           ? {
-              create: item.imageUrls.map((imageUrl, i) => ({
-                tenantId: params.tenantId,
-                imageUrl,
-                sortOrder: i,
-              })),
+              create: item.imageUrls.map((imageUrl, i) =>
+                figureImageCreate(params.tenantId, imageUrl, i),
+              ),
             }
           : undefined,
       },

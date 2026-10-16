@@ -16,3 +16,5 @@ export const forbidden = (msg = 'Forbidden') => new HttpError(403, msg);
 export const notFound = (msg = 'Not found') => new HttpError(404, msg);
 export const conflict = (msg: string) => new HttpError(409, msg);
 export const paymentRequired = (msg: string, details?: unknown) => new HttpError(402, msg, details);
+export const serviceUnavailable = (msg: string, retryAfterSec = 1) =>
+  new HttpError(503, msg, { retryAfterSec });

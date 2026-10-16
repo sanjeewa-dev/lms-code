@@ -1,0 +1,13 @@
+{
+  "name": "mindspark-client-deck",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Generates docs/Mindspark-LMS-Client-Presentation.pptx from build-deck.mjs",
+  "type": "module",
+  "scripts": {
+    "build": "node build-deck.mjs"
+  },
+  "dependencies": {
+    "pptxgenjs": "^3.12.0"
+  }
+}

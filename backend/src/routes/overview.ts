@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { prisma, basePrisma } from '../lib/prisma';
+import { TtlCache } from '../lib/ttlCache';
 import { asyncHandler } from '../utils/asyncHandler';
 import { authenticate, requireRole } from '../middleware/auth';
 import { teacherCreateSchema, teacherUpdateSchema, studentFreeCardSchema, studentUpdateSchema } from '../validation/schemas';
@@ -10,6 +11,8 @@ const router = Router({ mergeParams: true });
 
 const staff = [authenticate, requireRole('teacher', 'admin')];
 const adminOnly = [authenticate, requireRole('admin')];
+
+const statsCache = new TtlCache<{ stats: Record<string, unknown> }>(10_000);
 
 const teacherSelect = {
   id: true,
@@ -93,6 +96,12 @@ router.get(
   asyncHandler(async (req, res) => {
     const tenantId = req.tenant!.id;
     const user = req.user!;
+    const cacheKey = `${tenantId}:${user.sub}:${user.role}`;
+    const cached = statsCache.get(cacheKey);
+    if (cached) {
+      res.json(cached);
+      return;
+    }
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
@@ -180,7 +189,7 @@ router.get(
 
     const revenue = approved.reduce((sum, p) => sum + Number(p.amount), 0);
 
-    res.json({
+    const payload = {
       stats: {
         students,
         teachers,
@@ -197,7 +206,9 @@ router.get(
         liveTodayCount,
         draftQuizzes,
       },
-    });
+    };
+    statsCache.set(cacheKey, payload);
+    res.json(payload);
   })
 );
 

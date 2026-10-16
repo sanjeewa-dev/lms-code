@@ -108,6 +108,7 @@ docker compose up --build -d
 | Frontend loads but API fails / 502 | Check `docker compose logs backend`. Wait until Postgres is healthy and schema push finishes. Confirm nginx proxies `/api` (see `frontend/nginx.conf`). |
 | Empty login / no demo users | Ensure `SEED_ON_START=true` in `.env`, then restart backend: `docker compose up -d --force-recreate backend` or reset with `down -v`. |
 | Build fails on low memory | Increase Docker Desktop RAM (≥6 GB) and retry. |
+| Backend build fails on `canvas` / `node-gyp` / `gyp ERR!` | Pull latest `backend/Dockerfile` (includes Cairo/Pango build deps), then `docker compose build --no-cache backend && docker compose up -d`. |
 | JWT / CRON secret errors on start | Secrets in `.env` must be ≥32 characters (see `.env.docker.example`). |
 
 ## Architecture (local)
@@ -121,3 +122,15 @@ Browser  →  http://localhost:8080
 ```
 
 Postgres is not published to the host by default (only needed inside the Compose network).
+
+## Capacity (~3,000 concurrent requests)
+
+The backend container runs a **Node cluster** (`WEB_CONCURRENCY`, default 8) with a Prisma pool of 25 connections per worker. Postgres is started with `max_connections=300`. nginx uses 4096 worker connections and keepalive to the API.
+
+Override in `.env` if Docker Desktop has few CPUs:
+
+```
+WEB_CONCURRENCY=4
+```
+
+Local `npm run dev` is still one process. For a local load test: `cd backend && npm run build && WEB_CONCURRENCY=8 npm run start`, then run `node scripts/load-test.mjs` against `http://localhost:4000`. Raise host Postgres `max_connections` to 300 as well.

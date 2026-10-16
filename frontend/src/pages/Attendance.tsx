@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTenantApi } from '../hooks/useTenantApi';
 import { apiErrorMessage } from '../api/client';
-import { Badge, Button, Card, Select, Spinner } from '../components/ui';
+import { Badge, Button, Card, SearchableSelect, Select, Spinner } from '../components/ui';
 import { Icon } from '../components/icons';
 import { EmptyState, PageHeader } from '../components/tenant/TenantUi';
 
@@ -15,11 +15,19 @@ const statusTone: Record<Status, 'green' | 'red' | 'amber' | 'blue'> = {
   excused: 'blue',
 };
 
+const statusLabel: Record<Status, string> = {
+  present: 'Present',
+  absent: 'Absent',
+  late: 'Late',
+  excused: 'Excused',
+};
+
 export default function Attendance() {
   const t = useTenantApi();
   const queryClient = useQueryClient();
   const [classId, setClassId] = useState('');
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [studentId, setStudentId] = useState('');
   const [marks, setMarks] = useState<Record<string, Status>>({});
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -68,6 +76,10 @@ export default function Attendance() {
   });
 
   useEffect(() => {
+    setStudentId('');
+  }, [classId]);
+
+  useEffect(() => {
     if (!sessionQuery.data) return;
     const next: Record<string, Status> = {};
     for (const row of sessionQuery.data.roster) {
@@ -78,7 +90,7 @@ export default function Attendance() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const records = Object.entries(marks).map(([studentId, status]) => ({ studentId, status }));
+      const records = Object.entries(marks).map(([id, status]) => ({ studentId: id, status }));
       return (
         await t.post(`/classes/${classId}/attendance`, {
           sessionDate: date,
@@ -103,20 +115,37 @@ export default function Attendance() {
 
   function exportCsv() {
     if (!summaryQuery.data?.length) return;
+    const rows = studentId
+      ? summaryQuery.data.filter((r) => r.studentId === studentId)
+      : summaryQuery.data;
+    if (!rows.length) return;
     const header = 'Name,Present,Absent,Late,Excused,Total\n';
-    const body = summaryQuery.data
+    const body = rows
       .map((r) => `"${r.name}",${r.present},${r.absent},${r.late},${r.excused},${r.total}`)
       .join('\n');
     const blob = new Blob([header + body], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `attendance-${classId}.csv`;
+    a.download = `attendance-${classId}${studentId ? `-${studentId.slice(-6)}` : ''}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
 
   const roster = sessionQuery.data?.roster ?? [];
+  const filteredRoster = useMemo(
+    () => (studentId ? roster.filter((r) => r.studentId === studentId) : roster),
+    [roster, studentId]
+  );
+  const filteredSummary = useMemo(
+    () =>
+      studentId
+        ? (summaryQuery.data ?? []).filter((r) => r.studentId === studentId)
+        : (summaryQuery.data ?? []),
+    [summaryQuery.data, studentId]
+  );
+  const lookupRow = studentId ? roster.find((r) => r.studentId === studentId) : null;
+  const lookupStatus = lookupRow ? marks[lookupRow.studentId] ?? lookupRow.status : null;
   const presentCount = Object.values(marks).filter((s) => s === 'present').length;
 
   return (
@@ -125,11 +154,11 @@ export default function Attendance() {
         icon="note"
         tone="amber"
         title="Attendance"
-        subtitle="Across your classes — mark present, absent, late, or excused for each session"
+        subtitle="Pick a date and student to check present/absent quickly — useful when parents call"
       />
 
       <Card className="rounded-2xl">
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <Select
             label="Class"
             value={classId}
@@ -146,14 +175,32 @@ export default function Attendance() {
             ))}
           </Select>
           <label className="block">
-            <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Session date</span>
+            <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+              Session date
+            </span>
             <input
               type="date"
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
               value={date}
-              onChange={(e) => setDate(e.target.value)}
+              onChange={(e) => {
+                setDate(e.target.value);
+                setSuccess('');
+              }}
             />
           </label>
+          <SearchableSelect
+            label="Student"
+            value={studentId}
+            onChange={setStudentId}
+            disabled={!classId || roster.length === 0}
+            placeholder="Search student by name or email…"
+            allLabel="All students"
+            options={roster.map((r) => ({
+              value: r.studentId,
+              label: r.name,
+              hint: r.email,
+            }))}
+          />
         </div>
       </Card>
 
@@ -162,78 +209,129 @@ export default function Attendance() {
       ) : sessionQuery.isLoading ? (
         <Spinner />
       ) : (
-        <Card className="overflow-hidden rounded-2xl p-0">
-          <div className="border-b border-slate-100 bg-slate-50/80 px-5 py-4 dark:border-white/5 dark:bg-white/5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Session roster</h2>
-                <p className="text-sm text-slate-500">
-                  {roster.length} students · {presentCount} marked present
-                </p>
+        <>
+          {lookupRow && (
+            <Card className="rounded-2xl border-brand-200/60 bg-brand-50/40 dark:border-brand-500/20 dark:bg-brand-500/10">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-brand-700 dark:text-brand-300">
+                    Parent lookup · {date}
+                  </p>
+                  <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-white">
+                    {lookupRow.name}
+                  </p>
+                  <p className="text-sm text-slate-500">{lookupRow.email}</p>
+                </div>
+                <div className="text-right">
+                  {lookupStatus ? (
+                    <Badge tone={statusTone[lookupStatus]}>{statusLabel[lookupStatus]}</Badge>
+                  ) : (
+                    <span className="text-sm text-slate-500">Not marked yet</span>
+                  )}
+                  <p className="mt-1 text-xs text-slate-500">
+                    {lookupStatus
+                      ? `${lookupRow.name.split(' ')[0]} was ${statusLabel[lookupStatus].toLowerCase()} on this date.`
+                      : 'No attendance saved for this date yet.'}
+                  </p>
+                </div>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="secondary" onClick={() => markAll('present')}>
-                  All present
-                </Button>
-                <Button variant="secondary" onClick={() => markAll('absent')}>
-                  All absent
-                </Button>
-                <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
-                  {saveMutation.isPending ? 'Saving...' : 'Save attendance'}
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {roster.length === 0 ? (
-            <EmptyState message="No active students in this class." />
-          ) : (
-            <ul className="divide-y divide-slate-100 dark:divide-white/5">
-              {roster.map((row) => {
-                const status = marks[row.studentId] ?? 'present';
-                return (
-                  <li key={row.studentId} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
-                    <div className="flex items-center gap-3">
-                      <span className="grid h-10 w-10 place-items-center rounded-full bg-brand-100 text-xs font-bold text-brand-700">
-                        {row.name.split(' ').slice(0, 2).map((p) => p[0]?.toUpperCase()).join('')}
-                      </span>
-                      <div>
-                        <p className="font-medium text-slate-800 dark:text-slate-100">{row.name}</p>
-                        <p className="text-xs text-slate-400">{row.email}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge tone={statusTone[status]}>{status}</Badge>
-                      <select
-                        className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
-                        value={status}
-                        onChange={(e) =>
-                          setMarks((m) => ({ ...m, [row.studentId]: e.target.value as Status }))
-                        }
-                      >
-                        <option value="present">Present</option>
-                        <option value="absent">Absent</option>
-                        <option value="late">Late</option>
-                        <option value="excused">Excused</option>
-                      </select>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+            </Card>
           )}
 
-          {error && <p className="px-5 pb-4 text-sm text-red-600">{error}</p>}
-          {success && <p className="px-5 pb-4 text-sm text-emerald-600">{success}</p>}
-        </Card>
+          <Card className="overflow-hidden rounded-2xl p-0">
+            <div className="border-b border-slate-100 bg-slate-50/80 px-5 py-4 dark:border-white/5 dark:bg-white/5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Session roster</h2>
+                  <p className="text-sm text-slate-500">
+                    {studentId
+                      ? `Showing 1 of ${roster.length} students`
+                      : `${roster.length} students · ${presentCount} marked present`}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {!studentId && (
+                    <>
+                      <Button variant="secondary" onClick={() => markAll('present')}>
+                        All present
+                      </Button>
+                      <Button variant="secondary" onClick={() => markAll('absent')}>
+                        All absent
+                      </Button>
+                    </>
+                  )}
+                  <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+                    {saveMutation.isPending ? 'Saving...' : 'Save attendance'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {filteredRoster.length === 0 ? (
+              <EmptyState
+                message={
+                  studentId
+                    ? 'Selected student is not on this class roster.'
+                    : 'No active students in this class.'
+                }
+              />
+            ) : (
+              <ul className="divide-y divide-slate-100 dark:divide-white/5">
+                {filteredRoster.map((row) => {
+                  const status = marks[row.studentId] ?? 'present';
+                  return (
+                    <li
+                      key={row.studentId}
+                      className="flex flex-wrap items-center justify-between gap-3 px-5 py-4"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="grid h-10 w-10 place-items-center rounded-full bg-brand-100 text-xs font-bold text-brand-700">
+                          {row.name
+                            .split(' ')
+                            .slice(0, 2)
+                            .map((p) => p[0]?.toUpperCase())
+                            .join('')}
+                        </span>
+                        <div>
+                          <p className="font-medium text-slate-800 dark:text-slate-100">{row.name}</p>
+                          <p className="text-xs text-slate-400">{row.email}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge tone={statusTone[status]}>{status}</Badge>
+                        <select
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
+                          value={status}
+                          onChange={(e) =>
+                            setMarks((m) => ({ ...m, [row.studentId]: e.target.value as Status }))
+                          }
+                        >
+                          <option value="present">Present</option>
+                          <option value="absent">Absent</option>
+                          <option value="late">Late</option>
+                          <option value="excused">Excused</option>
+                        </select>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            {error && <p className="px-5 pb-4 text-sm text-red-600">{error}</p>}
+            {success && <p className="px-5 pb-4 text-sm text-emerald-600">{success}</p>}
+          </Card>
+        </>
       )}
 
-      {classId && summaryQuery.data && summaryQuery.data.length > 0 && (
+      {classId && filteredSummary.length > 0 && (
         <Card className="overflow-hidden rounded-2xl p-0">
           <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-5 py-4 dark:border-white/5 dark:bg-white/5">
             <div className="flex items-center gap-2">
               <Icon name="chart" width={18} height={18} className="text-brand-600" />
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Summary</h2>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                Summary{studentId ? ' · filtered' : ''}
+              </h2>
             </div>
             <Button variant="secondary" onClick={exportCsv}>
               Export CSV
@@ -252,7 +350,7 @@ export default function Attendance() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50 dark:divide-white/5">
-                {summaryQuery.data.map((r) => (
+                {filteredSummary.map((r) => (
                   <tr key={r.studentId}>
                     <td className="py-2 font-medium">{r.name}</td>
                     <td className="py-2">{r.present}</td>

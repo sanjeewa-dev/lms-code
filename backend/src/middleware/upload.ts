@@ -73,6 +73,8 @@ export const uploadLogo = makeUploader(IMAGE_TYPES).single('logo');
 // Teacher shipping-label branding photo / flyer.
 export const uploadShippingLabelPhoto = makeUploader(IMAGE_TYPES).single('photo');
 
+export const uploadQuestionFigure = makeUploader(IMAGE_TYPES).single('figure');
+
 /** Question bank paper uploads: JPEG/PNG, PDF, or Word .docx (ScoreSmart parity). */
 export const QUESTION_BANK_PAPER_TYPES = [
   'image/jpeg',

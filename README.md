@@ -72,8 +72,19 @@ Create the schema and seed demo data:
 ```bash
 npm run prisma:push        # creates the database + tables (non-interactive)
 npm run seed               # creates the super-admin + 2 demo tenants with full sample data
-npm run dev                # starts API on http://localhost:4000
+npm run dev                # starts API on http://localhost:4000 (single process, hot reload)
 ```
+
+### Capacity (about 3,000 concurrent requests)
+
+`npm run dev` (`tsx watch`) stays single-process. For load, build and run the cluster (hit `:4000` directly, not Vite):
+
+```bash
+npm run build
+WEB_CONCURRENCY=8 npm run start
+```
+
+Raise local Postgres `max_connections` to at least **300** so `PRISMA_CONNECTION_LIMIT` × workers (25 × 8 = 200) fits. Docker Compose already sets this. See [docs/DOCKER_SETUP.md](docs/DOCKER_SETUP.md).
 
 ## Frontend setup
 

@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiErrorMessage } from '../api/client';
 import { useTenantApi } from '../hooks/useTenantApi';
 import { Button, Card, Input, Select, Spinner } from '../components/ui';
+import { FigureEditor } from '../components/FigureEditor';
+import { QuestionFigure } from '../components/QuestionFigure';
 
 type BankMeta = {
   id: string;
@@ -20,9 +22,10 @@ type BankItem = {
   marks: number;
   topic: string;
   complexity: string;
+  images?: { imageUrl: string }[];
 };
 
-type DraftItem = Omit<BankItem, 'id'>;
+type DraftItem = Omit<BankItem, 'id' | 'images'> & { imageUrls?: string[] };
 
 type PaperDraftItem = {
   questionNumber?: number;
@@ -359,6 +362,17 @@ export default function QuestionBankPage() {
     setDraftItems((prev) => prev.map((d, i) => (i === idx ? { ...d, ...patch } : d)));
   }
 
+  async function uploadFigure(file: File): Promise<string> {
+    const body = new FormData();
+    body.append('figure', file);
+    try {
+      const { data } = await t.post<{ imageUrl: string }>('/question-figures', body);
+      return data.imageUrl;
+    } catch (err) {
+      throw new Error(apiErrorMessage(err));
+    }
+  }
+
   function cancelReview() {
     setReviewPaperId(null);
     setReviewStatus(null);
@@ -625,6 +639,12 @@ export default function QuestionBankPage() {
                 </div>
               ))}
             </div>
+            <FigureEditor
+              imageUrl={draft.imageUrls?.[0]}
+              disabled={!bankSelected}
+              onChange={(url) => setDraft((d) => ({ ...d, imageUrls: url ? [url] : [] }))}
+              onUploadFile={uploadFigure}
+            />
             <Button
               disabled={!bankSelected || !draft.text.trim() || createMutation.isPending}
               onClick={() => createMutation.mutate()}
@@ -769,6 +789,11 @@ export default function QuestionBankPage() {
                       <p className="mt-1.5 text-xs text-amber-700">Select the correct answer</p>
                     )}
                   </fieldset>
+                  <FigureEditor
+                    imageUrl={d.imageUrls?.[0]}
+                    onChange={(url) => updateDraft(idx, { imageUrls: url ? [url] : [] })}
+                    onUploadFile={uploadFigure}
+                  />
                 </div>
               ))}
               <div className="flex flex-wrap gap-2">
@@ -820,6 +845,13 @@ export default function QuestionBankPage() {
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="font-medium text-slate-800 dark:text-slate-100">{item.text}</p>
+                    {(item.images ?? []).map((img, i) => (
+                      <QuestionFigure
+                        key={img.imageUrl + i}
+                        src={img.imageUrl}
+                        className="mt-2 max-h-32 w-auto max-w-full rounded-md border border-slate-200 object-contain dark:border-white/10"
+                      />
+                    ))}
                     <p className="mt-1 text-xs text-slate-500">
                       {item.topic} · {item.complexity} · {item.marks} mark(s)
                     </p>

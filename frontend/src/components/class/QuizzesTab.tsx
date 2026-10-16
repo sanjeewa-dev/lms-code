@@ -8,6 +8,7 @@ import { Icon } from '../icons';
 import { QuizBuilder } from './QuizBuilder';
 import { QuizLeaderboardPanel } from './QuizLeaderboard';
 import { AiQuizGenerator } from './AiQuizGenerator';
+import { QuizAnalyticsResultsCards } from '../analytics/QuizAnalyticsResultsCards';
 import type { QuizSummary } from '../../api/types';
 
 function hasFinishedQuiz(q: QuizSummary) {
@@ -134,12 +135,15 @@ export function QuizzesTab({
 
   if (resultsQuiz) {
     return (
-      <QuizLeaderboardPanel
-        quizId={resultsQuiz.id}
-        quizTitle={resultsQuiz.title}
-        canManage={canManage}
-        onClose={() => setResultsQuiz(null)}
-      />
+      <div className="space-y-6">
+        <QuizLeaderboardPanel
+          quizId={resultsQuiz.id}
+          quizTitle={resultsQuiz.title}
+          canManage={canManage}
+          onClose={() => setResultsQuiz(null)}
+        />
+        {canManage && <QuizAnalyticsResultsCards quizId={resultsQuiz.id} />}
+      </div>
     );
   }
 

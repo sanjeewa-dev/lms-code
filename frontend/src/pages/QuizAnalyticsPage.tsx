@@ -1,304 +1,139 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useTenantApi } from '../hooks/useTenantApi';
 import { useAuth } from '../context/AuthContext';
-import { Button, Card, Spinner } from '../components/ui';
-import { downloadQuizReportPdf } from '../lib/quizReportPdf';
+import { Spinner } from '../components/ui';
+import {
+  AnalyticsTabBar,
+  Metric,
+  type AnalyticsTab,
+} from '../components/analytics/AnalyticsPrimitives';
+import { createQuizAnalyticsApi } from '../api/quizAnalyticsApi';
+import type { QuizDetailResponse, TeacherAnalyticsDashboard } from '../api/quizAnalytics.types';
+import ClassesAnalysisTab from './analytics/ClassesAnalysisTab';
+import QuizzesAnalysisTab from './analytics/QuizzesAnalysisTab';
+import StudentsAnalysisTab from './analytics/StudentsAnalysisTab';
+import StudentMyResultsPanel from './analytics/StudentMyResultsPanel';
+import { downloadQuizAnalyticsPdf } from '../lib/quizReportPdf';
 
-type TopicRow = { topic: string; correct: number; total: number; percentage: number };
+const VALID_TABS: AnalyticsTab[] = ['classes', 'quizzes', 'students'];
 
-function TopicBars({ rows }: { rows: TopicRow[] }) {
-  if (!rows.length) {
-    return <p className="text-sm text-slate-500">No topic mastery data yet.</p>;
-  }
-  return (
-    <ul className="space-y-2">
-      {rows.map((row) => (
-        <li key={row.topic}>
-          <div className="mb-0.5 flex justify-between text-xs">
-            <span className="font-medium text-slate-700 dark:text-slate-200">{row.topic}</span>
-            <span className="tabular-nums text-slate-500">
-              {row.percentage}% ({row.correct}/{row.total})
-            </span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10">
-            <div
-              className={`h-full rounded-full ${
-                row.percentage >= 70 ? 'bg-emerald-500' : row.percentage >= 40 ? 'bg-amber-500' : 'bg-red-500'
-              }`}
-              style={{ width: `${Math.min(100, row.percentage)}%` }}
-            />
-          </div>
-        </li>
-      ))}
-    </ul>
-  );
+function parseTab(raw: string | null): AnalyticsTab {
+  return (VALID_TABS as string[]).includes(raw ?? '') ? (raw as AnalyticsTab) : 'classes';
 }
 
 export default function QuizAnalyticsPage() {
   const t = useTenantApi();
   const { user } = useAuth();
   const { slug } = useParams<{ slug: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const isStaff = user?.role === 'teacher' || user?.role === 'admin' || user?.role === 'superadmin';
-  const [tab, setTab] = useState<'classes' | 'quizzes' | 'students' | 'mine'>(
-    isStaff ? 'classes' : 'mine'
-  );
-  const [classFilter, setClassFilter] = useState('');
+  const api = useMemo(() => createQuizAnalyticsApi(t), [t]);
 
-  const classesQuery = useQuery({
-    queryKey: ['quiz-analytics-classes', t.slug],
-    enabled: isStaff,
-    queryFn: async () =>
-      (await t.get<{ classes: { classId: string; classTitle: string; attemptCount: number; averagePercentage: number | null; topicMastery: TopicRow[] }[] }>('/quiz-analytics/classes')).data.classes,
-  });
+  const [tab, setTab] = useState<AnalyticsTab>(() => parseTab(searchParams.get('tab')));
 
-  const quizzesQuery = useQuery({
-    queryKey: ['quiz-analytics-quizzes', t.slug, classFilter],
-    enabled: isStaff && tab === 'quizzes',
-    queryFn: async () => {
-      const qs = classFilter ? `?classId=${encodeURIComponent(classFilter)}` : '';
-      return (
-        await t.get<{
-          quizzes: {
-            quizId: string;
-            title: string;
-            classId: string;
-            classTitle: string;
-            attemptCount: number;
-            averagePercentage: number | null;
-            topicMastery: TopicRow[];
-            questionPerformance: { questionId: string; topic: string; percentage: number }[];
-          }[];
-        }>(`/quiz-analytics/quizzes${qs}`)
-      ).data.quizzes;
-    },
-  });
+  useEffect(() => {
+    const fromUrl = parseTab(searchParams.get('tab'));
+    if (fromUrl !== tab) setTab(fromUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
-  const studentsQuery = useQuery({
-    queryKey: ['quiz-analytics-students', t.slug, classFilter],
-    enabled: isStaff && tab === 'students',
-    queryFn: async () => {
-      const qs = classFilter ? `?classId=${encodeURIComponent(classFilter)}` : '';
-      return (
-        await t.get<{
-          students: {
-            studentId: string;
-            name: string;
-            email: string;
-            attemptCount: number;
-            averagePercentage: number | null;
-            topicMastery: TopicRow[];
-            strengths: TopicRow[];
-            weaknesses: TopicRow[];
-          }[];
-        }>(`/quiz-analytics/students${qs}`)
-      ).data.students;
-    },
-  });
-
-  const myMasteryQuery = useQuery({
-    queryKey: ['quiz-analytics-mine', t.slug, classFilter],
-    enabled: tab === 'mine' || user?.role === 'student',
-    queryFn: async () => {
-      const qs = classFilter ? `?classId=${encodeURIComponent(classFilter)}` : '';
-      return (
-        await t.get<{
-          topicMastery: TopicRow[];
-          attempts: {
-            attemptId: string;
-            quizTitle: string;
-            percentage: number | null;
-            submittedAt: string | null;
-          }[];
-        }>(`/quiz-analytics/my-mastery${qs}`)
-      ).data;
-    },
-  });
-
-  const classOptions = useMemo(() => {
-    return (classesQuery.data ?? []).map((c) => ({ id: c.classId, title: c.classTitle }));
-  }, [classesQuery.data]);
-
-  async function exportPdf(quizId: string) {
-    const { data } = await t.get<{ report: Parameters<typeof downloadQuizReportPdf>[0] }>(
-      `/quiz-analytics/quizzes/${quizId}/report`
-    );
-    if (data.report) downloadQuizReportPdf(data.report);
+  function handleTabChange(next: AnalyticsTab) {
+    setTab(next);
+    const params = new URLSearchParams(searchParams);
+    params.set('tab', next);
+    setSearchParams(params, { replace: true });
   }
 
-  const tabs: { id: typeof tab; label: string; staffOnly?: boolean }[] = isStaff
-    ? [
-        { id: 'classes', label: 'Classes' },
-        { id: 'quizzes', label: 'Quizzes' },
-        { id: 'students', label: 'Students' },
-        { id: 'mine', label: 'My mastery' },
-      ]
-    : [{ id: 'mine', label: 'My mastery' }];
+  const dashboardQuery = useQuery({
+    queryKey: ['quiz-analytics-dashboard', t.slug],
+    enabled: isStaff,
+    queryFn: () => api.getDashboard(),
+  });
+
+  if (!isStaff) {
+    return (
+      <div className="mx-auto max-w-6xl space-y-6">
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm dark:border-white/5 dark:bg-ink-850">
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white">My results</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Topic mastery, score trends, and quiz outcomes.
+          </p>
+        </div>
+        <StudentMyResultsPanel api={api} />
+      </div>
+    );
+  }
+
+  const data = dashboardQuery.data as TeacherAnalyticsDashboard | undefined;
+
+  function handlePdf(detail: QuizDetailResponse) {
+    downloadQuizAnalyticsPdf(detail);
+  }
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Quiz analytics</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Topic mastery across classes, quizzes, and students (on-screen MCQs).
+    <div className="mx-auto max-w-6xl space-y-6">
+      <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+        <Link to={`/${slug}/dashboard`} className="transition hover:text-brand-600">
+          Dashboard
+        </Link>
+        <span>/</span>
+        <span className="font-medium text-slate-700 dark:text-slate-200">Analytics</span>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm dark:border-white/5 dark:bg-ink-850">
+        <h1 className="text-xl font-bold text-slate-900 dark:text-white">Quiz Analytics</h1>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Class trends, quiz performance, and student mastery.
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {tabs.map((item) => (
+      {dashboardQuery.isError && (
+        <div className="flex flex-col gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300 sm:flex-row sm:items-center sm:justify-between">
+          <span>Failed to load analytics.</span>
           <button
-            key={item.id}
             type="button"
-            onClick={() => setTab(item.id)}
-            className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-              tab === item.id
-                ? 'bg-brand-600 text-white'
-                : 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'
-            }`}
+            onClick={() => dashboardQuery.refetch()}
+            className="shrink-0 font-semibold underline hover:no-underline"
           >
-            {item.label}
+            Retry
           </button>
-        ))}
-      </div>
-
-      {isStaff && (tab === 'quizzes' || tab === 'students') && (
-        <select
-          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-white/5"
-          value={classFilter}
-          onChange={(e) => setClassFilter(e.target.value)}
-        >
-          <option value="">All classes</option>
-          {classOptions.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.title}
-            </option>
-          ))}
-        </select>
-      )}
-
-      {tab === 'classes' && isStaff && (
-        <div className="space-y-3">
-          {classesQuery.isLoading && <Spinner label="Loading..." />}
-          {(classesQuery.data ?? []).map((c) => (
-            <Card key={c.classId}>
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <Link
-                    to={`/${slug}/classes/${c.classId}/quizzes`}
-                    className="font-semibold text-brand-700 hover:underline"
-                  >
-                    {c.classTitle}
-                  </Link>
-                  <p className="text-xs text-slate-500">
-                    {c.attemptCount} attempts · avg{' '}
-                    {c.averagePercentage != null ? `${c.averagePercentage}%` : '—'}
-                  </p>
-                </div>
-              </div>
-              <TopicBars rows={c.topicMastery} />
-            </Card>
-          ))}
         </div>
       )}
 
-      {tab === 'quizzes' && isStaff && (
-        <div className="space-y-3">
-          {quizzesQuery.isLoading && <Spinner label="Loading..." />}
-          {(quizzesQuery.data ?? []).map((q) => (
-            <Card key={q.quizId}>
-              <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <p className="font-semibold text-slate-900 dark:text-white">{q.title}</p>
-                  <p className="text-xs text-slate-500">
-                    {q.classTitle} · {q.attemptCount} attempts · avg{' '}
-                    {q.averagePercentage != null ? `${q.averagePercentage}%` : '—'}
-                  </p>
-                </div>
-                <Button variant="secondary" onClick={() => void exportPdf(q.quizId)}>
-                  PDF report
-                </Button>
-              </div>
-              <TopicBars rows={q.topicMastery} />
-              {q.questionPerformance.length > 0 && (
-                <div className="mt-3 border-t border-slate-100 pt-3 dark:border-white/5">
-                  <p className="mb-2 text-xs font-semibold uppercase text-slate-500">
-                    Hardest questions
-                  </p>
-                  <ul className="space-y-1 text-xs text-slate-600 dark:text-slate-300">
-                    {[...q.questionPerformance]
-                      .sort((a, b) => a.percentage - b.percentage)
-                      .slice(0, 5)
-                      .map((row) => (
-                        <li key={row.questionId}>
-                          {row.topic}: {row.percentage}% correct
-                        </li>
-                      ))}
-                  </ul>
-                </div>
-              )}
-            </Card>
-          ))}
+      {dashboardQuery.isLoading && !data ? (
+        <div className="flex justify-center py-16">
+          <Spinner label="Loading analytics…" />
         </div>
-      )}
+      ) : data ? (
+        <>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <Metric label="Classes" value={String(data.summary.classCount)} />
+            <Metric
+              label="Quizzes"
+              value={String(data.summary.quizCount ?? data.summary.assessmentCount)}
+            />
+            <Metric label="Attempts submitted" value={String(data.summary.totalSubmissions)} />
+            <Metric
+              label="Average score"
+              value={
+                data.summary.averageScorePercent != null
+                  ? `${data.summary.averageScorePercent}%`
+                  : '—'
+              }
+            />
+          </div>
 
-      {tab === 'students' && isStaff && (
-        <div className="space-y-3">
-          {studentsQuery.isLoading && <Spinner label="Loading..." />}
-          {(studentsQuery.data ?? []).map((s) => (
-            <Card key={s.studentId}>
-              <div className="mb-2">
-                <p className="font-semibold">{s.name}</p>
-                <p className="text-xs text-slate-500">
-                  {s.email} · {s.attemptCount} quizzes · avg{' '}
-                  {s.averagePercentage != null ? `${s.averagePercentage}%` : '—'}
-                </p>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <p className="mb-1 text-xs font-semibold uppercase text-emerald-700">Strengths</p>
-                  <TopicBars rows={s.strengths} />
-                </div>
-                <div>
-                  <p className="mb-1 text-xs font-semibold uppercase text-red-700">Weaknesses</p>
-                  <TopicBars rows={s.weaknesses} />
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
+          <AnalyticsTabBar value={tab} onChange={handleTabChange} />
 
-      {tab === 'mine' && (
-        <div className="space-y-3">
-          {myMasteryQuery.isLoading && <Spinner label="Loading..." />}
-          <Card>
-            <h2 className="mb-3 text-lg font-semibold">Your topic mastery</h2>
-            <TopicBars rows={myMasteryQuery.data?.topicMastery ?? []} />
-          </Card>
-          <Card>
-            <h2 className="mb-3 text-lg font-semibold">Recent quiz attempts</h2>
-            <ul className="space-y-2 text-sm">
-              {(myMasteryQuery.data?.attempts ?? []).map((a) => (
-                <li key={a.attemptId} className="flex justify-between gap-2">
-                  <Link
-                    to={`/${slug}/attempts/${a.attemptId}/result`}
-                    className="font-medium text-brand-700 hover:underline"
-                  >
-                    {a.quizTitle}
-                  </Link>
-                  <span className="tabular-nums text-slate-500">
-                    {a.percentage != null ? `${a.percentage}%` : '—'}
-                  </span>
-                </li>
-              ))}
-              {!myMasteryQuery.data?.attempts?.length && (
-                <li className="text-slate-500">No submitted quizzes yet.</li>
-              )}
-            </ul>
-          </Card>
-        </div>
-      )}
+          {tab === 'classes' && <ClassesAnalysisTab dashboard={data} api={api} />}
+          {tab === 'quizzes' && (
+            <QuizzesAnalysisTab dashboard={data} api={api} onDownloadPdf={handlePdf} />
+          )}
+          {tab === 'students' && <StudentsAnalysisTab dashboard={data} api={api} />}
+        </>
+      ) : null}
     </div>
   );
 }

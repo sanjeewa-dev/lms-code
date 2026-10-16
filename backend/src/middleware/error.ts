@@ -20,6 +20,15 @@ export function errorHandler(
   }
 
   if (err instanceof HttpError) {
+    if (err.status === 503) {
+      const retry =
+        err.details && typeof err.details === 'object' && 'retryAfterSec' in err.details
+          ? Number((err.details as { retryAfterSec?: number }).retryAfterSec)
+          : 1;
+      if (Number.isFinite(retry) && retry > 0) {
+        res.setHeader('Retry-After', String(Math.ceil(retry)));
+      }
+    }
     return res.status(err.status).json({ error: err.message, details: err.details });
   }
 

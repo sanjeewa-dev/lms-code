@@ -5,6 +5,7 @@ import { useTenantApi } from '../hooks/useTenantApi';
 import { apiErrorMessage } from '../api/client';
 import { Badge, Button, Card, Spinner } from '../components/ui';
 import { QuizLeaderboardPanel } from '../components/class/QuizLeaderboard';
+import { QuestionFigure } from '../components/QuestionFigure';
 import type { AttemptResult } from '../api/types';
 
 function CoachSteps({ steps }: { steps: string[] }) {
@@ -171,6 +172,9 @@ export default function QuizResult() {
                 <p className="mb-3 font-medium text-slate-800 dark:text-slate-200">
                   {idx + 1}. {q.text}
                 </p>
+                {(q.images ?? []).map((img) => (
+                  <QuestionFigure key={img.id} src={img.imageUrl} />
+                ))}
                 <div className="space-y-2">
                   {q.options.map((opt, oIdx) => {
                     const isCorrect = oIdx === q.correctIndex;

@@ -26,7 +26,7 @@ const PLAN_DEFAULTS: Record<TenantPlan, PlanFeatureMap> = {
     interventions: true,
     smartJobs: true,
     maxStudents: 200,
-    aiTokenLimit: 20,
+    aiTokenLimit: 100,
   },
   enterprise: {
     aiStudent: true,
@@ -35,7 +35,7 @@ const PLAN_DEFAULTS: Record<TenantPlan, PlanFeatureMap> = {
     interventions: true,
     smartJobs: true,
     maxStudents: null,
-    aiTokenLimit: 50,
+    aiTokenLimit: 100,
   },
 };
 

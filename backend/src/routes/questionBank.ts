@@ -19,6 +19,7 @@ import {
   normalizeSubject,
 } from '../services/questionBank';
 import { persistUploadedFile } from '../services/files';
+import { figureImageCreate } from '../lib/questionFigureUrl';
 import {
   confirmPaper,
   createPaperAndExtract,
@@ -249,11 +250,7 @@ router.post(
         complexity: data.complexity,
         images: data.imageUrls?.length
           ? {
-              create: data.imageUrls.map((imageUrl, i) => ({
-                tenantId,
-                imageUrl,
-                sortOrder: i,
-              })),
+              create: data.imageUrls.map((imageUrl, i) => figureImageCreate(tenantId, imageUrl, i)),
             }
           : undefined,
       },
@@ -318,11 +315,7 @@ router.patch(
         complexity: data.complexity,
         images: data.imageUrls?.length
           ? {
-              create: data.imageUrls.map((imageUrl, i) => ({
-                tenantId,
-                imageUrl,
-                sortOrder: i,
-              })),
+              create: data.imageUrls.map((imageUrl, i) => figureImageCreate(tenantId, imageUrl, i)),
             }
           : undefined,
       },

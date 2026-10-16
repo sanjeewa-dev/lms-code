@@ -1,13 +1,29 @@
 import { PrismaClient } from '@prisma/client';
+import { env } from '../config/env';
 import { getContext } from './tenantContext';
+
+/** Prisma reads `connection_limit` from the URL; default pool is far too small for burst load. */
+export function withConnectionLimit(url: string, limit = env.prismaConnectionLimit): string {
+  if (/[?&]connection_limit=/.test(url)) return url;
+  return url.includes('?') ? `${url}&connection_limit=${limit}` : `${url}?connection_limit=${limit}`;
+}
+
+function prismaDatasource() {
+  const url = process.env.DATABASE_URL;
+  if (!url) return undefined;
+  return { db: { url: withConnectionLimit(url) } };
+}
 
 /**
  * Unscoped client. Use ONLY for platform (superadmin) operations and for
  * auth / tenant-resolution queries that must run before a tenant context
  * exists. Everything tenant-facing should go through the scoped `prisma`.
  */
+const datasources = prismaDatasource();
+
 export const basePrisma = new PrismaClient({
   log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
+  ...(datasources ? { datasources } : {}),
 });
 
 // Models that carry a tenantId and must be isolated per tenant.

@@ -974,7 +974,7 @@ model Answer {
   @@index([tenantId])
 }
 
-/// Monthly AI Student Area quota: 20 tokens per student per class.
+/// Monthly AI Student Area quota per student per class (plan default; see planGates).
 model AiUsage {
   id        String   @id @default(cuid())
   tenantId  String

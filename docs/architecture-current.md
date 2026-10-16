@@ -2,7 +2,7 @@
 
 **Status:** As-built (monolith)  
 **Stack:** React + Vite · Express + TypeScript · PostgreSQL + Prisma · local disk uploads  
-**Related:** [architecture.md](./architecture.md) (detailed), [security-audit.md](./security-audit.md), [design.md](./design.md)
+**Related:** [ARCHITECT_TECHNICAL_BRIEF.md](./ARCHITECT_TECHNICAL_BRIEF.md) (sendable architect package + PDF), [architecture.md](./architecture.md) (detailed), [security-audit.md](./security-audit.md), [design.md](./design.md)
 
 ---
 
@@ -256,13 +256,15 @@ Layouts: `AdminLayout`, `TenantLayout`. API helper: `useTenantApi` → `/api/t/:
 
 ## 10. Deployment shape (current)
 
-**Today:** single Node process + Postgres + local disk (typical local/dev or one VM).
+**Local `npm run dev`:** single Express process + Postgres + local disk.
+
+**Capacity / Docker Compose:** Node **cluster** (`WEB_CONCURRENCY`, default 8 in Compose) + Postgres (`max_connections=300`) + uploads volume + nginx SPA. Schedulers run on the **cluster primary** only when `WEB_CONCURRENCY` &gt; 1. See `backend/src/index.ts` and `docker-compose.yml`.
 
 ```mermaid
 flowchart TB
-  subgraph host [Single host or laptop]
-    FE["Static SPA or Vite dev"]
-    BE["One Express process"]
+  subgraph host [Single host or Docker Compose]
+    FE["Static SPA nginx or Vite dev"]
+    BE["Express cluster<br/>WEB_CONCURRENCY workers"]
     PG[(Postgres)]
     Disk["uploads volume"]
   end
@@ -270,7 +272,7 @@ flowchart TB
   BE --> Disk
 ```
 
-This is a **modular monolith**: clear domain folders and route mounts, one deployable API. It is **not** microservices yet.
+This is a **modular monolith**: clear domain folders and route mounts, one deployable API (optionally multi-worker). It is **not** microservices yet.
 
 ---
 
